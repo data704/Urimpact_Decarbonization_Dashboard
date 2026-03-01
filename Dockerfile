@@ -1,6 +1,7 @@
 # Stage 1: Builder
 # When used: Dockerfile and entrypoint.sh are copied into backend/; build context = backend/
-FROM node:20-alpine AS builder
+# Use Debian-based image so Prisma engine finds OpenSSL (Alpine often causes "Prisma failed to detect libssl" in container).
+FROM node:20-bookworm-slim AS builder
 WORKDIR /app
 
 COPY package*.json ./
@@ -11,7 +12,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-alpine
+FROM node:20-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 
