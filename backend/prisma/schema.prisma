@@ -1,0 +1,226 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum DocumentType {
+  UTILITY_BILL
+  FUEL_RECEIPT
+  INVOICE
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum EmissionScope {
+  SCOPE_1
+  SCOPE_2
+  SCOPE_3
+}
+
+enum EmissionCategory {
+  ELECTRICITY
+  NATURAL_GAS
+  FUEL_COMBUSTION
+  TRANSPORTATION
+  WASTE
+  WATER
+  REFRIGERANTS
+  BUSINESS_TRAVEL
+  EMPLOYEE_COMMUTING
+  PURCHASED_GOODS
+  OTHER
+}
+
+// User Model
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  company       String?
+  role          UserRole  @default(USER)
+  isActive      Boolean   @default(true)
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  documents    Document[]
+  emissions    Emission[]
+  auditLogs    AuditLog[]
+  clientConfigs ClientConfig[]
+
+  @@index([email])
+  @@index([company])
+  @@map("users")
+}
+
+// Client Inputs & Constraints (decarbonisation pathway config)
+model ClientConfig {
+  id                    String   @id @default(uuid())
+  userId                String
+  targetYear            Int
+  ambitionLevel         String
+  capexOpexPreference   String?
+  supportingDocuments   Json?    // array of file names/paths
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("client_configs")
+}
+
+// Document Model
+model Document {
+  id            String         @id @default(uuid())
+  userId        String
+  fileName      String
+  fileType      String
+  fileSize      Int
+  filePath      String
+  s3Key         String?
+  documentType  DocumentType   @default(OTHER)
+  status        DocumentStatus @default(UPLOADED)
+  ocrData       Json?
+  extractedData Json?
+  errorMessage  String?
+  processedAt   DateTime?
+  uploadedAt    DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emissions Emission[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([documentType])
+  @@index([uploadedAt])
+  @@map("documents")
+}
+
+// Emission Model
+model Emission {
+  id                 String           @id @default(uuid())
+  userId             String
+  documentId         String?
+  scope              EmissionScope
+  category           EmissionCategory
+  activityType       String
+  activityAmount     Float
+  activityUnit       String
+  region             String           @default("AE")
+  co2e               Float            // Total CO2 equivalent in kg
+  co2                Float?           // CO2 in kg
+  ch4                Float?           // Methane in kg
+  n2o                Float?           // Nitrous oxide in kg
+  emissionFactor     Float
+  emissionFactorUnit String
+  dataSource         String?          // e.g., "Climatiq", "EPA", "DEFRA"
+  dataYear           Int?
+  calculatedAt       DateTime         @default(now())
+  billingPeriodStart DateTime?
+  billingPeriodEnd   DateTime?
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  // Relations
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([documentId])
+  @@index([scope])
+  @@index([category])
+  @@index([calculatedAt])
+  @@index([region])
+  @@map("emissions")
+}
+
+// Emission Factors Cache Model
+model EmissionFactor {
+  id           String   @id @default(uuid())
+  activityId   String   @unique
+  category     String
+  subcategory  String?
+  region       String
+  fuelType     String?
+  unit         String
+  co2Factor    Float
+  ch4Factor    Float?
+  n2oFactor    Float?
+  co2eFactor   Float
+  source       String   // EPA, DEFRA, IEA, IPCC, Climatiq
+  year         Int
+  qualityTier  Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([activityId])
+  @@index([category])
+  @@index([region])
+  @@map("emission_factors")
+}
+
+// Audit Log Model
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  timestamp  DateTime @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// Refresh Token Model (for JWT refresh)
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}

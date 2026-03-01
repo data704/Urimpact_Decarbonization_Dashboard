@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.local
+
+# Build outputs
+dist/
+dist-ssr/
+backend/dist/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE / Editor
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swo
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Backend
+backend/uploads/
+backend/coverage/
+backend/prisma/*.db
+backend/prisma/*.db-journal
+
+# Frontend
+frontend/dist/
+frontend/dist-ssr/
+
+# Misc
+*.tgz
+.cache/
