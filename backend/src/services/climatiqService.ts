@@ -76,29 +76,23 @@ function getActivityId(activityType: string, region?: string): string {
   const normalizedType = activityType.toLowerCase().replace(/\s+/g, '-');
   
   // Check direct mapping
-  if (ACTIVITY_MAPPINGS[normalizedType]) {
-    return ACTIVITY_MAPPINGS[normalizedType];
-  }
+  const direct = ACTIVITY_MAPPINGS[normalizedType];
+  if (direct) return direct;
 
   // Check with region suffix
-  const withRegion = `${normalizedType}-${region?.toLowerCase()}`;
-  if (ACTIVITY_MAPPINGS[withRegion]) {
-    return ACTIVITY_MAPPINGS[withRegion];
-  }
+  const withRegion = `${normalizedType}-${region?.toLowerCase() ?? ''}`;
+  const withRegionMap = ACTIVITY_MAPPINGS[withRegion];
+  if (withRegionMap) return withRegionMap;
 
   // Default mappings based on keywords
-  if (normalizedType.includes('electric')) {
-    return ACTIVITY_MAPPINGS['electricity'];
-  }
-  if (normalizedType.includes('gas') && !normalizedType.includes('petrol')) {
-    return ACTIVITY_MAPPINGS['natural-gas'];
-  }
-  if (normalizedType.includes('diesel')) {
-    return ACTIVITY_MAPPINGS['diesel'];
-  }
-  if (normalizedType.includes('petrol') || normalizedType.includes('gasoline')) {
-    return ACTIVITY_MAPPINGS['petrol'];
-  }
+  const electricityId = ACTIVITY_MAPPINGS['electricity'];
+  const naturalGasId = ACTIVITY_MAPPINGS['natural-gas'];
+  const dieselId = ACTIVITY_MAPPINGS['diesel'];
+  const petrolId = ACTIVITY_MAPPINGS['petrol'];
+  if (normalizedType.includes('electric') && electricityId) return electricityId;
+  if (normalizedType.includes('gas') && !normalizedType.includes('petrol') && naturalGasId) return naturalGasId;
+  if (normalizedType.includes('diesel') && dieselId) return dieselId;
+  if ((normalizedType.includes('petrol') || normalizedType.includes('gasoline')) && petrolId) return petrolId;
 
   // Return as-is if no mapping found (user might provide exact Climatiq ID)
   return activityType;

@@ -37,7 +37,7 @@ export function generateAccessToken(user: {
   return jwt.sign(
     { userId: user.id, email: user.email, role: user.role },
     config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn }
+    { expiresIn: config.jwt.expiresIn } as jwt.SignOptions
   );
 }
 
@@ -98,7 +98,17 @@ export async function registerUser(input: CreateUserInput): Promise<UserProfile>
     },
   });
 
-  return user;
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    company: user.company ?? undefined,
+    role: user.role,
+    isActive: user.isActive,
+    emailVerified: user.emailVerified,
+    createdAt: user.createdAt,
+  };
 }
 
 /**
@@ -171,7 +181,6 @@ export async function refreshAccessToken(
 ): Promise<AuthTokens> {
   const storedToken = await prisma.refreshToken.findUnique({
     where: { token: refreshToken },
-    include: { },
   });
 
   if (!storedToken) {
@@ -249,7 +258,17 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
     throw new NotFoundError('User');
   }
 
-  return user;
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    company: user.company ?? undefined,
+    role: user.role,
+    isActive: user.isActive,
+    emailVerified: user.emailVerified,
+    createdAt: user.createdAt,
+  };
 }
 
 /**
@@ -275,7 +294,17 @@ export async function updateUserProfile(
     },
   });
 
-  return user;
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    company: user.company ?? undefined,
+    role: user.role,
+    isActive: user.isActive,
+    emailVerified: user.emailVerified,
+    createdAt: user.createdAt,
+  };
 }
 
 /**

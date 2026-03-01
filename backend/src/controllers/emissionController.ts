@@ -62,7 +62,11 @@ export async function getEmission(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { id } = req.params;
+    const id = req.params.id;
+    if (typeof id !== 'string') {
+      sendError(res, 'Emission ID required', 400);
+      return;
+    }
     const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     
     const emission = await getEmissionById(id, req.user.userId, isAdmin);
@@ -154,7 +158,11 @@ export async function removeEmission(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { id } = req.params;
+    const id = req.params.id;
+    if (typeof id !== 'string') {
+      sendError(res, 'Emission ID required', 400);
+      return;
+    }
     const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     
     await deleteEmission(id, req.user.userId, isAdmin);

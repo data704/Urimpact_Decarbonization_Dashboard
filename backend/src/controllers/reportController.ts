@@ -144,21 +144,21 @@ export async function getComplianceReport(req: AuthRequest, res: Response): Prom
       emissionsByScope: {
         scope1: {
           description: 'Direct emissions from owned or controlled sources',
-          total: byScope.SCOPE_1.totalTonnes,
+          total: byScope.SCOPE_1?.totalTonnes ?? 0,
           unit: 'tonnes CO2e',
-          percentage: calculatePercentage(byScope.SCOPE_1.total, totalEmissions.totalCo2e),
+          percentage: calculatePercentage(byScope.SCOPE_1?.total ?? 0, totalEmissions.totalCo2e),
         },
         scope2: {
           description: 'Indirect emissions from purchased electricity, steam, heating, and cooling',
-          total: byScope.SCOPE_2.totalTonnes,
+          total: byScope.SCOPE_2?.totalTonnes ?? 0,
           unit: 'tonnes CO2e',
-          percentage: calculatePercentage(byScope.SCOPE_2.total, totalEmissions.totalCo2e),
+          percentage: calculatePercentage(byScope.SCOPE_2?.total ?? 0, totalEmissions.totalCo2e),
         },
         scope3: {
           description: 'Other indirect emissions in the value chain',
-          total: byScope.SCOPE_3.totalTonnes,
+          total: byScope.SCOPE_3?.totalTonnes ?? 0,
           unit: 'tonnes CO2e',
-          percentage: calculatePercentage(byScope.SCOPE_3.total, totalEmissions.totalCo2e),
+          percentage: calculatePercentage(byScope.SCOPE_3?.total ?? 0, totalEmissions.totalCo2e),
         },
       },
       emissionsByCategory: byCategory.map((cat) => ({
@@ -222,9 +222,9 @@ export async function getReportInsights(req: AuthRequest, res: Response): Promis
       totalCo2eKg: totalEmissions.totalCo2e,
       recordCount: totalEmissions.recordCount,
       byScope: {
-        SCOPE_1: byScope.SCOPE_1,
-        SCOPE_2: byScope.SCOPE_2,
-        SCOPE_3: byScope.SCOPE_3,
+        SCOPE_1: byScope.SCOPE_1 ?? { total: 0, totalTonnes: 0, count: 0 },
+        SCOPE_2: byScope.SCOPE_2 ?? { total: 0, totalTonnes: 0, count: 0 },
+        SCOPE_3: byScope.SCOPE_3 ?? { total: 0, totalTonnes: 0, count: 0 },
       },
       byCategory,
       trend,

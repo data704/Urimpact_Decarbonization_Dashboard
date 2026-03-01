@@ -168,7 +168,11 @@ export async function getDocument(req: AuthRequest, res: Response): Promise<void
       return;
     }
 
-    const { id } = req.params;
+    const id = req.params.id;
+    if (typeof id !== 'string') {
+      sendError(res, 'Document ID required', 400);
+      return;
+    }
     const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     
     const document = await getDocumentById(id, req.user.userId, isAdmin);
@@ -213,7 +217,11 @@ export async function removeDocument(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { id } = req.params;
+    const id = req.params.id;
+    if (typeof id !== 'string') {
+      sendError(res, 'Document ID required', 400);
+      return;
+    }
     const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     
     await deleteDocument(id, req.user.userId, isAdmin);
@@ -259,7 +267,11 @@ export async function processDocument(req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const { id } = req.params;
+    const id = req.params.id;
+    if (typeof id !== 'string') {
+      sendError(res, 'Document ID required', 400);
+      return;
+    }
     const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     
     const document = await getDocumentById(id, req.user.userId, isAdmin);
@@ -331,7 +343,11 @@ export async function submitDocument(req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { id } = req.params;
+    const id = req.params.id;
+    if (typeof id !== 'string') {
+      sendError(res, 'Document ID required', 400);
+      return;
+    }
     const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     const document = await getDocumentById(id, req.user.userId, isAdmin);
 
@@ -426,7 +442,11 @@ export async function submitDocumentBatch(req: AuthRequest, res: Response): Prom
       return;
     }
 
-    const { id } = req.params;
+    const id = req.params.id;
+    if (typeof id !== 'string') {
+      sendError(res, 'Document ID required', 400);
+      return;
+    }
     const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
     const document = await getDocumentById(id, req.user.userId, isAdmin);
 

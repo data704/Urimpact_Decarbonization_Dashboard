@@ -138,7 +138,7 @@ function extractFieldsFromText(text: string): ExtractedDocumentData {
 
   for (const pattern of consumptionPatterns) {
     const match = text.match(pattern);
-    if (match) {
+    if (match && match[1] !== undefined) {
       extracted.consumption = parseFloat(match[1].replace(/,/g, ''));
       extracted.consumptionUnit = 'kWh';
       break;
@@ -154,7 +154,7 @@ function extractFieldsFromText(text: string): ExtractedDocumentData {
 
   for (const pattern of amountPatterns) {
     const match = text.match(pattern);
-    if (match) {
+    if (match && match[1] !== undefined) {
       extracted.amount = parseFloat(match[1].replace(/,/g, ''));
       extracted.currency = 'AED';
       break;
@@ -170,7 +170,7 @@ function extractFieldsFromText(text: string): ExtractedDocumentData {
 
   for (const pattern of accountPatterns) {
     const match = text.match(pattern);
-    if (match) {
+    if (match && match[1] !== undefined) {
       extracted.accountNumber = match[1].trim();
       break;
     }
@@ -184,7 +184,7 @@ function extractFieldsFromText(text: string): ExtractedDocumentData {
 
   for (const pattern of periodPatterns) {
     const match = text.match(pattern);
-    if (match) {
+    if (match && match[1] !== undefined && match[2] !== undefined) {
       extracted.billingPeriodStart = match[1];
       extracted.billingPeriodEnd = match[2];
       break;
@@ -199,7 +199,7 @@ function extractFieldsFromText(text: string): ExtractedDocumentData {
 
   for (const pattern of datePatterns) {
     const match = text.match(pattern);
-    if (match) {
+    if (match && match[1] !== undefined) {
       extracted.documentDate = match[1];
       break;
     }
@@ -213,7 +213,7 @@ function extractFieldsFromText(text: string): ExtractedDocumentData {
 
   for (const pattern of fuelPatterns) {
     const match = text.match(pattern);
-    if (match) {
+    if (match && match[1] !== undefined) {
       extracted.fuelType = match[1].toLowerCase();
       break;
     }
@@ -227,7 +227,7 @@ function extractFieldsFromText(text: string): ExtractedDocumentData {
 
   for (const pattern of quantityPatterns) {
     const match = text.match(pattern);
-    if (match) {
+    if (match && match[1] !== undefined && match[2] !== undefined) {
       extracted.quantity = parseFloat(match[1].replace(/,/g, ''));
       extracted.quantityUnit = match[2].toLowerCase().startsWith('l') ? 'L' : 'gal';
       break;
@@ -290,7 +290,7 @@ function getMockOCRResult(filePath: string): OCRResult {
 
   if (isUtilityBill || (!isFuelReceipt && !isWaterBill && !isGasBill)) {
     // Electric utility bill (default)
-    const provider = providers[Math.floor(Math.random() * providers.length)];
+    const provider = providers[Math.floor(Math.random() * providers.length)] ?? providers[0]!;
     const consumption = Math.floor(Math.random() * 45000) + 5000; // 5,000 - 50,000 kWh
     const rate = 0.28 + Math.random() * 0.15; // 0.28 - 0.43 AED/kWh
     const amount = consumption * rate;
@@ -340,12 +340,12 @@ function getMockOCRResult(filePath: string): OCRResult {
   } else if (isFuelReceipt) {
     // Fuel receipt
     const fuelTypes = ['diesel', 'petrol', 'premium'];
-    const fuelType = fuelTypes[Math.floor(Math.random() * fuelTypes.length)];
+    const fuelType = fuelTypes[Math.floor(Math.random() * fuelTypes.length)] ?? 'petrol';
     const stations = ['ADNOC', 'ENOC', 'EMARAT', 'EPPCO'];
-    const station = stations[Math.floor(Math.random() * stations.length)];
+    const station = stations[Math.floor(Math.random() * stations.length)] ?? 'ADNOC';
     const quantity = Math.floor(Math.random() * 150) + 30; // 30 - 180 liters
     const prices: Record<string, number> = { diesel: 3.23, petrol: 2.99, premium: 3.15 };
-    const pricePerLiter = prices[fuelType] + (Math.random() * 0.2 - 0.1);
+    const pricePerLiter = (prices[fuelType] ?? 3) + (Math.random() * 0.2 - 0.1);
     const amount = quantity * pricePerLiter;
     
     mockText = `
@@ -382,7 +382,7 @@ function getMockOCRResult(filePath: string): OCRResult {
     };
   } else if (isWaterBill) {
     // Water bill
-    const provider = providers[Math.floor(Math.random() * providers.length)];
+    const provider = providers[Math.floor(Math.random() * providers.length)] ?? providers[0]!;
     const consumption = Math.floor(Math.random() * 50) + 10; // 10 - 60 cubic meters
     const rate = 2.5 + Math.random() * 1.5; // 2.5 - 4.0 AED/m3
     const amount = consumption * rate;

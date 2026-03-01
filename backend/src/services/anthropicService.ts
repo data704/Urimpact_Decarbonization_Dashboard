@@ -149,6 +149,7 @@ function excelToText(filePath: string): string {
   const firstSheetName = workbook.SheetNames[0];
   if (!firstSheetName) return '';
   const sheet = workbook.Sheets[firstSheetName];
+  if (!sheet) return '';
   return XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
 }
 
@@ -221,7 +222,7 @@ Rules:
     const processingTime = Date.now() - startTime;
     let jsonStr = responseText.trim();
     const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) jsonStr = codeBlockMatch[1].trim();
+    if (codeBlockMatch) jsonStr = (codeBlockMatch[1] ?? jsonStr).trim();
 
     let arr: unknown;
     try {
@@ -318,7 +319,7 @@ Rules:
   // Parse JSON from response (handle optional markdown code block)
   let jsonStr = responseText.trim();
   const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch) {
+  if (codeBlockMatch && codeBlockMatch[1] !== undefined) {
     jsonStr = codeBlockMatch[1].trim();
   }
 
@@ -384,7 +385,7 @@ Base targets and pathway on target_year and ambition_level. Consider capex_opex_
   const responseText = await callClaude(prompt);
   let jsonStr = responseText.trim();
   const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch) {
+  if (codeBlockMatch && codeBlockMatch[1] !== undefined) {
     jsonStr = codeBlockMatch[1].trim();
   }
 
