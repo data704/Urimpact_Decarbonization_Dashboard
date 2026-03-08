@@ -378,7 +378,11 @@ function DataInput() {
         try {
             const result = await submitReceiptBatch(documentId, entries);
             const count = result?.emissions?.length ?? entries.length;
-            showNotification(`${count} emission(s) saved. Taking you to Dashboard…`, 'success');
+            const skipped = result?.skipped?.length ?? 0;
+            const msg = skipped > 0
+                ? `${count} emission(s) saved, ${skipped} row(s) skipped (invalid data). Taking you to Dashboard…`
+                : `${count} emission(s) saved. Taking you to Dashboard…`;
+            showNotification(msg, 'success');
             const removeIndices = new Set(indices.map(({ i }) => i));
             setPendingVerifications(prev => prev.filter((_, i) => !removeIndices.has(i)));
             navigate('/', { state: { fromSubmit: true, submitMessage: `${count} emission(s) saved`, count } });

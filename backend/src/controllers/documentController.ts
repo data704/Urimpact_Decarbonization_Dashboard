@@ -20,6 +20,50 @@ import { logUserAction, AuditActions } from '../services/auditService.js';
 import { logger } from '../utils/logger.js';
 import { DocumentType, EmissionScope, EmissionCategory } from '@prisma/client';
 
+// ─── Enum normalisation helpers ───────────────────────────────────────────────
+// Claude / Excel may return scope/category in many formats (mixed case, spaces, etc.).
+// Normalise to the exact Prisma enum values before hitting the database.
+
+const SCOPE_MAP: Record<string, EmissionScope> = {
+  SCOPE_1: 'SCOPE_1', SCOPE1: 'SCOPE_1', 'SCOPE 1': 'SCOPE_1', '1': 'SCOPE_1',
+  SCOPE_2: 'SCOPE_2', SCOPE2: 'SCOPE_2', 'SCOPE 2': 'SCOPE_2', '2': 'SCOPE_2',
+  SCOPE_3: 'SCOPE_3', SCOPE3: 'SCOPE_3', 'SCOPE 3': 'SCOPE_3', '3': 'SCOPE_3',
+};
+
+function normalizeScope(val: unknown, fallback: EmissionScope = 'SCOPE_1'): EmissionScope {
+  if (!val) return fallback;
+  const key = String(val).trim().toUpperCase().replace(/\s+/g, ' ');
+  return SCOPE_MAP[key] ?? SCOPE_MAP[key.replace(/ /g, '_')] ?? fallback;
+}
+
+const CATEGORY_MAP: Record<string, EmissionCategory> = {
+  ELECTRICITY: 'ELECTRICITY', ELECTRIC: 'ELECTRICITY', POWER: 'ELECTRICITY', 'PURCHASED ELECTRICITY': 'ELECTRICITY',
+  FUEL_COMBUSTION: 'FUEL_COMBUSTION', FUEL: 'FUEL_COMBUSTION', 'FUEL COMBUSTION': 'FUEL_COMBUSTION',
+  COMBUSTION: 'FUEL_COMBUSTION', DIESEL: 'FUEL_COMBUSTION', PETROL: 'FUEL_COMBUSTION',
+  GASOLINE: 'FUEL_COMBUSTION', NATURAL_GAS: 'FUEL_COMBUSTION', 'NATURAL GAS': 'FUEL_COMBUSTION',
+  TRANSPORT: 'TRANSPORT', TRANSPORTATION: 'TRANSPORT', TRAVEL: 'TRANSPORT',
+  WASTE: 'WASTE', WATER: 'WATER', REFRIGERANTS: 'REFRIGERANTS',
+  PROCESS: 'PROCESS_EMISSIONS', PROCESS_EMISSIONS: 'PROCESS_EMISSIONS',
+  OTHER: 'OTHER',
+};
+
+function normalizeCategory(val: unknown, activityType: string, fallback: EmissionCategory = 'FUEL_COMBUSTION'): EmissionCategory {
+  if (val) {
+    const key = String(val).trim().toUpperCase().replace(/\s+/g, ' ');
+    const mapped = CATEGORY_MAP[key] ?? CATEGORY_MAP[key.replace(/ /g, '_')];
+    if (mapped) return mapped;
+  }
+  // Infer from activityType when category is missing/unrecognised
+  const at = activityType.toLowerCase();
+  if (at.includes('electric') || at.includes('power') || at === 'electricity') return 'ELECTRICITY';
+  if (['diesel','petrol','gasoline','natural_gas','natural-gas','lpg','kerosene','fuel'].some((k) => at.includes(k))) return 'FUEL_COMBUSTION';
+  if (['vehicle','car','truck','flight','taxi','bus','ship','transport'].some((k) => at.includes(k))) return 'TRANSPORT';
+  if (at.includes('waste')) return 'WASTE';
+  if (at.includes('water')) return 'WATER';
+  if (at.includes('refriger')) return 'REFRIGERANTS';
+  return fallback;
+}
+
 /**
  * Upload a document
  * POST /api/documents/upload
@@ -376,8 +420,9 @@ export async function submitDocument(req: AuthRequest, res: Response): Promise<v
       region,
     });
 
-    const scope: EmissionScope = (body.scope ?? extracted.scope) as EmissionScope || (document.documentType === 'FUEL_RECEIPT' ? 'SCOPE_1' : 'SCOPE_2');
-    const category: EmissionCategory = (body.category ?? extracted.category) as EmissionCategory || (document.documentType === 'FUEL_RECEIPT' ? 'FUEL_COMBUSTION' : 'ELECTRICITY');
+    const defaultScope: EmissionScope = document.documentType === 'FUEL_RECEIPT' ? 'SCOPE_1' : 'SCOPE_2';
+    const scope = normalizeScope(body.scope ?? extracted.scope, defaultScope);
+    const category = normalizeCategory(body.category ?? extracted.category, activityType, document.documentType === 'FUEL_RECEIPT' ? 'FUEL_COMBUSTION' : 'ELECTRICITY');
 
     const emission = await createEmission(
       {
@@ -458,47 +503,68 @@ export async function submitDocumentBatch(req: AuthRequest, res: Response): Prom
 
     const bodyEntries = Array.isArray(req.body?.entries) ? req.body.entries : extracted.entries;
     const emissions = [];
+    const skipped: Array<{ row: number; reason: string }> = [];
+    const defaultScope: EmissionScope = document.documentType === 'FUEL_RECEIPT' ? 'SCOPE_1' : 'SCOPE_2';
+    const defaultCategory: EmissionCategory = document.documentType === 'FUEL_RECEIPT' ? 'FUEL_COMBUSTION' : 'ELECTRICITY';
 
     for (let i = 0; i < bodyEntries.length; i++) {
       const row = bodyEntries[i] as Record<string, unknown>;
-      const def = (extracted.entries[i] as Record<string, unknown>) || {};
-      const activityType = String(row.activityType ?? def.activityType ?? '').trim();
+      // Use stored extracted entry as fallback (body may omit unchanged fields)
+      const def = (extracted.entries[i] as Record<string, unknown>) ?? {};
+
+      const activityType = String(row.activityType ?? def.activityType ?? '').trim().toLowerCase();
       const activityAmount = Number(row.activityAmount ?? def.activityAmount);
       const activityUnit = String(row.activityUnit ?? def.activityUnit ?? '').trim();
-      const region = String(row.region ?? def.region ?? 'AE').trim();
+      const region = String(row.region ?? def.region ?? 'AE').trim() || 'AE';
 
-      if (!activityType || Number.isNaN(activityAmount) || !activityUnit) {
-        sendError(res, `Entry ${i + 1}: missing or invalid activityType, activityAmount, or activityUnit`, 400);
-        return;
+      // Skip rows that are fundamentally unusable — don't abort the whole batch
+      if (!activityType || Number.isNaN(activityAmount) || activityAmount <= 0 || !activityUnit) {
+        const reason = `missing activityType, invalid/zero amount, or missing unit`;
+        logger.warn(`Batch submit row ${i + 1} skipped: ${reason}`, { activityType, activityAmount, activityUnit });
+        skipped.push({ row: i + 1, reason });
+        continue;
       }
 
-      const climatiqResult = await calculateEmissions({
-        activityType,
-        activityAmount,
-        activityUnit,
-        region,
-      });
+      try {
+        const climatiqResult = await calculateEmissions({ activityType, activityAmount, activityUnit, region });
 
-      const scope: EmissionScope = (row.scope ?? def.scope ?? (document.documentType === 'FUEL_RECEIPT' ? 'SCOPE_1' : 'SCOPE_2')) as EmissionScope;
-      const category: EmissionCategory = (row.category ?? def.category ?? (document.documentType === 'FUEL_RECEIPT' ? 'FUEL_COMBUSTION' : 'ELECTRICITY')) as EmissionCategory;
-      const dateVal = row.documentDate ?? row.billingPeriodStart ?? def.documentDate ?? def.billingPeriodStart;
+        // Normalise scope and category — handles 'Scope 1', 'scope_1', 'SCOPE1' etc.
+        const scope = normalizeScope(row.scope ?? def.scope, defaultScope);
+        const category = normalizeCategory(row.category ?? def.category, activityType, defaultCategory);
 
-      const emission = await createEmission(
-        {
-          userId: req.user!.userId,
-          documentId: id,
-          scope,
-          category,
-          activityType,
-          activityAmount,
-          activityUnit,
-          region,
-          billingPeriodStart: dateVal ? new Date(String(dateVal)) : undefined,
-          billingPeriodEnd: (row.billingPeriodEnd ?? def.billingPeriodEnd) ? new Date(String(row.billingPeriodEnd ?? def.billingPeriodEnd)) : undefined,
-        },
-        climatiqResult
-      );
-      emissions.push(emission);
+        const rawDate = row.documentDate ?? row.billingPeriodStart ?? def.documentDate ?? def.billingPeriodStart;
+        const rawEnd = row.billingPeriodEnd ?? def.billingPeriodEnd;
+
+        const parsedStart = rawDate ? (() => { const d = new Date(String(rawDate)); return isNaN(d.getTime()) ? undefined : d; })() : undefined;
+        const parsedEnd   = rawEnd  ? (() => { const d = new Date(String(rawEnd));  return isNaN(d.getTime()) ? undefined : d; })() : undefined;
+
+        const emission = await createEmission(
+          {
+            userId: req.user!.userId,
+            documentId: id,
+            scope,
+            category,
+            activityType,
+            activityAmount,
+            activityUnit,
+            region,
+            billingPeriodStart: parsedStart,
+            billingPeriodEnd: parsedEnd,
+          },
+          climatiqResult
+        );
+        emissions.push(emission);
+      } catch (rowErr) {
+        const reason = rowErr instanceof Error ? rowErr.message : 'Unknown error';
+        logger.error(`Batch submit row ${i + 1} failed: ${reason}`, { activityType, activityAmount, activityUnit });
+        skipped.push({ row: i + 1, reason });
+        // Continue processing remaining rows — partial success is better than total failure
+      }
+    }
+
+    if (emissions.length === 0) {
+      sendError(res, `No entries could be saved. ${skipped.length} row(s) skipped. Check that activityType, activityAmount, and activityUnit are valid.`, 400);
+      return;
     }
 
     await updateDocumentStatus(id, 'COMPLETED');
@@ -514,10 +580,15 @@ export async function submitDocumentBatch(req: AuthRequest, res: Response): Prom
 
     const updatedDocument = await getDocumentById(id, req.user.userId, isAdmin);
 
+    const msg = skipped.length > 0
+      ? `${emissions.length} emission(s) saved. ${skipped.length} row(s) skipped (see skipped array).`
+      : `${emissions.length} emission(s) calculated and saved.`;
+
     sendSuccess(res, {
       document: updatedDocument,
       emissions,
-    }, `${emissions.length} emission(s) calculated and saved.`);
+      ...(skipped.length > 0 && { skipped }),
+    }, msg);
   } catch (error) {
     if (error instanceof Error) {
       if (error.message.includes('not found')) {
