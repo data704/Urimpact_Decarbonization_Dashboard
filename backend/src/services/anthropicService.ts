@@ -142,7 +142,31 @@ async function callClaude(text: string, options: CallClaudeOptions = {}): Promis
 }
 
 /**
- * Read Excel file (xlsx/xls) and return first sheet as CSV-like text for Claude
+ * Read Excel file (xlsx/xls) and return structured data: header row + data rows separately.
+ * This lets us chunk large files by rows without losing column headers.
+ */
+function parseExcelRows(filePath: string): { headers: string; rows: string[]; totalRows: number } {
+  const workbook = XLSX.readFile(filePath, { cellDates: true });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) return { headers: '', rows: [], totalRows: 0 };
+  const sheet = workbook.Sheets[firstSheetName];
+  if (!sheet) return { headers: '', rows: [], totalRows: 0 };
+
+  // Convert to array-of-arrays (raw mode) to split headers from data rows
+  const raw = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '', blankrows: false });
+  if (raw.length === 0) return { headers: '', rows: [], totalRows: 0 };
+
+  // First non-empty row is the header
+  const headerRow = (raw[0] as string[]).join(',');
+  const dataRows = (raw.slice(1) as string[][])
+    .filter((r) => r.some((cell) => String(cell).trim() !== ''))
+    .map((r) => r.join(','));
+
+  return { headers: headerRow, rows: dataRows, totalRows: dataRows.length };
+}
+
+/**
+ * Legacy: whole sheet as CSV (kept for small files / single-entry receipts)
  */
 function excelToText(filePath: string): string {
   const workbook = XLSX.readFile(filePath, { cellDates: true });
@@ -195,72 +219,118 @@ export async function extractReceiptToClimatiqJson(filePath: string): Promise<{
     logger.warn(`Receipt extraction: unsupported file type ${ext}`);
   }
 
-  // Excel with table data: ask for one JSON object per row (array of entries)
+  // Excel with table data: chunk large files and ask for one JSON object per row
   if (isExcel && extraText) {
-    const excelPrompt = `You are an expert at extracting emission-related data from spreadsheets for carbon calculations.
+    const BATCH_SIZE = 25; // rows per Claude call — keeps prompt + response within token limits
+    const { headers, rows: dataRows, totalRows } = parseExcelRows(filePath);
 
-Below is tabular data from a spreadsheet. Each row typically represents one emission entry (e.g. one fuel purchase, one utility bill, one activity).
+    if (totalRows === 0) {
+      throw new AppError('Spreadsheet has no readable data rows', 400);
+    }
+
+    logger.info(`Excel processing: ${totalRows} data rows, processing in batches of ${BATCH_SIZE}`);
+
+    /**
+     * Call Claude for a single batch of rows and parse the JSON response.
+     * Returns an empty array on parse failure (partial batch failure won't abort the whole file).
+     */
+    async function extractBatch(batchRows: string[], batchIndex: number): Promise<ReceiptExtractionResult[]> {
+      const tableText = [headers, ...batchRows].join('\n');
+      const batchPrompt = `You are an expert at extracting emission-related data from spreadsheets for carbon calculations.
+
+Below is tabular data from a spreadsheet. Each row represents one emission entry (e.g. one fuel purchase, one utility bill, one activity).
 
 Document data (table):
-${extraText}
+${tableText}
 
-Extract ONE entry per data row. Respond with ONLY a JSON array of objects (no markdown, no code block). Each object must have at least:
+Extract ONE entry per data row. Respond with ONLY a JSON array of objects. No markdown, no code block, no commentary.
+Each object must have at least:
 - "activityType": "electricity" or "diesel" or "petrol" or "natural_gas" etc. (lowercase)
-- "activityAmount": number
-- "activityUnit": "kWh" or "L" or "m3" etc.
+- "activityAmount": number (the consumption quantity)
+- "activityUnit": "kWh" or "L" or "m3" or "gal" etc.
 
 Each object may also include: "region", "product", "supplier", "documentDate" (YYYY-MM-DD), "scope", "category".
 
 Rules:
-- Output a JSON array with one object per data row. Do not merge rows into one entry.
-- If the table has 30 rows of data, return an array of 30 objects.
-- activityType must be Climatiq-compatible: electricity, diesel, petrol, gasoline, natural_gas, etc.
-- Infer activityType from column headers or values (e.g. "Electricity" column → electricity, "Diesel" → diesel).
-- Return only the JSON array, no other text.`;
+- One JSON object per data row — do NOT merge rows.
+- activityType must be Climatiq-compatible: electricity, diesel, petrol, gasoline, natural_gas, lpg, etc.
+- Infer activityType from column headers or values.
+- Return only the JSON array, nothing else.`;
 
-    const responseText = await callClaude(excelPrompt, {});
+      let responseText = '';
+      try {
+        responseText = await callClaude(batchPrompt, {});
+      } catch (err) {
+        logger.error(`Excel batch ${batchIndex}: Claude call failed`, { error: err instanceof Error ? err.message : String(err) });
+        return [];
+      }
+
+      let jsonStr = responseText.trim();
+      // Strip optional markdown code fence
+      const fence = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fence?.[1]) jsonStr = fence[1].trim();
+      // If response starts with '[', grab everything from '[' to the last ']'
+      const arrStart = jsonStr.indexOf('[');
+      const arrEnd = jsonStr.lastIndexOf(']');
+      if (arrStart !== -1 && arrEnd > arrStart) jsonStr = jsonStr.slice(arrStart, arrEnd + 1);
+
+      let arr: unknown;
+      try {
+        arr = JSON.parse(jsonStr);
+      } catch {
+        logger.error(`Excel batch ${batchIndex}: invalid JSON from Claude`, { responseText: responseText.slice(0, 300) });
+        return []; // skip this batch rather than aborting the whole file
+      }
+
+      const items = Array.isArray(arr) ? arr : [arr];
+      return items
+        .filter((item): item is Record<string, unknown> => item != null && typeof item === 'object')
+        .map((item) => {
+          const activityType = String(item.activityType ?? '').trim().toLowerCase();
+          const activityAmount = Number(item.activityAmount);
+          const activityUnit = String(item.activityUnit ?? '').trim();
+          if (!activityType || Number.isNaN(activityAmount) || !activityUnit) return null;
+          return {
+            ...item,
+            activityType,
+            activityAmount,
+            activityUnit,
+            region: (item.region as string) ?? 'AE',
+            product: item.product as string | undefined,
+            supplier: (item.supplier ?? item.provider) as string | undefined,
+            documentDate: item.documentDate as string | undefined,
+            billingPeriodStart: item.billingPeriodStart as string | undefined,
+            billingPeriodEnd: item.billingPeriodEnd as string | undefined,
+          } as ReceiptExtractionResult;
+        })
+        .filter((e): e is ReceiptExtractionResult => e != null);
+    }
+
+    // Split data rows into batches and process sequentially to avoid rate limits
+    const allExtracted: ReceiptExtractionResult[] = [];
+    const batches: string[][] = [];
+    for (let i = 0; i < dataRows.length; i += BATCH_SIZE) {
+      batches.push(dataRows.slice(i, i + BATCH_SIZE));
+    }
+
+    for (let b = 0; b < batches.length; b++) {
+      const batchResults = await extractBatch(batches[b], b + 1);
+      allExtracted.push(...batchResults);
+      logger.info(`Excel batch ${b + 1}/${batches.length}: extracted ${batchResults.length} entries`);
+    }
+
     const processingTime = Date.now() - startTime;
-    let jsonStr = responseText.trim();
-    const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlockMatch) jsonStr = (codeBlockMatch[1] ?? jsonStr).trim();
 
-    let arr: unknown;
-    try {
-      arr = JSON.parse(jsonStr);
-    } catch {
-      logger.error('Claude Excel extraction: invalid JSON', { responseText: responseText.slice(0, 500) });
-      throw new AppError('Failed to parse spreadsheet data from AI response', 500);
+    if (allExtracted.length === 0) {
+      throw new AppError(
+        `No valid emission entries could be extracted from the spreadsheet (${totalRows} rows checked). ` +
+        'Check that the file has columns for activity type, amount, and unit.',
+        400
+      );
     }
 
-    const items = Array.isArray(arr) ? arr : [arr];
-    const extractedFields: ReceiptExtractionResult[] = items
-      .filter((item): item is Record<string, unknown> => item != null && typeof item === 'object')
-      .map((item) => {
-        const activityType = String(item.activityType ?? '').trim().toLowerCase();
-        const activityAmount = Number(item.activityAmount);
-        const activityUnit = String(item.activityUnit ?? '').trim();
-        if (!activityType || Number.isNaN(activityAmount) || !activityUnit) return null;
-        return {
-          ...item,
-          activityType,
-          activityAmount,
-          activityUnit,
-          region: (item.region as string) ?? 'AE',
-          product: item.product as string | undefined,
-          supplier: (item.supplier ?? item.provider) as string | undefined,
-          documentDate: item.documentDate as string | undefined,
-          billingPeriodStart: item.billingPeriodStart as string | undefined,
-          billingPeriodEnd: item.billingPeriodEnd as string | undefined,
-        } as ReceiptExtractionResult;
-      })
-      .filter((e): e is ReceiptExtractionResult => e != null);
-
-    if (extractedFields.length === 0) {
-      throw new AppError('No valid emission entries could be extracted from the spreadsheet', 400);
-    }
-
-    logger.info(`Excel extracted ${extractedFields.length} entries in ${processingTime}ms`);
-    return { rawText: responseText, extractedFields, processingTime, multiple: true };
+    logger.info(`Excel extraction complete: ${allExtracted.length}/${totalRows} entries extracted in ${processingTime}ms`);
+    return { rawText: `Extracted ${allExtracted.length} entries from ${totalRows} rows`, extractedFields: allExtracted, processingTime, multiple: true };
   }
 
   const attachmentDesc =
@@ -453,17 +523,16 @@ export interface SectionNarrativeOutput {
 }
 
 /**
- * Generate per-section narrative text for the V2 report.
- * AI returns text only — all numbers come from the deterministic engine.
+ * Call Claude for one batch of sections.
+ * Returns an array of { slot_id, text } — never throws; returns empty strings on any error.
  */
-export async function generateSectionNarratives(
-  sections: SectionNarrativeInput[]
+async function callClaudeForSectionBatch(
+  batch: SectionNarrativeInput[]
 ): Promise<SectionNarrativeOutput[]> {
-  if (!config.anthropic.apiKey || sections.length === 0) {
-    return sections.map((s) => ({ slot_id: s.slot_id, text: '' }));
-  }
+  const empty = batch.map((s) => ({ slot_id: s.slot_id, text: '' }));
+  if (batch.length === 0) return empty;
 
-  const numbered = sections.map((s, i) => ({
+  const numbered = batch.map((s, i) => ({
     idx: i + 1,
     slot_id: s.slot_id,
     instruction: buildSectionPrompt(s.slot_id, s.bindings),
@@ -480,18 +549,50 @@ ${numbered.map((p) => `[${p.idx}] slot_id: "${p.slot_id}"\nTask: ${p.instruction
 
 Return only the JSON array.`;
 
-  const responseText = await callClaude(prompt);
-  let jsonStr = responseText.trim();
-  const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match?.[1]) jsonStr = match[1].trim();
-
   try {
+    const responseText = await callClaude(prompt);
+    let jsonStr = responseText.trim();
+    const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (match?.[1]) jsonStr = match[1].trim();
+
     const arr = JSON.parse(jsonStr) as Array<{ slot_id: string; text: string }>;
     if (!Array.isArray(arr)) throw new Error('Expected array');
-    logger.info(`Section narratives generated: ${arr.length} sections`);
-    return arr.filter((item) => typeof item.slot_id === 'string' && typeof item.text === 'string');
-  } catch {
-    logger.error('Section narratives: invalid JSON from Claude', { responseText: responseText.slice(0, 500) });
+    const valid = arr.filter((item) => typeof item.slot_id === 'string' && typeof item.text === 'string');
+    logger.info(`Section narratives batch (${batch.length} sections) generated: ${valid.length} returned`);
+    return valid;
+  } catch (err) {
+    logger.error('Section narratives batch failed', {
+      sections: batch.map((s) => s.slot_id),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return empty;
+  }
+}
+
+/**
+ * Generate per-section narrative text for the V2 report.
+ * Sections are processed in small batches to avoid token limits and reduce blast radius of errors.
+ * AI returns text only — all numbers come from the deterministic engine.
+ * This function never throws — it returns empty strings on any failure.
+ */
+export async function generateSectionNarratives(
+  sections: SectionNarrativeInput[]
+): Promise<SectionNarrativeOutput[]> {
+  if (!config.anthropic.apiKey || sections.length === 0) {
+    logger.warn('Section narratives: skipped (no API key or empty sections)');
     return sections.map((s) => ({ slot_id: s.slot_id, text: '' }));
   }
+
+  // Split into batches of 3 to keep each prompt small and avoid response truncation
+  const BATCH_SIZE = 3;
+  const batches: SectionNarrativeInput[][] = [];
+  for (let i = 0; i < sections.length; i += BATCH_SIZE) {
+    batches.push(sections.slice(i, i + BATCH_SIZE));
+  }
+
+  // Process all batches in parallel (each batch is an independent Claude call)
+  const results = await Promise.all(batches.map((batch) => callClaudeForSectionBatch(batch)));
+
+  // Flatten and return
+  return results.flat();
 }

@@ -395,24 +395,31 @@ export async function generateReportNarratives(req: AuthRequest, res: Response):
       return;
     }
 
+    // generateSectionNarratives never throws — it returns empty strings on any failure
     const narratives = await generateSectionNarratives(sections);
 
-    await logUserAction(
-      req.user.userId,
-      AuditActions.REPORT_GENERATED,
-      'report',
-      undefined,
-      { reportType: 'v2_narrative', sectionCount: sections.length },
-      req
-    );
+    // Only log the audit action if at least some narratives were generated
+    const hasContent = narratives.some((n) => n.text.length > 0);
+    if (hasContent) {
+      await logUserAction(
+        req.user.userId,
+        AuditActions.REPORT_GENERATED,
+        'report',
+        undefined,
+        { reportType: 'v2_narrative', sectionCount: sections.length },
+        req
+      ).catch(() => { /* non-critical — don't let audit failure break the response */ });
+    }
 
     sendSuccess(res, { narratives });
   } catch (error) {
-    logger.error('Generate report narratives error:', error);
-    if (error instanceof Error) {
-      sendError(res, error.message, 500);
-    } else {
-      sendError(res, 'Failed to generate report narratives', 500);
-    }
+    // Even on unexpected errors, return 200 with empty narratives so the report
+    // remains fully functional — AI text is supplementary, not structural.
+    logger.error('Generate report narratives unexpected error:', error);
+    const emptyNarratives = (req.body?.sections ?? []).map((s: { slot_id?: string }) => ({
+      slot_id: s.slot_id ?? '',
+      text: '',
+    }));
+    sendSuccess(res, { narratives: emptyNarratives });
   }
 }
