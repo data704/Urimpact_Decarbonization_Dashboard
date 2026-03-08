@@ -16,18 +16,16 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip);
 
 const AMBITION_OPTIONS = [
     { value: '', label: 'Select ambition level' },
-    { value: 'COMPLIANCE_MINIMUM', label: 'Compliance / Minimum Reduction' },
-    { value: 'PARTIAL_REDUCTION', label: 'Partial Reduction (30-50%)' },
-    { value: 'NEAR_ZERO', label: 'Near-Zero (90-95% reduction)' },
-    { value: 'NET_ZERO', label: 'Net-Zero (100% reduction or offset)' }
+    { value: 'MODERATE_50', label: 'Moderate (50% reduction)' },
+    { value: 'HIGH_75',     label: 'High (75% reduction)' },
+    { value: 'NEARZERO_90', label: 'Near-Zero (90% reduction)' }
 ];
 
-const CAPEX_OPEX_OPTIONS = [
-    { value: '', label: 'Select preference (optional)' },
-    { value: 'CAPEX_HEAVY', label: 'CAPEX-Heavy Preferred' },
-    { value: 'BALANCED', label: 'Balanced Approach' },
-    { value: 'OPEX_LIGHT', label: 'OPEX-Light Preferred' }
-];
+const AMBITION_TIERS = {
+    MODERATE_50: { R_total: 0.50, StructuralResidual: 0.15, label: 'Moderate (50%)' },
+    HIGH_75:     { R_total: 0.75, StructuralResidual: 0.08, label: 'High (75%)' },
+    NEARZERO_90: { R_total: 0.90, StructuralResidual: 0.05, label: 'Near-Zero (90%)' },
+};
 
 // Project data (matches dummy: KKU, Majmaah)
 const PROJECTS = {
@@ -84,11 +82,12 @@ function Decarbonization() {
                     organizationName: c.organization_name ?? '',
                     targetYear: c.target_year ? String(c.target_year) : '',
                     ambitionLevel: c.ambition_level ?? '',
-                    capexOpex: c.capex_opex_preference ?? ''
+                    includeBau: c.include_bau ?? false,
+                    includeTreeEquivalency: c.include_tree_equivalency ?? true,
                 };
             }
         } catch (_) {}
-        return { organizationName: '', targetYear: '', ambitionLevel: '', capexOpex: '' };
+        return { organizationName: '', targetYear: '', ambitionLevel: '', includeBau: false, includeTreeEquivalency: true };
     });
     const [configPreview, setConfigPreview] = useState(() => {
         try {
@@ -99,13 +98,18 @@ function Decarbonization() {
     });
     const [configModalOpen, setConfigModalOpen] = useState(false);
 
-    const ambitionLevel = configForm?.ambitionLevel || configPreview?.ambition_level || '';
-    const reductionPercent = ambitionLevel === 'NET_ZERO' ? 100 : ambitionLevel === 'NEAR_ZERO' ? 85.1 : ambitionLevel === 'PARTIAL_REDUCTION' ? 45 : ambitionLevel === 'COMPLIANCE_MINIMUM' ? 25 : 0;
+    // configReady = user has saved a valid config (ambition level + target year both set)
+    const configReady = Boolean(configPreview?.ambition_level && configPreview?.target_year);
+
+    const ambitionLevel = configPreview?.ambition_level || '';
+    const tier = AMBITION_TIERS[ambitionLevel] ?? AMBITION_TIERS['NEARZERO_90'];
     const residualEmissions = useMemo(() => {
+        if (!configReady) return 0;
         const total = Number(currentTotalEmissions) || 0;
-        if (!ambitionLevel || total <= 0) return total;
-        return Math.max(0, total * (1 - reductionPercent / 100));
-    }, [currentTotalEmissions, ambitionLevel, reductionPercent]);
+        if (!ambitionLevel || total <= 0) return 0;
+        const E_target = total * (1 - tier.R_total);
+        return Math.max(0, Math.round(E_target * 100) / 100);
+    }, [configReady, currentTotalEmissions, ambitionLevel, tier]);
     const totalEmissions = residualEmissions;
 
     // Generate and cache tree counts for projects
@@ -182,7 +186,7 @@ function Decarbonization() {
 
     const handleSaveConfig = (e) => {
         e.preventDefault();
-        const { organizationName, targetYear, ambitionLevel, capexOpex } = configForm;
+        const { organizationName, targetYear, ambitionLevel, includeBau, includeTreeEquivalency } = configForm;
         if (!targetYear || !ambitionLevel) {
             showNotification('Please fill in all required fields (Target Year & Ambition Level)', 'error');
             return;
@@ -191,7 +195,8 @@ function Decarbonization() {
             organization_name: organizationName?.trim() || null,
             target_year: parseInt(targetYear, 10),
             ambition_level: ambitionLevel,
-            capex_opex_preference: capexOpex || null
+            include_bau: includeBau,
+            include_tree_equivalency: includeTreeEquivalency,
         };
         setConfigPreview(config);
         try {
@@ -206,7 +211,8 @@ function Decarbonization() {
             organizationName: '',
             targetYear: '',
             ambitionLevel: '',
-            capexOpex: ''
+            includeBau: false,
+            includeTreeEquivalency: true,
         });
         setConfigPreview(null);
         try {
@@ -349,7 +355,7 @@ function Decarbonization() {
                                         max={2100}
                                         required
                                     />
-                                    <p className="help-text">Used for emissions trajectory length and cost amortisation</p>
+                                    <p className="help-text">Used for emissions trajectory length</p>
                                 </div>
                             </div>
                         </div>
@@ -358,25 +364,50 @@ function Decarbonization() {
                             <div className="config-card-header">
                                 <div className="config-card-title">
                                     <span className="config-card-number">3</span>
-                                    CAPEX vs OPEX Preference
+                                    BAU Scenario
                                 </div>
                                 <div className="config-card-description">
-                                    Indicates preference for upfront investment vs ongoing operating costs (Optional)
+                                    Include a Business-as-Usual comparator section in the report
                                 </div>
                             </div>
                             <div className="config-card-content">
                                 <div className="form-group">
-                                    <label htmlFor="capexOpex">Investment Preference</label>
-                                    <select
-                                        id="capexOpex"
-                                        value={configForm.capexOpex}
-                                        onChange={(e) => setConfigForm({ ...configForm, capexOpex: e.target.value })}
-                                    >
-                                        {CAPEX_OPEX_OPTIONS.map(opt => (
-                                            <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
-                                        ))}
-                                    </select>
-                                    <p className="help-text">Used for ranking and optimization of decarbonisation levers</p>
+                                    <label className="toggle-label" style={{ display:'flex', alignItems:'center', gap:'0.75rem', cursor:'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={configForm.includeBau}
+                                            onChange={(e) => setConfigForm({ ...configForm, includeBau: e.target.checked })}
+                                            style={{ width:'1.1rem', height:'1.1rem', accentColor:'#14B8A6' }}
+                                        />
+                                        <span>Include BAU comparison in report</span>
+                                    </label>
+                                    <p className="help-text">When enabled, the report includes a BAU vs Intervention pathway chart. BAU growth rate defaults to 0%.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="config-card">
+                            <div className="config-card-header">
+                                <div className="config-card-title">
+                                    <span className="config-card-number">4</span>
+                                    Tree Equivalency
+                                </div>
+                                <div className="config-card-description">
+                                    Include illustrative tree equivalency for removal obligation
+                                </div>
+                            </div>
+                            <div className="config-card-content">
+                                <div className="form-group">
+                                    <label className="toggle-label" style={{ display:'flex', alignItems:'center', gap:'0.75rem', cursor:'pointer' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={configForm.includeTreeEquivalency}
+                                            onChange={(e) => setConfigForm({ ...configForm, includeTreeEquivalency: e.target.checked })}
+                                            style={{ width:'1.1rem', height:'1.1rem', accentColor:'#14B8A6' }}
+                                        />
+                                        <span>Include tree equivalency in report</span>
+                                    </label>
+                                    <p className="help-text">When enabled, the report includes an illustrative translation of the removal obligation into trees/year. Uses default sequestration rate of 0.025 tCO₂e/tree/year.</p>
                                 </div>
                             </div>
                         </div>
@@ -401,8 +432,10 @@ function Decarbonization() {
                                 <dd>{configForm.ambitionLevel ? AMBITION_OPTIONS.find(o => o.value === configForm.ambitionLevel)?.label || configForm.ambitionLevel : '—'}</dd>
                                 <dt>Target Year</dt>
                                 <dd>{configForm.targetYear || '—'}</dd>
-                                <dt>Investment</dt>
-                                <dd>{configForm.capexOpex ? CAPEX_OPEX_OPTIONS.find(o => o.value === configForm.capexOpex)?.label || configForm.capexOpex : '—'}</dd>
+                                <dt>BAU Scenario</dt>
+                                <dd>{configForm.includeBau ? 'Included' : 'Not included'}</dd>
+                                <dt>Tree Equivalency</dt>
+                                <dd>{configForm.includeTreeEquivalency ? 'Included' : 'Not included'}</dd>
                             </dl>
                         </div>
                     </aside>
@@ -421,73 +454,106 @@ function Decarbonization() {
                 {/* Left: Net Emissions Projection card */}
                 <div className="decarb-card decarb-card-main">
                     <div className="decarb-card-title">Net Emissions Projection</div>
-                    <div className="metrics-row">
-                        <div className="metric-box">
-                            <div className="metric-label">Residual Emissions</div>
-                            <div className="metric-number">{formatNumber(totalEmissions)} <span className="metric-unit">tCO₂e</span></div>
+
+                    {!configReady ? (
+                        /* ── Placeholder: config not yet saved ── */
+                        <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'2.5rem 1.5rem', gap:'1rem', textAlign:'center', color:'#94A3B8', flex:1 }}>
+                            <i className="fas fa-sliders-h" style={{ fontSize:'2.25rem', color:'#CBD5E1' }}></i>
+                            <p style={{ fontSize:'0.95rem', fontWeight:500, color:'#475569', margin:0 }}>
+                                Set your Inputs &amp; Constraints to see the calculation
+                            </p>
+                            <p style={{ fontSize:'0.82rem', margin:0 }}>
+                                Define your ambition level and target year, then save the configuration to calculate residual emissions and offset potential.
+                            </p>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                style={{ marginTop:'0.5rem' }}
+                                onClick={() => setConfigModalOpen(true)}
+                            >
+                                <i className="fas fa-sliders-h"></i> Open Inputs &amp; Constraints
+                            </button>
                         </div>
-                        <div className="metric-box">
-                            <div className="metric-label">Offset Potential</div>
-                            <div className="metric-number metric-number-highlight">-{formatNumber(totalOffset)} <span className="metric-unit">tCO₂e</span></div>
-                        </div>
-                        <div className="metric-box">
-                            <div className="metric-label">Projected Net</div>
-                            <div className="metric-number">{formatNumber(netEmissions)} <span className="metric-unit">tCO₂e</span></div>
-                        </div>
-                    </div>
-                    <div className="chart-wrapper" style={{ height: 280 }}>
-                        <Bar
-                            data={barChartData}
-                            options={{
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: { legend: { display: false }, tooltip: { enabled: true } },
-                                scales: {
-                                    y: {
-                                        beginAtZero: true,
-                                        grid: { color: '#E2E8F0' },
-                                        ticks: { color: '#475569', font: { size: 12 } },
-                                    },
-                                    x: {
-                                        grid: { display: false },
-                                        ticks: { color: '#475569', font: { size: 12 } },
-                                    },
-                                },
-                                animation: { duration: 400 },
-                            }}
-                        />
-                    </div>
-                    <div className="slider-group">
-                        <div className="slider-label">
-                            <span>Trees to Plant (URIMPACT Initiative)</span>
-                            <span className="slider-value">{formatNumber(treesToPlant)} Trees</span>
-                        </div>
-                        <input
-                            type="range"
-                            min="0"
-                            max={currentProjectTrees}
-                            value={treesToPlant}
-                            step="50"
-                            onChange={handleSliderChange}
-                            disabled={!selectedProject}
-                            className="decarb-slider"
-                        />
-                        <div className="slider-minmax">
-                            <span>0</span>
-                            <span>{formatNumber(currentProjectTrees)}</span>
-                        </div>
-                    </div>
+                    ) : (
+                        /* ── Results: config saved, calculations ready ── */
+                        <>
+                            <div className="metrics-row">
+                                <div className="metric-box">
+                                    <div className="metric-label">Residual Emissions</div>
+                                    <div className="metric-number">{formatNumber(totalEmissions)} <span className="metric-unit">tCO₂e</span></div>
+                                </div>
+                                <div className="metric-box">
+                                    <div className="metric-label">Offset Potential</div>
+                                    <div className="metric-number metric-number-highlight">-{formatNumber(totalOffset)} <span className="metric-unit">tCO₂e</span></div>
+                                </div>
+                                <div className="metric-box">
+                                    <div className="metric-label">Projected Net</div>
+                                    <div className="metric-number">{formatNumber(netEmissions)} <span className="metric-unit">tCO₂e</span></div>
+                                </div>
+                            </div>
+                            <div className="chart-wrapper" style={{ height: 280 }}>
+                                <Bar
+                                    data={barChartData}
+                                    options={{
+                                        responsive: true,
+                                        maintainAspectRatio: false,
+                                        plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                                        scales: {
+                                            y: {
+                                                beginAtZero: true,
+                                                grid: { color: '#E2E8F0' },
+                                                ticks: { color: '#475569', font: { size: 12 } },
+                                            },
+                                            x: {
+                                                grid: { display: false },
+                                                ticks: { color: '#475569', font: { size: 12 } },
+                                            },
+                                        },
+                                        animation: { duration: 400 },
+                                    }}
+                                />
+                            </div>
+                            <div className="slider-group">
+                                <div className="slider-label">
+                                    <span>Trees to Plant (URIMPACT Initiative)</span>
+                                    <span className="slider-value">{formatNumber(treesToPlant)} Trees</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={currentProjectTrees}
+                                    value={treesToPlant}
+                                    step="50"
+                                    onChange={handleSliderChange}
+                                    disabled={!selectedProject}
+                                    className="decarb-slider"
+                                />
+                                <div className="slider-minmax">
+                                    <span>0</span>
+                                    <span>{formatNumber(currentProjectTrees)}</span>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Right: Impact card + Project Details */}
                 <div className="decarb-sidebar">
                     <div className="impact-card">
                         <div className="impact-title">Your Contribution</div>
-                        <div className="impact-big-number">{formatNumber(treesToPlant)}</div>
-                        <div className="impact-desc">Trees planted in verified reforestation projects.</div>
-                        <button type="button" className="cta-button" onClick={handleConfirmPlant}>
-                            Confirm &amp; Plant Now
-                        </button>
+                        {configReady ? (
+                            <>
+                                <div className="impact-big-number">{formatNumber(treesToPlant)}</div>
+                                <div className="impact-desc">Trees planted in verified reforestation projects.</div>
+                                <button type="button" className="cta-button" onClick={handleConfirmPlant}>
+                                    Confirm &amp; Plant Now
+                                </button>
+                            </>
+                        ) : (
+                            <div className="impact-desc" style={{ padding:'1rem 0', color:'#94A3B8', fontSize:'0.875rem' }}>
+                                Save your configuration to enable tree planting.
+                            </div>
+                        )}
                     </div>
                     <div className="decarb-card decarb-card-details">
                         <div className="decarb-card-title">Project Details</div>

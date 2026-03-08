@@ -260,6 +260,28 @@ export async function getEmissions(params = {}) {
 }
 
 /**
+ * Generate per-section AI narrative text for the V2 Decarbonisation Report.
+ * Requires auth.
+ * Body: { sections: Array<{ section_id, slot_id, bindings }> }
+ * Returns: { narratives: Array<{ slot_id, text }> }
+ */
+export async function getReportNarratives(sections) {
+  const res = await fetch(`${API_BASE}/reports/narrative`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sections }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || err.message || `Narrative generation failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+  return (json?.data?.narratives ?? json?.narratives ?? []);
+}
+
+/**
  * Delete an emission record. Requires auth.
  * DELETE /api/emissions/:id
  */

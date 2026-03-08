@@ -401,3 +401,97 @@ Base targets and pathway on target_year and ambition_level. Consider capex_opex_
     };
   }
 }
+
+// ─── Section Narrative Generation (V2 Report Architecture) ───────────────────
+
+const GLOBAL_NARRATIVE_INSTRUCTION = `URIMPACT DECARBONISATION REPORT — NARRATIVE RULES:
+- You are given computed variables from a deterministic calculation engine.
+- Do NOT calculate anything. Do NOT invent numbers, percentages, dates, or assumptions.
+- Refer ONLY to the values provided in each section's bindings.
+- If a value is missing, write "Not provided."
+- Tone: institutional, audit-safe, reduction-first, non-promotional.
+- Output must be plain text only. No markdown tables, no markdown headers.
+- Keep strictly within the requested length for each section.`;
+
+type SectionBindings = Record<string, unknown>;
+
+function buildSectionPrompt(slot_id: string, bindings: SectionBindings): string {
+  const b = JSON.stringify(bindings);
+  const prompts: Record<string, string> = {
+    'exec.narrative': `Write 2–3 sentences summarising: (1) the baseline emissions and the absolute target-year reduction outcome, (2) the required annual reduction pace, (3) that the removal obligation addresses the structural residual only and does not substitute reductions. Data: ${b}`,
+
+    'baseline.caption': `Write 2–3 sentences explaining: (1) the top 1–2 contributors by share of total baseline emissions, (2) the Scope 1 vs Scope 2 split, (3) what that distribution implies for priority decarbonisation levers. Do not suggest new initiatives. Data: ${b}`,
+
+    'sources.caption': `Write exactly 2 sentences: (1) describe the overall distribution across emission sources, (2) highlight the top 1–2 sources as the primary reduction levers. Data: ${b}`,
+
+    'pathway.caption': `Write 80–110 words explaining: (1) the total reduction commitment and timeframe (base year to target year), (2) that the linear pathway is a planning simplification rather than a performance guarantee, (3) the required annual pace as a governance signal. Data: ${b}`,
+
+    'bau.caption': `${(bindings as {bau_enabled?: boolean}).bau_enabled ? `Write exactly 2 sentences: (1) explain the BAU comparator scenario and what it represents, (2) describe the difference in outcome at target year versus the intervention target. Do not use forecasting certainty language.` : `Output exactly: "BAU scenario not included."`} Data: ${b}`,
+
+    'residual.caption': `Write 90–130 words explaining: (1) what structural residual emissions are and why they persist after structural interventions (hard-to-abate), (2) that the residual ceiling is policy-defined and tied to the chosen ambition tier, (3) that the removal obligation addresses the residual only and does not substitute emission reductions. Data: ${b}`,
+
+    'removals.caption': `Write 2–3 sentences: (1) explain the annual removal requirement and its cumulative scale over the transition period${(bindings as {trees_enabled?: boolean}).trees_enabled ? ', (2) state clearly that the tree equivalency figure is an illustrative translation using the provided sequestration rate and is not a verified removal commitment' : ''}. Data: ${b}`,
+
+    'strategy.text': `Write exactly 3 sentences: (1) identify the priority operational lever(s) based on the dominant emission sources, (2) explain why the required annual pace implies early action from a governance perspective, (3) provide one neutral planning implication about capability-building or sequencing — without financial projections. Data: ${b}`,
+
+    'roadmap.caption': `Write 50–70 words introducing phased execution of the decarbonisation pathway: why foundation actions come first and how early phases establish conditions for later-phase actions. If phase names or years are provided in the data, reference them; otherwise keep generic without invented dates. Data: ${b}`,
+
+    'assumptions.bullets': `Write 5–8 concise bullet points (each starting with a dash "-") covering: the Scope 1 & 2 only boundary, the linear pathway as a planning simplification, that the tier mapping is policy-defined (not empirically measured), that the structural residual ceiling is policy-defined and hardcoded to the tier${(bindings as {bau_enabled?: boolean}).bau_enabled ? ', that the BAU scenario is a comparator only and does not affect pathway maths' : ''}${(bindings as {trees_enabled?: boolean}).trees_enabled ? ', that tree equivalency is illustrative and uses the default sequestration rate' : ''}, that no financial modelling or third-party verification is included. Max 120 words total. Data: ${b}`,
+  };
+  return prompts[slot_id] ?? `Write 1–2 sentences summarising this section concisely. Data: ${b}`;
+}
+
+export interface SectionNarrativeInput {
+  section_id: string;
+  slot_id: string;
+  bindings: SectionBindings;
+}
+
+export interface SectionNarrativeOutput {
+  slot_id: string;
+  text: string;
+}
+
+/**
+ * Generate per-section narrative text for the V2 report.
+ * AI returns text only — all numbers come from the deterministic engine.
+ */
+export async function generateSectionNarratives(
+  sections: SectionNarrativeInput[]
+): Promise<SectionNarrativeOutput[]> {
+  if (!config.anthropic.apiKey || sections.length === 0) {
+    return sections.map((s) => ({ slot_id: s.slot_id, text: '' }));
+  }
+
+  const numbered = sections.map((s, i) => ({
+    idx: i + 1,
+    slot_id: s.slot_id,
+    instruction: buildSectionPrompt(s.slot_id, s.bindings),
+  }));
+
+  const prompt = `${GLOBAL_NARRATIVE_INSTRUCTION}
+
+Generate narrative text for each section listed below.
+Return ONLY a valid JSON array. Each element: { "slot_id": "...", "text": "..." }
+Do not include any other keys, markdown, or commentary.
+
+Sections:
+${numbered.map((p) => `[${p.idx}] slot_id: "${p.slot_id}"\nTask: ${p.instruction}`).join('\n\n')}
+
+Return only the JSON array.`;
+
+  const responseText = await callClaude(prompt);
+  let jsonStr = responseText.trim();
+  const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (match?.[1]) jsonStr = match[1].trim();
+
+  try {
+    const arr = JSON.parse(jsonStr) as Array<{ slot_id: string; text: string }>;
+    if (!Array.isArray(arr)) throw new Error('Expected array');
+    logger.info(`Section narratives generated: ${arr.length} sections`);
+    return arr.filter((item) => typeof item.slot_id === 'string' && typeof item.text === 'string');
+  } catch {
+    logger.error('Section narratives: invalid JSON from Claude', { responseText: responseText.slice(0, 500) });
+    return sections.map((s) => ({ slot_id: s.slot_id, text: '' }));
+  }
+}

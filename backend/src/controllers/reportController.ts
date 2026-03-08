@@ -10,7 +10,12 @@ import {
 } from '../services/emissionService.js';
 import { getDocumentStats, getRecentDocuments } from '../services/documentService.js';
 import { getLatestClientConfigOrNull } from '../services/clientConfigService.js';
-import { generateReportCalculations, ReportCalculationInput } from '../services/anthropicService.js';
+import {
+  generateReportCalculations,
+  generateSectionNarratives,
+  ReportCalculationInput,
+  SectionNarrativeInput,
+} from '../services/anthropicService.js';
 import { logUserAction, AuditActions } from '../services/auditService.js';
 import { logger } from '../utils/logger.js';
 
@@ -369,4 +374,45 @@ function calculateDataCompleteness(documentStats: Record<string, number>): numbe
 
 function calculatePercentage(value: number, total: number): number {
   return total > 0 ? Math.round((value / total) * 100 * 10) / 10 : 0;
+}
+
+/**
+ * Generate per-section AI narratives for the V2 report.
+ * POST /api/reports/narrative
+ * Body: { sections: Array<{ section_id, slot_id, bindings }> }
+ */
+export async function generateReportNarratives(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    const { sections } = req.body as { sections: SectionNarrativeInput[] };
+
+    if (!Array.isArray(sections) || sections.length === 0) {
+      sendError(res, 'sections array is required', 400);
+      return;
+    }
+
+    const narratives = await generateSectionNarratives(sections);
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.REPORT_GENERATED,
+      'report',
+      undefined,
+      { reportType: 'v2_narrative', sectionCount: sections.length },
+      req
+    );
+
+    sendSuccess(res, { narratives });
+  } catch (error) {
+    logger.error('Generate report narratives error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Failed to generate report narratives', 500);
+    }
+  }
 }
