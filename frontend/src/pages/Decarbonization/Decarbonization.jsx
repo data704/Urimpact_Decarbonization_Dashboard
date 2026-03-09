@@ -35,7 +35,8 @@ const PROJECTS = {
 
 const SPECIES_MIX = ['Date palm', 'Ghaf', 'Sidr'];
 
-const CO2_PER_TREE = 0.15; // tCO2e offset per tree per year (simulation, matches dummy)
+// Must match report: removal obligation / sequestration rate = trees per year (see Report S7)
+const SEQUESTRATION_RATE = 0.025; // tCO2e per tree per year (report default)
 
 const DECARB_CONFIG_KEY = 'urimpact_decarbonization_config';
 
@@ -82,12 +83,10 @@ function Decarbonization() {
                     organizationName: c.organization_name ?? '',
                     targetYear: c.target_year ? String(c.target_year) : '',
                     ambitionLevel: c.ambition_level ?? '',
-                    includeBau: c.include_bau ?? false,
-                    includeTreeEquivalency: c.include_tree_equivalency ?? true,
                 };
             }
         } catch (_) {}
-        return { organizationName: '', targetYear: '', ambitionLevel: '', includeBau: false, includeTreeEquivalency: true };
+        return { organizationName: '', targetYear: '', ambitionLevel: '' };
     });
     const [configPreview, setConfigPreview] = useState(() => {
         try {
@@ -103,13 +102,20 @@ function Decarbonization() {
 
     const ambitionLevel = configPreview?.ambition_level || '';
     const tier = AMBITION_TIERS[ambitionLevel] ?? AMBITION_TIERS['NEARZERO_90'];
-    const residualEmissions = useMemo(() => {
+    // Report-aligned: removal obligation = baseline × StructuralResidual% (same as Report S6/S7)
+    const removalObligationTco2e = useMemo(() => {
         if (!configReady) return 0;
         const total = Number(currentTotalEmissions) || 0;
         if (!ambitionLevel || total <= 0) return 0;
-        const E_target = total * (1 - tier.R_total);
-        return Math.max(0, Math.round(E_target * 100) / 100);
+        return Math.round(total * tier.StructuralResidual);
     }, [configReady, currentTotalEmissions, ambitionLevel, tier]);
+    // Trees required annually = removal_obligation / sequestration_rate (same as Report S7)
+    const treesRequiredAnnually = useMemo(() => {
+        if (removalObligationTco2e <= 0) return 0;
+        return Math.round(removalObligationTco2e / SEQUESTRATION_RATE);
+    }, [removalObligationTco2e]);
+    // Residual for display: use removal obligation so offset comparison matches report
+    const residualEmissions = removalObligationTco2e;
     const totalEmissions = residualEmissions;
 
     // Generate and cache tree counts for projects
@@ -123,8 +129,8 @@ function Decarbonization() {
     // Get current project's tree count
     const currentProjectTrees = selectedProject ? projectTreeCounts[selectedProject] : 6000;
 
-    // Calculate offset (CO2_PER_TREE tCO2e per tree per year)
-    const totalOffset = Math.round(treesToPlant * CO2_PER_TREE * 100) / 100;
+    // Calculate offset using same rate as report (SEQUESTRATION_RATE tCO2e per tree per year)
+    const totalOffset = Math.round(treesToPlant * SEQUESTRATION_RATE * 100) / 100;
     const netEmissions = Math.max(0, Math.round((totalEmissions - totalOffset) * 100) / 100);
     const offsetPercentage = totalEmissions > 0 ? (totalOffset / totalEmissions) * 100 : 0;
 
@@ -132,7 +138,7 @@ function Decarbonization() {
         const current = Number(totalEmissions) || 0;
         const projected = Number(netEmissions) || 0;
         return {
-            labels: ['Residual Emissions', 'Projected Net Emissions'],
+            labels: ['Removal Obligation', 'Projected Net'],
             datasets: [{
                 label: 'tCO₂e',
                 data: [current, projected],
@@ -148,10 +154,11 @@ function Decarbonization() {
     const handleProjectChange = (e) => {
         const projectId = e.target.value;
         setSelectedProject(projectId);
-        
+
         if (projectId) {
-            // Set slider to max (all available trees) by default
-            setTreesToPlant(projectTreeCounts[projectId]);
+            const available = projectTreeCounts[projectId];
+            const reportTrees = treesRequiredAnnually || 0;
+            setTreesToPlant(Math.min(available, reportTrees > 0 ? reportTrees : available));
         } else {
             setTreesToPlant(0);
         }
@@ -186,7 +193,7 @@ function Decarbonization() {
 
     const handleSaveConfig = (e) => {
         e.preventDefault();
-        const { organizationName, targetYear, ambitionLevel, includeBau, includeTreeEquivalency } = configForm;
+        const { organizationName, targetYear, ambitionLevel } = configForm;
         if (!targetYear || !ambitionLevel) {
             showNotification('Please fill in all required fields (Target Year & Ambition Level)', 'error');
             return;
@@ -195,8 +202,8 @@ function Decarbonization() {
             organization_name: organizationName?.trim() || null,
             target_year: parseInt(targetYear, 10),
             ambition_level: ambitionLevel,
-            include_bau: includeBau,
-            include_tree_equivalency: includeTreeEquivalency,
+            include_bau: true,
+            include_tree_equivalency: true,
         };
         setConfigPreview(config);
         try {
@@ -211,8 +218,6 @@ function Decarbonization() {
             organizationName: '',
             targetYear: '',
             ambitionLevel: '',
-            includeBau: false,
-            includeTreeEquivalency: true,
         });
         setConfigPreview(null);
         try {
@@ -360,58 +365,6 @@ function Decarbonization() {
                             </div>
                         </div>
 
-                        <div className="config-card">
-                            <div className="config-card-header">
-                                <div className="config-card-title">
-                                    <span className="config-card-number">3</span>
-                                    BAU Scenario
-                                </div>
-                                <div className="config-card-description">
-                                    Include a Business-as-Usual comparator section in the report
-                                </div>
-                            </div>
-                            <div className="config-card-content">
-                                <div className="form-group">
-                                    <label className="toggle-label" style={{ display:'flex', alignItems:'center', gap:'0.75rem', cursor:'pointer' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={configForm.includeBau}
-                                            onChange={(e) => setConfigForm({ ...configForm, includeBau: e.target.checked })}
-                                            style={{ width:'1.1rem', height:'1.1rem', accentColor:'#14B8A6' }}
-                                        />
-                                        <span>Include BAU comparison in report</span>
-                                    </label>
-                                    <p className="help-text">When enabled, the report includes a BAU vs Intervention pathway chart. BAU growth rate defaults to 0%.</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="config-card">
-                            <div className="config-card-header">
-                                <div className="config-card-title">
-                                    <span className="config-card-number">4</span>
-                                    Tree Equivalency
-                                </div>
-                                <div className="config-card-description">
-                                    Include illustrative tree equivalency for removal obligation
-                                </div>
-                            </div>
-                            <div className="config-card-content">
-                                <div className="form-group">
-                                    <label className="toggle-label" style={{ display:'flex', alignItems:'center', gap:'0.75rem', cursor:'pointer' }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={configForm.includeTreeEquivalency}
-                                            onChange={(e) => setConfigForm({ ...configForm, includeTreeEquivalency: e.target.checked })}
-                                            style={{ width:'1.1rem', height:'1.1rem', accentColor:'#14B8A6' }}
-                                        />
-                                        <span>Include tree equivalency in report</span>
-                                    </label>
-                                    <p className="help-text">When enabled, the report includes an illustrative translation of the removal obligation into trees/year. Uses default sequestration rate of 0.025 tCO₂e/tree/year.</p>
-                                </div>
-                            </div>
-                        </div>
-
                         <div className="config-button-group">
                             <button type="button" className="btn btn-secondary" onClick={handleResetConfig}>
                                 Reset
@@ -432,10 +385,6 @@ function Decarbonization() {
                                 <dd>{configForm.ambitionLevel ? AMBITION_OPTIONS.find(o => o.value === configForm.ambitionLevel)?.label || configForm.ambitionLevel : '—'}</dd>
                                 <dt>Target Year</dt>
                                 <dd>{configForm.targetYear || '—'}</dd>
-                                <dt>BAU Scenario</dt>
-                                <dd>{configForm.includeBau ? 'Included' : 'Not included'}</dd>
-                                <dt>Tree Equivalency</dt>
-                                <dd>{configForm.includeTreeEquivalency ? 'Included' : 'Not included'}</dd>
                             </dl>
                         </div>
                     </aside>
@@ -479,8 +428,8 @@ function Decarbonization() {
                         <>
                             <div className="metrics-row">
                                 <div className="metric-box">
-                                    <div className="metric-label">Residual Emissions</div>
-                                    <div className="metric-number">{formatNumber(totalEmissions)} <span className="metric-unit">tCO₂e</span></div>
+                                    <div className="metric-label">Removal Obligation</div>
+                                    <div className="metric-number">{formatNumber(totalEmissions)} <span className="metric-unit">tCO₂e/yr</span></div>
                                 </div>
                                 <div className="metric-box">
                                     <div className="metric-label">Offset Potential</div>
@@ -491,6 +440,11 @@ function Decarbonization() {
                                     <div className="metric-number">{formatNumber(netEmissions)} <span className="metric-unit">tCO₂e</span></div>
                                 </div>
                             </div>
+                            {treesRequiredAnnually > 0 && (
+                                <p className="body-text" style={{ fontSize: '0.875rem', color: '#64748B', marginBottom: '0.75rem' }}>
+                                    Report (S7) trees required annually: <strong>{formatNumber(treesRequiredAnnually)} trees</strong> at {SEQUESTRATION_RATE} tCO₂e/tree/yr — same formula as this offset.
+                                </p>
+                            )}
                             <div className="chart-wrapper" style={{ height: 280 }}>
                                 <Bar
                                     data={barChartData}
@@ -521,7 +475,7 @@ function Decarbonization() {
                                 <input
                                     type="range"
                                     min="0"
-                                    max={currentProjectTrees}
+                                    max={Math.max(currentProjectTrees, treesRequiredAnnually || 0)}
                                     value={treesToPlant}
                                     step="50"
                                     onChange={handleSliderChange}
@@ -530,7 +484,7 @@ function Decarbonization() {
                                 />
                                 <div className="slider-minmax">
                                     <span>0</span>
-                                    <span>{formatNumber(currentProjectTrees)}</span>
+                                    <span>{formatNumber(Math.max(currentProjectTrees, treesRequiredAnnually || 0))}</span>
                                 </div>
                             </div>
                         </>

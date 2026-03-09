@@ -47,8 +47,8 @@ function computeReportOutputs({ config, totalTonnes, scope1Tonnes, scope2Tonnes,
 
     const tierKey = config?.ambition_level;
     const tier = AMBITION_TIERS[tierKey] ?? AMBITION_TIERS['NEARZERO_90'];
-    const include_bau = Boolean(config?.include_bau);
-    const include_trees = Boolean(config?.include_tree_equivalency ?? true);
+    const include_bau = true;
+    const include_trees = true;
     const targetYear = config?.target_year ?? (baseYear + 5);
     const orgName = config?.organization_name || 'Your Organization';
     const bauGrowthRate = BAU_GROWTH_RATE_DEFAULT;
@@ -140,7 +140,8 @@ function computeReportOutputs({ config, totalTonnes, scope1Tonnes, scope2Tonnes,
     let breakdown = [];
     if (breakdownRaw && breakdownRaw.length > 0) {
         breakdown = breakdownRaw.map((c) => {
-            const tco2e = Math.round(c.totalTonnes ?? c.total / 1000 ?? 0);
+            const raw = c.totalTonnes ?? c.total / 1000;
+            const tco2e = Math.round(Number(raw) || 0);
             return {
                 name: c.category.replace(/_/g, ' '),
                 scope: c.category === 'ELECTRICITY' ? 'Scope 2' : 'Scope 1',
@@ -202,7 +203,7 @@ function Reports() {
             const c = JSON.parse(s);
             if (!c.target_year || !c.ambition_level) return null;
             return c;
-        } catch (_) { return null; }
+        } catch { return null; }
     }, []);
 
     const {
@@ -227,7 +228,7 @@ function Reports() {
         try {
             const cached = localStorage.getItem(NARRATIVE_CACHE_KEY);
             if (cached) return JSON.parse(cached).data ?? {};
-        } catch (_) {}
+        } catch { /* ignore */ }
         return {};
     });
     const [narrativesLoading, setNarrativesLoading] = useState(false);
@@ -328,7 +329,7 @@ function Reports() {
                     return; // Cache hit — no API call needed
                 }
             }
-        } catch (_) { /* corrupted cache; proceed to fetch */ }
+        } catch { /* corrupted cache; proceed to fetch */ }
 
         // ── Cache miss → call Claude ──────────────────────────────────────────
         const o = outputs;
@@ -405,11 +406,13 @@ function Reports() {
                         data: dict,
                         cached_at: new Date().toISOString(),
                     }));
-                } catch (_) { /* localStorage full or unavailable — ignore */ }
+                } catch { /* localStorage full or unavailable — ignore */ }
             })
             .catch(() => { /* silently fallback — report still usable without AI text */ })
             .finally(() => { if (!cancelled) setNarrativesLoading(false); });
         return () => { cancelled = true; };
+    // narrativeCacheFingerprint is derived from outputs; re-running on outputs ref would be redundant
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [narrativeCacheFingerprint, hasToken]);
 
     const intensity = totalTonnes / EMPLOYEES;
