@@ -40,10 +40,11 @@ const CATEGORY_MAP: Record<string, EmissionCategory> = {
   ELECTRICITY: 'ELECTRICITY', ELECTRIC: 'ELECTRICITY', POWER: 'ELECTRICITY', 'PURCHASED ELECTRICITY': 'ELECTRICITY',
   FUEL_COMBUSTION: 'FUEL_COMBUSTION', FUEL: 'FUEL_COMBUSTION', 'FUEL COMBUSTION': 'FUEL_COMBUSTION',
   COMBUSTION: 'FUEL_COMBUSTION', DIESEL: 'FUEL_COMBUSTION', PETROL: 'FUEL_COMBUSTION',
-  GASOLINE: 'FUEL_COMBUSTION', NATURAL_GAS: 'FUEL_COMBUSTION', 'NATURAL GAS': 'FUEL_COMBUSTION',
-  TRANSPORT: 'TRANSPORT', TRANSPORTATION: 'TRANSPORT', TRAVEL: 'TRANSPORT',
+  GASOLINE: 'FUEL_COMBUSTION', NATURAL_GAS: 'NATURAL_GAS', 'NATURAL GAS': 'NATURAL_GAS',
+  TRANSPORT: 'TRANSPORTATION', TRANSPORTATION: 'TRANSPORTATION', TRAVEL: 'TRANSPORTATION',
   WASTE: 'WASTE', WATER: 'WATER', REFRIGERANTS: 'REFRIGERANTS',
-  PROCESS: 'PROCESS_EMISSIONS', PROCESS_EMISSIONS: 'PROCESS_EMISSIONS',
+  BUSINESS_TRAVEL: 'BUSINESS_TRAVEL', EMPLOYEE_COMMUTING: 'EMPLOYEE_COMMUTING', PURCHASED_GOODS: 'PURCHASED_GOODS',
+  PROCESS: 'OTHER', PROCESS_EMISSIONS: 'OTHER',
   OTHER: 'OTHER',
 };
 
@@ -57,7 +58,7 @@ function normalizeCategory(val: unknown, activityType: string, fallback: Emissio
   const at = activityType.toLowerCase();
   if (at.includes('electric') || at.includes('power') || at === 'electricity') return 'ELECTRICITY';
   if (['diesel','petrol','gasoline','natural_gas','natural-gas','lpg','kerosene','fuel'].some((k) => at.includes(k))) return 'FUEL_COMBUSTION';
-  if (['vehicle','car','truck','flight','taxi','bus','ship','transport'].some((k) => at.includes(k))) return 'TRANSPORT';
+  if (['vehicle','car','truck','flight','taxi','bus','ship','transport'].some((k) => at.includes(k))) return 'TRANSPORTATION';
   if (at.includes('waste')) return 'WASTE';
   if (at.includes('water')) return 'WATER';
   if (at.includes('refriger')) return 'REFRIGERANTS';
