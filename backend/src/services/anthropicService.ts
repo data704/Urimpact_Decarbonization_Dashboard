@@ -6,7 +6,7 @@
  * which is then sent to Climatiq for emission calculation and stored.
  * Supports images (JPEG, PNG, etc.), PDF, and Excel (xlsx, xls).
  */
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
@@ -128,14 +128,34 @@ async function callClaude(text: string, options: CallClaudeOptions = {}): Promis
     ],
   };
 
-  const response = await anthropicApi.post<{ content: Array<{ type: string; text?: string }> }>(
-    '/messages',
-    body
-  );
+  let response;
+  try {
+    response = await anthropicApi.post<{ content: Array<{ type: string; text?: string }> }>(
+      '/messages',
+      body
+    );
+  } catch (err) {
+    // Extract the real Anthropic error message instead of a generic axios error
+    if (err instanceof AxiosError) {
+      const anthropicMsg =
+        (err.response?.data as { error?: { message?: string } })?.error?.message
+        ?? err.response?.data?.message
+        ?? err.message;
+      const status = err.response?.status ?? 500;
+
+      if (status === 401)  throw new AppError('Claude API key is invalid or not authorised. Check ANTHROPIC_API_KEY in your .env file.', 500);
+      if (status === 429)  throw new AppError('Claude API rate limit reached. Please wait a moment and try again.', 429);
+      if (status === 400)  throw new AppError(`Claude API rejected the request: ${anthropicMsg}`, 500);
+      if (status === 404)  throw new AppError(`Claude model not found (${config.anthropic.model}). Check ANTHROPIC_MODEL in your .env file.`, 500);
+      if (status >= 500)   throw new AppError(`Claude API server error (${status}). Please try again shortly.`, 500);
+      throw new AppError(`Claude API error (${status}): ${anthropicMsg}`, 500);
+    }
+    throw err;
+  }
 
   const firstBlock = response.data.content?.[0];
   if (!firstBlock || firstBlock.type !== 'text' || !firstBlock.text) {
-    throw new AppError('Invalid response from Claude', 500);
+    throw new AppError('Claude returned an empty response. Please try again.', 500);
   }
 
   return firstBlock.text;
@@ -191,7 +211,39 @@ export async function extractReceiptToClimatiqJson(filePath: string): Promise<{
   const startTime = Date.now();
   const ext = path.extname(filePath).toLowerCase();
   const supportedImages = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-  const isExcel = ext === '.xlsx' || ext === '.xls';
+  const supportedPdf = ['.pdf'];
+  const supportedExcel = ['.xlsx', '.xls'];
+  const allSupported = [...supportedImages, ...supportedPdf, ...supportedExcel];
+  const isExcel = supportedExcel.includes(ext);
+
+  // ── Guard 1: file must exist ──────────────────────────────────────────────
+  if (!fs.existsSync(filePath)) {
+    throw new AppError(
+      'Receipt file not found on server. The upload may have been lost on a server restart — please re-upload the document.',
+      400
+    );
+  }
+
+  // ── Guard 2: must be a supported file type ────────────────────────────────
+  if (!allSupported.includes(ext)) {
+    throw new AppError(
+      `Unsupported file type "${ext}". Supported types: JPG, PNG, GIF, WebP, PDF, XLSX, XLS.`,
+      400
+    );
+  }
+
+  // ── Guard 3: file size limits ─────────────────────────────────────────────
+  // Claude's API accepts base64 images/PDFs up to ~5MB encoded; larger files time out or error.
+  const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
+  const fileStats = fs.statSync(filePath);
+  if ((supportedImages.includes(ext) || ext === '.pdf') && fileStats.size > MAX_SIZE_BYTES) {
+    const sizeMB = (fileStats.size / 1024 / 1024).toFixed(1);
+    throw new AppError(
+      `File is too large (${sizeMB} MB). Maximum size for image/PDF receipts is 5 MB. ` +
+      'Please compress the file or take a lower-resolution photo.',
+      400
+    );
+  }
 
   let imageBase64: string | undefined;
   let documentBase64: string | undefined;
@@ -213,10 +265,8 @@ export async function extractReceiptToClimatiqJson(filePath: string): Promise<{
   } else if (isExcel) {
     extraText = excelToText(filePath);
     if (!extraText.trim()) {
-      throw new AppError('Excel file has no readable sheet data', 400);
+      throw new AppError('Excel file has no readable sheet data. Check that the first sheet has data rows.', 400);
     }
-  } else {
-    logger.warn(`Receipt extraction: unsupported file type ${ext}`);
   }
 
   // Excel with table data: chunk large files and ask for one JSON object per row
@@ -504,7 +554,17 @@ function buildSectionPrompt(slot_id: string, bindings: SectionBindings): string 
 
     'strategy.text': `Write exactly 3 sentences: (1) identify the priority operational lever(s) based on the dominant emission sources, (2) explain why the required annual pace implies early action from a governance perspective, (3) provide one neutral planning implication about capability-building or sequencing — without financial projections. Data: ${b}`,
 
-    'roadmap.caption': `Write 50–70 words introducing phased execution of the decarbonisation pathway: why foundation actions come first and how early phases establish conditions for later-phase actions. If phase names or years are provided in the data, reference them; otherwise keep generic without invented dates. Data: ${b}`,
+    'roadmap.caption': `You are writing the implementation roadmap section of a corporate decarbonisation strategy report. Use ONLY the variables provided in the data. Do NOT perform calculations, invent numbers, introduce costs/ROI/financial assumptions, or mention technologies or actions not implied by the emissions mix. Tone: institutional, audit-safe, reduction-first, non-promotional.
+
+Write a 120–180 word roadmap explaining how a company with this emissions profile would realistically phase its decarbonisation actions over time. Structure the explanation across three phases:
+
+Phase 1 – Foundation: Describe the early actions that should focus on measurement systems, operational efficiency, and quick-win reductions targeting the largest emissions source.
+
+Phase 2 – Structural Reduction: Describe the deeper operational or energy changes that would address the dominant emissions sources identified in the baseline emissions profile.
+
+Phase 3 – Residual Management: Explain how the company approaches the final stage of decarbonisation, where emissions move toward the structural residual ceiling and removals are used only to address remaining hard-to-abate emissions.
+
+The roadmap must explicitly reference: the dominant emissions sources, the annual reduction pace required, and the transition from reduction to residual management. Do not mention costs, speculative technologies, or generic sustainability language. Output plain paragraphs only; no markdown or bullet lists. Data: ${b}`,
 
     'assumptions.bullets': `Write 5–8 concise bullet points (each starting with a dash "-") covering: the Scope 1 & 2 only boundary, the linear pathway as a planning simplification, that the tier mapping is policy-defined (not empirically measured), that the structural residual ceiling is policy-defined and hardcoded to the tier${(bindings as {bau_enabled?: boolean}).bau_enabled ? ', that the BAU scenario is a comparator only and does not affect pathway maths' : ''}${(bindings as {trees_enabled?: boolean}).trees_enabled ? ', that tree equivalency is illustrative and uses the default sequestration rate' : ''}, that no financial modelling or third-party verification is included. Max 120 words total. Data: ${b}`,
   };

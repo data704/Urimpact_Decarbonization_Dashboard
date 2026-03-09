@@ -335,7 +335,7 @@ export async function processDocument(req: AuthRequest, res: Response): Promise<
     try {
       const filePath = `${process.cwd()}/uploads/${document.filePath}`;
 
-      logger.info(`Starting receipt extraction (Claude) for document ${id}`);
+      logger.info(`Starting AI extraction for document ${id} (${document.fileName})`);
       const { rawText, extractedFields, processingTime, multiple } = await extractReceiptToClimatiqJson(filePath);
 
       const payload = multiple && Array.isArray(extractedFields)
@@ -350,23 +350,29 @@ export async function processDocument(req: AuthRequest, res: Response): Promise<
         extractedFields,
         multiple: multiple ?? false,
       }, 'Extraction complete. Verify the numbers and submit to calculate emissions.');
+
     } catch (processingError) {
-      const errorMessage = processingError instanceof Error 
-        ? processingError.message 
+      const errorMessage = processingError instanceof Error
+        ? processingError.message
         : 'Processing failed';
-      await updateDocumentStatus(id, 'FAILED', errorMessage);
-      throw processingError;
+
+      logger.error(`AI extraction failed for document ${id}:`, processingError);
+      await updateDocumentStatus(id, 'FAILED', errorMessage).catch(() => {});
+
+      // Return an appropriate HTTP status: 400 for user-fixable issues, 500 for server errors
+      const isClientError = errorMessage.includes('not found')
+        || errorMessage.includes('too large')
+        || errorMessage.includes('Unsupported file type')
+        || errorMessage.includes('no readable')
+        || errorMessage.includes('re-upload');
+
+      sendError(res, errorMessage, isClientError ? 400 : 500);
     }
+
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('not found')) {
-        sendError(res, error.message, 404);
-        return;
-      }
-      if (error.message.includes('access')) {
-        sendError(res, error.message, 403);
-        return;
-      }
+      if (error.message.includes('not found')) { sendError(res, error.message, 404); return; }
+      if (error.message.includes('access'))    { sendError(res, error.message, 403); return; }
       logger.error('Process document error:', error);
       sendError(res, error.message, 500);
     } else {

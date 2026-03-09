@@ -20,7 +20,7 @@ function DataInput() {
     const { addScope1Entry, addScope2Entry } = useDataStore();
     const [inputMethod, setInputMethod] = useState('upload');
     const [notification, setNotification] = useState(null);
-
+    
     // Scope 1 entries state
     const [scope1Entries, setScope1Entries] = useState([{
         id: 1,
@@ -128,7 +128,7 @@ function DataInput() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
+        
         const scope1Valid = scope1Entries.filter(entry => entry.date && entry.amount);
         const scope2Valid = scope2Entries.filter(entry => entry.date && entry.electricity);
         if (scope1Valid.length === 0 && scope2Valid.length === 0) {
@@ -175,27 +175,27 @@ function DataInput() {
             scope1Valid.forEach(entry => addScope1Entry({ ...entry, amount: parseFloat(entry.amount) }));
             scope2Valid.forEach(entry => addScope2Entry({ ...entry, electricity: parseFloat(entry.electricity) }));
 
-            setScope1Entries([{
-                id: 1,
-                date: '',
-                fuelType: 'Diesel',
-                combustionType: 'mobile',
-                amount: '',
-                unit: 'Liters',
-                vehicleId: '',
-                costAmount: '',
-                currency: 'USD'
-            }]);
-            setScope2Entries([{
-                id: 1,
-                date: '',
-                electricity: '',
-                unit: 'kWh',
-                supplier: '',
+        setScope1Entries([{
+            id: 1,
+            date: '',
+            fuelType: 'Diesel',
+            combustionType: 'mobile',
+            amount: '',
+            unit: 'Liters',
+            vehicleId: '',
+            costAmount: '',
+            currency: 'USD'
+        }]);
+        setScope2Entries([{
+            id: 1,
+            date: '',
+            electricity: '',
+            unit: 'kWh',
+            supplier: '',
                 gridRegion: 'Saudi Arabia - National',
-                costAmount: '',
-                currency: 'USD'
-            }]);
+            costAmount: '',
+            currency: 'USD'
+        }]);
 
             showNotification(`${count} emission(s) saved (${totalCo2e.toFixed(1)} kg CO₂e).`, 'success');
             navigate('/', { state: { fromSubmit: true, submitMessage: `${count} manual emission(s) saved`, count } });
