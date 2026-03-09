@@ -16,14 +16,16 @@ export const apiLimiter = rateLimit({
 });
 
 /**
- * Strict rate limiter for authentication endpoints
+ * Rate limiter for authentication endpoints (login, register, refresh).
+ * Configurable via RATE_LIMIT_AUTH_WINDOW_MS and RATE_LIMIT_AUTH_MAX.
+ * More lenient than before to avoid blocking legitimate sign-in (e.g. retries, shared IP).
  */
 export const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per window
+  windowMs: config.rateLimit.authWindowMs,
+  max: config.rateLimit.authMax,
   message: {
     success: false,
-    error: 'Too many authentication attempts, please try again after 15 minutes',
+    error: 'Too many sign-in attempts. Please try again in a few minutes.',
   },
   standardHeaders: true,
   legacyHeaders: false,
