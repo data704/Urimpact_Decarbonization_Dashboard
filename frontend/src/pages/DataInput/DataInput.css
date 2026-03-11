@@ -33,6 +33,11 @@
     color: #991B1B;
 }
 
+.notification.warning {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
 @keyframes slideIn {
     from {
         transform: translateX(100%);
@@ -740,6 +745,19 @@
     font-size: 0.75rem;
     color: #64748B;
     margin-top: 0.5rem;
+}
+
+.help-text.date-mismatch-warning {
+    color: #B45309;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.upload-verify-fields .form-group-date-mismatch input[type="date"] {
+    border-color: #F59E0B;
+    background: #FFFBEB;
 }
 
 .config-card-content input[type="number"],

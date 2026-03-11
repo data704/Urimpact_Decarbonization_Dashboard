@@ -640,6 +640,8 @@
 
 .detail-table {
     overflow-x: auto;
+    max-height: 260px;
+    overflow-y: auto;
 }
 
 .detail-table table {
@@ -760,6 +762,11 @@
 .facility-card {
     padding: 20px;
     margin-bottom: 24px;
+}
+
+.facility-table-wrapper {
+    max-height: 260px;
+    overflow-y: auto;
 }
 
 .facility-table {

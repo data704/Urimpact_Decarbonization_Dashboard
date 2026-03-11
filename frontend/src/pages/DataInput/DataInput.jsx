@@ -219,24 +219,39 @@ function DataInput() {
     const dateFromExtraction = (fields) =>
         fields?.billingPeriodStart || fields?.documentDate || fields?.billingPeriodEnd || '';
 
+    /** True if extracted date (ISO or YYYY-MM-DD) is in the same month/year as expected */
+    const extractedDateMatchesExpected = (extractedDateStr, expectedYear, expectedMonth) => {
+        if (!extractedDateStr || !expectedYear || !expectedMonth) return true;
+        const d = new Date(extractedDateStr);
+        if (Number.isNaN(d.getTime())) return true;
+        return d.getFullYear() === expectedYear && (d.getMonth() + 1) === expectedMonth;
+    };
+
     const getExpectedDateString = () =>
         `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}-01`;
 
-    const buildPendingItem = (documentId, fileName, fields, expectedDate) => ({
-        documentId,
-        fileName,
-        product: fields?.product ?? '',
-        supplier: fields?.supplier ?? fields?.provider ?? '',
-        date: dateFromExtraction(fields) || expectedDate || '',
-        activityType: fields?.activityType ?? '',
-        activityAmount: fields?.activityAmount ?? '',
-        activityUnit: fields?.activityUnit ?? '',
-        region: fields?.region ?? 'AE',
-        scope: fields?.scope ?? '',
-        category: fields?.category ?? '',
-        billingPeriodStart: fields?.billingPeriodStart ?? '',
-        billingPeriodEnd: fields?.billingPeriodEnd ?? '',
-    });
+    const buildPendingItem = (documentId, fileName, fields, expectedDate) => {
+        const extracted = dateFromExtraction(fields);
+        const expectedYear = expectedDate ? parseInt(expectedDate.slice(0, 4), 10) : null;
+        const expectedMonth = expectedDate ? parseInt(expectedDate.slice(5, 7), 10) : null;
+        const dateMismatch = Boolean(extracted && expectedYear && expectedMonth && !extractedDateMatchesExpected(extracted, expectedYear, expectedMonth));
+        return {
+            documentId,
+            fileName,
+            product: fields?.product ?? '',
+            supplier: fields?.supplier ?? fields?.provider ?? '',
+            date: extracted || expectedDate || '',
+            activityType: fields?.activityType ?? '',
+            activityAmount: fields?.activityAmount ?? '',
+            activityUnit: fields?.activityUnit ?? '',
+            region: fields?.region ?? 'AE',
+            scope: fields?.scope ?? '',
+            category: fields?.category ?? '',
+            billingPeriodStart: fields?.billingPeriodStart ?? '',
+            billingPeriodEnd: fields?.billingPeriodEnd ?? '',
+            dateMismatch,
+        };
+    };
 
     const handleFileUpload = async (e) => {
         const fileList = e.target.files;
@@ -277,16 +292,26 @@ function DataInput() {
                 if (result?.multiple && Array.isArray(result?.extractedFields)) {
                     const newItems = result.extractedFields.map((fields) => buildPendingItem(docId, fileName, fields, expectedDate));
                     setPendingVerifications(prev => [...prev, ...newItems]);
-                    showNotification(`${newItems.length} entries extracted. Verify and use "Submit all" to save.`, 'success');
+                    if (newItems.some((i) => i.dateMismatch)) {
+                        showNotification(`The date on the receipt doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the date in the table below before submitting.`, 'warning');
+                    } else {
+                        showNotification(`${newItems.length} entries extracted. Verify and use "Submit all" to save.`, 'success');
+                    }
                 } else {
                     const fields = result?.extractedFields || {};
-                    setPendingVerifications(prev => [...prev, buildPendingItem(docId, fileName, fields, expectedDate)]);
-                    showNotification('Verify the numbers below and press Submit to calculate emissions.', 'success');
+                    const item = buildPendingItem(docId, fileName, fields, expectedDate);
+                    setPendingVerifications(prev => [...prev, item]);
+                    if (item.dateMismatch) {
+                        showNotification(`The date on the receipt doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the date in the table below before submitting.`, 'warning');
+                    } else {
+                        showNotification('Verify the numbers below and press Submit to calculate emissions.', 'success');
+                    }
                 }
             } else {
                 showNotification(`Uploading ${files.length} receipts...`, 'info');
                 const documents = await uploadReceiptsMultiple(files);
                 let totalEntries = 0;
+                let hasDateMismatch = false;
                 const expectedDate = getExpectedDateString();
                 for (let i = 0; i < documents.length; i++) {
                     showNotification(`Extracting ${i + 1}/${documents.length}: ${documents[i].fileName}`, 'info');
@@ -295,15 +320,22 @@ function DataInput() {
                     const docId = result?.documentId;
                     if (result?.multiple && Array.isArray(result?.extractedFields)) {
                         const newItems = result.extractedFields.map((fields) => buildPendingItem(docId, fileName, fields, expectedDate));
+                        if (newItems.some((it) => it.dateMismatch)) hasDateMismatch = true;
                         setPendingVerifications(prev => [...prev, ...newItems]);
                         totalEntries += newItems.length;
                     } else {
                         const fields = result?.extractedFields || {};
-                        setPendingVerifications(prev => [...prev, buildPendingItem(docId, fileName, fields, expectedDate)]);
+                        const item = buildPendingItem(docId, fileName, fields, expectedDate);
+                        if (item.dateMismatch) hasDateMismatch = true;
+                        setPendingVerifications(prev => [...prev, item]);
                         totalEntries += 1;
                     }
                 }
-                showNotification(totalEntries > documents.length ? `${totalEntries} entries extracted. Verify and Submit.` : `${documents.length} receipts extracted. Verify each and Submit.`, 'success');
+                if (hasDateMismatch) {
+                    showNotification(`The date on one or more receipts doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the dates in the table below before submitting.`, 'warning');
+                } else {
+                    showNotification(totalEntries > documents.length ? `${totalEntries} entries extracted. Verify and Submit.` : `${documents.length} receipts extracted. Verify each and Submit.`, 'success');
+                }
             }
         } catch (err) {
             const msg = err?.message || 'Upload or extraction failed';
@@ -316,7 +348,14 @@ function DataInput() {
 
     const updatePendingField = (index, field, value) => {
         setPendingVerifications(prev =>
-            prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+            prev.map((item, i) => {
+                if (i !== index) return item;
+                const next = { ...item, [field]: value };
+                if (field === 'date' && value) {
+                    next.dateMismatch = !extractedDateMatchesExpected(value, expectedDocYear, expectedDocMonth);
+                }
+                return next;
+            })
         );
     };
 
@@ -474,7 +513,7 @@ function DataInput() {
             {/* Notification */}
             {notification && (
                 <div className={`notification ${notification.type}`}>
-                    <i className={`fas fa-${notification.type === 'success' ? 'check-circle' : notification.type === 'error' ? 'exclamation-circle' : 'info-circle'}`}></i>
+                    <i className={`fas fa-${notification.type === 'success' ? 'check-circle' : notification.type === 'error' ? 'exclamation-circle' : notification.type === 'warning' ? 'exclamation-triangle' : 'info-circle'}`}></i>
                     <span>{notification.message}</span>
                 </div>
             )}
@@ -548,7 +587,6 @@ function DataInput() {
                                                 type="date"
                                                 value={entry.date}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'date', e.target.value)}
-                                                required
                                             />
                                         </div>
                                         <div className="form-group">
@@ -579,7 +617,6 @@ function DataInput() {
                                                 placeholder="0.00"
                                                 value={entry.amount}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'amount', e.target.value)}
-                                                required
                                             />
                                         </div>
                                         <div className="form-group">
@@ -663,7 +700,6 @@ function DataInput() {
                                                 type="date"
                                                 value={entry.date}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'date', e.target.value)}
-                                                required
                                             />
                                         </div>
                                         <div className="form-group">
@@ -673,7 +709,6 @@ function DataInput() {
                                                 placeholder="0.00"
                                                 value={entry.electricity}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'electricity', e.target.value)}
-                                                required
                                             />
                                         </div>
                                         <div className="form-group">
@@ -844,7 +879,7 @@ function DataInput() {
                                                         />
                                                     </div>
                                                 )}
-                                                <div className="form-group">
+                                                <div className={`form-group${item.dateMismatch ? ' form-group-date-mismatch' : ''}`}>
                                                     <label>Date</label>
                                                     <input
                                                         type="date"
@@ -852,7 +887,13 @@ function DataInput() {
                                                         onChange={(e) => updatePendingField(index, 'date', e.target.value)}
                                                         placeholder="YYYY-MM-DD"
                                                     />
-                                                    <span className="help-text">Add date if not extracted from receipt</span>
+                                                    {item.dateMismatch ? (
+                                                        <span className="help-text date-mismatch-warning">
+                                                            <i className="fas fa-exclamation-triangle"></i> Doesn&apos;t match expected month ({MONTHS[expectedDocMonth - 1]} {expectedDocYear}). Correct the date above if needed.
+                                                        </span>
+                                                    ) : (
+                                                        <span className="help-text">Add date if not extracted from receipt</span>
+                                                    )}
                                                 </div>
                                                 <div className="form-group">
                                                     <label>Activity type *</label>

@@ -142,7 +142,8 @@ function Dashboard() {
     const submissionsByMonth = useMemo(() => {
         const counts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0, 11: 0 };
         (calendarYearEmissions || []).forEach((e) => {
-            const d = e.calculatedAt ? new Date(e.calculatedAt) : null;
+            const activityDate = e.billingPeriodStart || e.calculatedAt;
+            const d = activityDate ? new Date(activityDate) : null;
             if (d && d.getFullYear() === filterYear) {
                 const m = d.getMonth();
                 if (m >= 0 && m <= 11) counts[m] = (counts[m] || 0) + 1;
@@ -359,7 +360,7 @@ function Dashboard() {
         ? apiEmissions.slice(0, 5).map((e) => ({
             id: e.id,
             source: e.activityType,
-            date: e.calculatedAt,
+            date: e.billingPeriodStart || e.calculatedAt,
             type: e.scope === 'SCOPE_1' ? 'scope1' : e.scope === 'SCOPE_2' ? 'scope2' : 'scope3',
             amount: kgToTonnes(e.co2e),
             dataSource: e.dataSource || '—',
@@ -797,53 +798,55 @@ function Dashboard() {
                         Recent Activities
                     </h2>
                 </div>
-                <table className="facility-table">
-                    <thead>
-                        <tr>
-                            <th>Source</th>
-                            <th>Date</th>
-                            <th>Type</th>
-                            <th>Emissions</th>
-                            <th>Data source</th>
-                            <th>Status</th>
-                            {hasToken && <th className="th-actions">Actions</th>}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {recentActivitiesRows.map((activity, index) => (
-                            <tr key={activity.id || index}>
-                                <td>{activity.source}</td>
-                                <td>{formatDate(activity.date)}</td>
-                                <td>
-                                    <span className={`type-badge ${activity.type}`}>
-                                        {activity.type === 'scope1' ? 'Scope 1' : activity.type === 'scope2' ? 'Scope 2' : 'Scope 3'}
-                                    </span>
-                                </td>
-                                <td>{formatNumber(activity.amount)} tCO₂e</td>
-                                <td><span className="source-badge">{activity.dataSource || '—'}</span></td>
-                                <td>
-                                    <span className="status-badge verified">verified</span>
-                                </td>
-                                {hasToken && (
-                                    <td className="td-actions">
-                                        {activity.id ? (
-                                            <button
-                                                type="button"
-                                                className="btn-icon btn-delete"
-                                                onClick={() => handleDeleteEmission(activity.id)}
-                                                disabled={deletingId === activity.id}
-                                                title="Delete this record"
-                                                aria-label="Delete"
-                                            >
-                                                {deletingId === activity.id ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-alt"></i>}
-                                            </button>
-                                        ) : null}
-                                    </td>
-                                )}
+                <div className="facility-table-wrapper">
+                    <table className="facility-table">
+                        <thead>
+                            <tr>
+                                <th>Source</th>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Emissions</th>
+                                <th>Data source</th>
+                                <th>Status</th>
+                                {hasToken && <th className="th-actions">Actions</th>}
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {recentActivitiesRows.map((activity, index) => (
+                                <tr key={activity.id || index}>
+                                    <td>{activity.source}</td>
+                                    <td>{activity.date ? formatDate(activity.date) : '—'}</td>
+                                    <td>
+                                        <span className={`type-badge ${activity.type}`}>
+                                            {activity.type === 'scope1' ? 'Scope 1' : activity.type === 'scope2' ? 'Scope 2' : 'Scope 3'}
+                                        </span>
+                                    </td>
+                                    <td>{formatNumber(activity.amount)} tCO₂e</td>
+                                    <td><span className="source-badge">{activity.dataSource || '—'}</span></td>
+                                    <td>
+                                        <span className="status-badge verified">verified</span>
+                                    </td>
+                                    {hasToken && (
+                                        <td className="td-actions">
+                                            {activity.id ? (
+                                                <button
+                                                    type="button"
+                                                    className="btn-icon btn-delete"
+                                                    onClick={() => handleDeleteEmission(activity.id)}
+                                                    disabled={deletingId === activity.id}
+                                                    title="Delete this record"
+                                                    aria-label="Delete"
+                                                >
+                                                    {deletingId === activity.id ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-alt"></i>}
+                                                </button>
+                                            ) : null}
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* Footer */}
