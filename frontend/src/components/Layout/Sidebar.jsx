@@ -1,5 +1,12 @@
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import {
+    canUpload,
+    canAccessDashboard,
+    canGenerateReports,
+    canManageUsers,
+    roleLabel,
+} from '../../utils/roles';
 import './Layout.css';
 
 function Sidebar({ isOpen, onClose }) {
@@ -9,16 +16,15 @@ function Sidebar({ isOpen, onClose }) {
     const initials = displayName !== 'Guest'
         ? (user?.firstName?.charAt(0) || '') + (user?.lastName?.charAt(0) || '')
         : '?';
-    const roleLabel = (user?.role || 'User').replace(/^\w/, (c) => c.toUpperCase());
-
-    const navItems = [
-        { to: '/data-input', icon: 'fas fa-pen-to-square', label: 'Data Input' },
-        { to: '/', icon: 'fas fa-gauge-high', label: 'Dashboard' },
-        { to: '/decarbonization', icon: 'fas fa-seedling', label: 'Decarbonization' },
-        { to: '/reports', icon: 'fas fa-file-lines', label: 'Reports' },
-        { to: '/settings', icon: 'fas fa-gear', label: 'Settings' },
-        { to: '/user-management', icon: 'fas fa-user-group', label: 'User Management' },
+    const allNavItems = [
+        { to: '/data-input', icon: 'fas fa-pen-to-square', label: 'Data Input', show: () => canUpload(user?.role) },
+        { to: '/', icon: 'fas fa-gauge-high', label: 'Dashboard', show: () => canAccessDashboard(user?.role) },
+        { to: '/decarbonization', icon: 'fas fa-seedling', label: 'Decarbonization', show: () => canGenerateReports(user?.role) || String(user?.role || '').toUpperCase() === 'VIEWER' },
+        { to: '/reports', icon: 'fas fa-file-lines', label: 'Reports', show: () => canGenerateReports(user?.role) },
+        { to: '/settings', icon: 'fas fa-gear', label: 'Settings', show: () => canManageUsers(user?.role) },
+        { to: '/user-management', icon: 'fas fa-user-group', label: 'User Management', show: () => canManageUsers(user?.role) },
     ];
+    const navItems = allNavItems.filter((item) => (item.show ? item.show() : true));
 
     return (
         <>
@@ -60,7 +66,7 @@ function Sidebar({ isOpen, onClose }) {
                         </div>
                         <div className="sidebar-user-meta">
                             <span className="sidebar-user-name">{displayName}</span>
-                            <span className="sidebar-user-role">{roleLabel}</span>
+                            <span className="sidebar-user-role">{roleLabel(user?.role)}</span>
                         </div>
                         <i className="fas fa-chevron-right sidebar-user-chevron" aria-hidden></i>
                     </Link>

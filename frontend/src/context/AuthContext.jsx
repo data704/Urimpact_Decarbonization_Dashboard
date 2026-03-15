@@ -12,7 +12,8 @@ function toFrontendUser(backendUser) {
         firstName: backendUser.firstName,
         lastName: backendUser.lastName,
         role: backendUser.role,
-        company: backendUser.company || 'URIMPACT',
+        organizationId: backendUser.organizationId || null,
+        company: backendUser.company ?? '',
         avatar: null
     };
 }

@@ -44,6 +44,7 @@ export { saveConfig, getConfig } from './clientConfigController.js';
 export {
   getUsers,
   getUser,
+  createUser,
   updateUser,
   getAuditLogsHandler,
   getSystemStats,

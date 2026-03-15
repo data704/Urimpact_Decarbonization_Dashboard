@@ -9,6 +9,8 @@ import Reports from './pages/Reports';
 import Decarbonization from './pages/Decarbonization';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
+import Notifications from './pages/Notifications';
+import AdminRoute from './components/AdminRoute';
 import Profile from './pages/Profile';
 
 function App() {
@@ -27,7 +29,15 @@ function App() {
                             <Route path="/reports" element={<Reports />} />
                             <Route path="/decarbonization" element={<Decarbonization />} />
                             <Route path="/settings" element={<Settings />} />
-                            <Route path="/user-management" element={<UserManagement />} />
+                            <Route path="/notifications" element={<Notifications />} />
+                            <Route
+                                path="/user-management"
+                                element={
+                                    <AdminRoute>
+                                        <UserManagement />
+                                    </AdminRoute>
+                                }
+                            />
                             <Route path="/profile" element={<Profile />} />
                         </Route>
                     </Routes>

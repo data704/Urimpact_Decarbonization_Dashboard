@@ -14,6 +14,12 @@ import { logUserAction, AuditActions } from '../services/auditService.js';
 import { emissionCalculationSchema, validate } from '../utils/validators.js';
 import { logger } from '../utils/logger.js';
 import { EmissionScope, EmissionCategory } from '@prisma/client';
+import {
+  canUpload,
+  canEditDeleteData,
+  canExportDatasets,
+  isOrgAdmin,
+} from '../utils/rolePermissions.js';
 
 /**
  * Get user's emissions
@@ -25,6 +31,8 @@ export async function getEmissions(req: AuthRequest, res: Response): Promise<voi
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    // Data Contributor: no company-wide list — only their own submissions are returned by getUserEmissions(userId)
+    // (already scoped by userId). Analyst/Viewer/Admin may read.
 
     const filters = {
       scope: req.query.scope as string,
@@ -99,6 +107,10 @@ export async function calculateEmission(req: AuthRequest, res: Response): Promis
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit or edit emissions data', 403);
+      return;
+    }
 
     const validation = validate(emissionCalculationSchema, req.body);
     if (!validation.success) {
@@ -110,6 +122,7 @@ export async function calculateEmission(req: AuthRequest, res: Response): Promis
 
     const emission = await calculateAndCreateEmission({
       userId: req.user.userId,
+      organizationId: req.user.organizationId,
       scope: (data.scope as EmissionScope) || 'SCOPE_2',
       category: (data.category as EmissionCategory) || 'ELECTRICITY',
       activityType: data.activityType,
@@ -163,8 +176,8 @@ export async function removeEmission(req: AuthRequest, res: Response): Promise<v
       sendError(res, 'Emission ID required', 400);
       return;
     }
-    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
-    
+    const isAdmin = isOrgAdmin(req.user.role);
+
     await deleteEmission(id, req.user.userId, isAdmin);
 
     // Log audit
@@ -204,6 +217,10 @@ export async function getEmissionsSummary(req: AuthRequest, res: Response): Prom
   try {
     if (!req.user) {
       sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canAccessDashboard(req.user.role)) {
+      sendError(res, 'Your role cannot access emissions summaries', 403);
       return;
     }
 
@@ -250,6 +267,10 @@ export async function exportEmissions(req: AuthRequest, res: Response): Promise<
   try {
     if (!req.user) {
       sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canExportDatasets(req.user.role)) {
+      sendError(res, 'Your role cannot export datasets', 403);
       return;
     }
 

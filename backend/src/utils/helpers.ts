@@ -43,7 +43,8 @@ export function sendPaginated<T>(
     page: number;
     limit: number;
     total: number;
-  }
+  },
+  meta?: { organizationLimit?: { userCount: number; maxUsers: number } }
 ): Response {
   const response: PaginatedResponse<T> = {
     success: true,
@@ -53,6 +54,9 @@ export function sendPaginated<T>(
       totalPages: Math.ceil(pagination.total / pagination.limit),
     },
   };
+  if (meta?.organizationLimit) {
+    response.organizationLimit = meta.organizationLimit;
+  }
   return res.status(200).json(response);
 }
 

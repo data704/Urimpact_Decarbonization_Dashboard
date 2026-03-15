@@ -18,6 +18,7 @@ import {
 } from '../services/anthropicService.js';
 import { logUserAction, AuditActions } from '../services/auditService.js';
 import { logger } from '../utils/logger.js';
+import { canAccessDashboard, canGenerateReports } from '../utils/rolePermissions.js';
 
 /**
  * Get dashboard data
@@ -30,11 +31,16 @@ export async function getDashboard(req: AuthRequest, res: Response): Promise<voi
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    if (!canAccessDashboard(req.user.role)) {
+      sendError(res, 'Your role cannot access the emissions dashboard', 403);
+      return;
+    }
 
     const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
     const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
 
     // Fetch all dashboard data in parallel (with optional date filter for emissions)
+    const orgId = req.user.organizationId;
     const [
       totalEmissions,
       emissionsByScope,
@@ -43,14 +49,14 @@ export async function getDashboard(req: AuthRequest, res: Response): Promise<voi
       recentDocuments,
       trend,
     ] = await Promise.all([
-      getTotalEmissions(req.user.userId, startDate, endDate),
-      getEmissionsSummaryByScope(req.user.userId, startDate, endDate),
-      getEmissionsSummaryByCategory(req.user.userId, startDate, endDate),
-      getDocumentStats(req.user.userId),
-      getRecentDocuments(req.user.userId, 5),
+      getTotalEmissions(req.user.userId, startDate, endDate, orgId),
+      getEmissionsSummaryByScope(req.user.userId, startDate, endDate, orgId),
+      getEmissionsSummaryByCategory(req.user.userId, startDate, endDate, orgId),
+      getDocumentStats(req.user.userId, orgId),
+      getRecentDocuments(req.user.userId, 5, orgId),
       startDate && endDate
-        ? getEmissionsTrendForRange(req.user.userId, startDate, endDate)
-        : getEmissionsTrend(req.user.userId, 12),
+        ? getEmissionsTrendForRange(req.user.userId, startDate, endDate, orgId)
+        : getEmissionsTrend(req.user.userId, 12, orgId),
     ]);
 
     const dashboard = {
@@ -94,6 +100,10 @@ export async function getTrends(req: AuthRequest, res: Response): Promise<void> 
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    if (!canAccessDashboard(req.user.role)) {
+      sendError(res, 'Your role cannot access analytics', 403);
+      return;
+    }
 
     const months = parseInt(req.query.months as string) || 12;
     const trend = await getEmissionsTrend(req.user.userId, months);
@@ -127,10 +137,11 @@ export async function getComplianceReport(req: AuthRequest, res: Response): Prom
     const startDate = new Date(year, 0, 1);
     const endDate = new Date(year, 11, 31);
 
+    const orgId = req.user.organizationId;
     const [totalEmissions, byScope, byCategory] = await Promise.all([
-      getTotalEmissions(req.user.userId),
-      getEmissionsSummaryByScope(req.user.userId, startDate, endDate),
-      getEmissionsSummaryByCategory(req.user.userId, startDate, endDate),
+      getTotalEmissions(req.user.userId, undefined, undefined, orgId),
+      getEmissionsSummaryByScope(req.user.userId, startDate, endDate, orgId),
+      getEmissionsSummaryByCategory(req.user.userId, startDate, endDate, orgId),
     ]);
 
     const report = {
@@ -211,6 +222,10 @@ export async function getReportInsights(req: AuthRequest, res: Response): Promis
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    if (!canGenerateReports(req.user.role)) {
+      sendError(res, 'Your role cannot access report insights', 403);
+      return;
+    }
 
     const userId = req.user.userId;
 
@@ -276,6 +291,10 @@ export async function generateCustomReport(req: AuthRequest, res: Response): Pro
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    if (!canGenerateReports(req.user.role)) {
+      sendError(res, 'Your role cannot generate reports', 403);
+      return;
+    }
 
     const { startDate, endDate, scopes, categories, groupBy } = req.body;
 
@@ -287,10 +306,11 @@ export async function generateCustomReport(req: AuthRequest, res: Response): Pro
     const start = new Date(startDate);
     const end = new Date(endDate);
 
+    const orgId = req.user.organizationId;
     const [byScope, byCategory, trend] = await Promise.all([
-      getEmissionsSummaryByScope(req.user.userId, start, end),
-      getEmissionsSummaryByCategory(req.user.userId, start, end),
-      getEmissionsTrend(req.user.userId, 12),
+      getEmissionsSummaryByScope(req.user.userId, start, end, orgId),
+      getEmissionsSummaryByCategory(req.user.userId, start, end, orgId),
+      getEmissionsTrend(req.user.userId, 12, orgId),
     ]);
 
     // Filter by requested scopes if specified
@@ -385,6 +405,10 @@ export async function generateReportNarratives(req: AuthRequest, res: Response):
   try {
     if (!req.user) {
       sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canGenerateReports(req.user.role)) {
+      sendError(res, 'Your role cannot generate report narratives', 403);
       return;
     }
 

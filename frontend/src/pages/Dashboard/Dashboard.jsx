@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { useDataStore } from '../../context/DataStoreContext';
-import { getAuthToken, getDashboard, getEmissions, deleteEmission } from '../../api/client';
+import { getAuthToken, getDashboard, getEmissions, deleteEmission, getRecentActivity } from '../../api/client';
 import './Dashboard.css';
 
 const kgToTonnes = (kg) => (kg == null ? 0 : kg / 1000);
@@ -65,6 +65,10 @@ function Dashboard() {
     const [calendarModalOpen, setCalendarModalOpen] = useState(false);
     const [calendarYearEmissions, setCalendarYearEmissions] = useState([]);
     const [calendarSelectedMonths, setCalendarSelectedMonths] = useState([]);
+
+    // Recent activity feed (who did what)
+    const [activityLogs, setActivityLogs] = useState([]);
+    const [activityError, setActivityError] = useState(null);
 
     const hasToken = Boolean(getAuthToken());
 
@@ -124,6 +128,51 @@ function Dashboard() {
             });
         return () => { cancelled = true; };
     }, [hasToken, fromSubmit, filterYear, filterPeriod]);
+
+    // Load recent activity from audit logs
+    useEffect(() => {
+        if (!hasToken) {
+            setActivityLogs([]);
+            return;
+        }
+        let cancelled = false;
+        getRecentActivity(15)
+            .then((logs) => {
+                if (!cancelled) {
+                    setActivityLogs(Array.isArray(logs) ? logs : []);
+                    setActivityError(null);
+                }
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    setActivityError(err?.message || null);
+                    setActivityLogs([]);
+                }
+            });
+        return () => { cancelled = true; };
+    }, [hasToken, fromSubmit]);
+
+    useEffect(() => {
+        if (!hasToken) {
+            setActivityLogs([]);
+            return;
+        }
+        let cancelled = false;
+        getRecentActivity(15)
+            .then((logs) => {
+                if (!cancelled) {
+                    setActivityLogs(Array.isArray(logs) ? logs : []);
+                    setActivityError(null);
+                }
+            })
+            .catch((err) => {
+                if (!cancelled) {
+                    setActivityError(err?.message || null);
+                    setActivityLogs([]);
+                }
+            });
+        return () => { cancelled = true; };
+    }, [hasToken, fromSubmit]);
 
     useEffect(() => {
         if (!calendarModalOpen || !hasToken) {

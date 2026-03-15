@@ -8,6 +8,7 @@ import { logger } from '../utils/logger.js';
 
 interface CreateDocumentInput {
   userId: string;
+  organizationId?: string | null;
   fileName: string;
   fileType: string;
   fileSize: number;
@@ -23,6 +24,7 @@ export async function createDocument(input: CreateDocumentInput) {
   const document = await prisma.document.create({
     data: {
       userId: input.userId,
+      organizationId: input.organizationId ?? undefined,
       fileName: input.fileName,
       fileType: input.fileType,
       fileSize: input.fileSize,
@@ -206,15 +208,14 @@ export async function deleteDocument(documentId: string, userId: string, isAdmin
 }
 
 /**
- * Get document counts by status for a user
+ * Get document counts by status for a user or whole organization
  */
-export async function getDocumentStats(userId: string) {
+export async function getDocumentStats(userId: string, organizationId?: string | null) {
   const stats = await prisma.document.groupBy({
     by: ['status'],
-    where: {
-      userId,
-      deletedAt: null,
-    },
+    where: organizationId
+      ? { organizationId, deletedAt: null }
+      : { userId, deletedAt: null },
     _count: true,
   });
 
@@ -233,14 +234,13 @@ export async function getDocumentStats(userId: string) {
 }
 
 /**
- * Get recent documents for a user
+ * Get recent documents for a user or organization
  */
-export async function getRecentDocuments(userId: string, limit = 5) {
+export async function getRecentDocuments(userId: string, limit = 5, organizationId?: string | null) {
   return prisma.document.findMany({
-    where: {
-      userId,
-      deletedAt: null,
-    },
+    where: organizationId
+      ? { organizationId, deletedAt: null }
+      : { userId, deletedAt: null },
     orderBy: { uploadedAt: 'desc' },
     take: limit,
     select: {

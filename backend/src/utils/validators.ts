@@ -82,8 +82,28 @@ export const documentFilterSchema = z.object({
 // Admin User Update Schema
 export const adminUserUpdateSchema = z.object({
   isActive: z.boolean().optional(),
-  role: z.enum(['USER', 'ADMIN', 'SUPER_ADMIN']).optional(),
+  role: z
+    .enum(['SUPER_ADMIN', 'ADMINISTRATOR', 'DATA_CONTRIBUTOR', 'ANALYST', 'VIEWER'])
+    .optional(),
   emailVerified: z.boolean().optional(),
+});
+
+// Admin create user (same password rules as register; role optional, default USER)
+export const adminUserCreateSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+      'Password must contain at least one uppercase letter, one lowercase letter, and one number'
+    ),
+  firstName: z.string().min(2, 'First name must be at least 2 characters'),
+  lastName: z.string().min(2, 'Last name must be at least 2 characters'),
+  company: z.string().optional(),
+  role: z
+    .enum(['SUPER_ADMIN', 'ADMINISTRATOR', 'DATA_CONTRIBUTOR', 'ANALYST', 'VIEWER'])
+    .optional(),
 });
 
 // Custom Report Schema

@@ -19,6 +19,7 @@ import { createEmission } from '../services/emissionService.js';
 import { logUserAction, AuditActions } from '../services/auditService.js';
 import { logger } from '../utils/logger.js';
 import { DocumentType, EmissionScope, EmissionCategory } from '@prisma/client';
+import { canUpload, canEditDeleteData, isOrgAdmin } from '../utils/rolePermissions.js';
 
 // ─── Enum normalisation helpers ───────────────────────────────────────────────
 // Claude / Excel may return scope/category in many formats (mixed case, spaces, etc.).
@@ -85,6 +86,7 @@ export async function uploadDocument(req: AuthRequest, res: Response): Promise<v
 
     const document = await createDocument({
       userId: req.user.userId,
+      organizationId: req.user.organizationId,
       fileName: req.file.originalname,
       fileType: req.file.mimetype,
       fileSize: req.file.size,
@@ -125,6 +127,10 @@ export async function uploadDocumentsMultiple(req: AuthRequest, res: Response): 
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot upload documents', 403);
+      return;
+    }
 
     const files = req.files as Express.Multer.File[] | undefined;
     if (!files?.length) {
@@ -138,6 +144,7 @@ export async function uploadDocumentsMultiple(req: AuthRequest, res: Response): 
     for (const file of files) {
       const document = await createDocument({
         userId: req.user.userId,
+        organizationId: req.user.organizationId,
         fileName: file.originalname,
         fileType: file.mimetype,
         fileSize: file.size,
@@ -218,7 +225,7 @@ export async function getDocument(req: AuthRequest, res: Response): Promise<void
       sendError(res, 'Document ID required', 400);
       return;
     }
-    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+    const isAdmin = isOrgAdmin(req.user.role);
     
     const document = await getDocumentById(id, req.user.userId, isAdmin);
 
@@ -261,13 +268,17 @@ export async function removeDocument(req: AuthRequest, res: Response): Promise<v
       sendError(res, 'Unauthorized', 401);
       return;
     }
+    if (!canEditDeleteData(req.user.role)) {
+      sendError(res, 'Only Administrators can delete documents', 403);
+      return;
+    }
 
     const id = req.params.id;
     if (typeof id !== 'string') {
       sendError(res, 'Document ID required', 400);
       return;
     }
-    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+    const isAdmin = isOrgAdmin(req.user.role);
     
     await deleteDocument(id, req.user.userId, isAdmin);
 
@@ -317,7 +328,7 @@ export async function processDocument(req: AuthRequest, res: Response): Promise<
       sendError(res, 'Document ID required', 400);
       return;
     }
-    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+    const isAdmin = isOrgAdmin(req.user.role);
     
     const document = await getDocumentById(id, req.user.userId, isAdmin);
 
@@ -399,7 +410,7 @@ export async function submitDocument(req: AuthRequest, res: Response): Promise<v
       sendError(res, 'Document ID required', 400);
       return;
     }
-    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+    const isAdmin = isOrgAdmin(req.user.role);
     const document = await getDocumentById(id, req.user.userId, isAdmin);
 
     if (document.status === 'COMPLETED') {
@@ -434,6 +445,7 @@ export async function submitDocument(req: AuthRequest, res: Response): Promise<v
     const emission = await createEmission(
       {
         userId: req.user.userId,
+        organizationId: req.user.organizationId,
         documentId: id,
         scope,
         category,
@@ -499,7 +511,7 @@ export async function submitDocumentBatch(req: AuthRequest, res: Response): Prom
       sendError(res, 'Document ID required', 400);
       return;
     }
-    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+    const isAdmin = isOrgAdmin(req.user.role);
     const document = await getDocumentById(id, req.user.userId, isAdmin);
 
     const extracted = (document.extractedData as { entries?: Record<string, unknown>[] } | null) || {};
@@ -548,6 +560,7 @@ export async function submitDocumentBatch(req: AuthRequest, res: Response): Prom
         const emission = await createEmission(
           {
             userId: req.user!.userId,
+            organizationId: req.user!.organizationId,
             documentId: id,
             scope,
             category,

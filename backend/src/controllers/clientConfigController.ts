@@ -3,6 +3,7 @@ import { AuthRequest } from '../types/index.js';
 import { sendSuccess, sendError } from '../utils/helpers.js';
 import { saveClientConfig, getLatestClientConfig } from '../services/clientConfigService.js';
 import { logger } from '../utils/logger.js';
+import { canConfigureSettings } from '../utils/rolePermissions.js';
 
 /**
  * Save client inputs & constraints
@@ -12,6 +13,10 @@ export async function saveConfig(req: AuthRequest, res: Response): Promise<void>
   try {
     if (!req.user) {
       sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canConfigureSettings(req.user.role)) {
+      sendError(res, 'Only Administrators can change pathway configuration', 403);
       return;
     }
 

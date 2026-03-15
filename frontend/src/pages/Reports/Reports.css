@@ -170,26 +170,13 @@
     pointer-events: none;
 }
 
-.report-cover-logo {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 0;
-}
-
-.report-cover-logo-icon {
-    width: 28px;
-    height: 28px;
+/* Center logo (replaces green chart icon) */
+.report-cover-brand-logo {
+    width: 120px;
+    height: auto;
+    margin-bottom: 24px;
     object-fit: contain;
-}
-
-.report-cover-logo-text {
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: #fff;
+    filter: brightness(0) invert(1);
 }
 
 /* Compact center block – no flex:1 so page isn’t elongated */
@@ -200,13 +187,6 @@
     align-items: center;
     text-align: center;
     padding: 32px 0 28px;
-}
-
-.report-cover-chart-icon {
-    width: 80px;
-    height: 48px;
-    margin-bottom: 20px;
-    color: #2EC97F;
 }
 
 .report-cover-title {

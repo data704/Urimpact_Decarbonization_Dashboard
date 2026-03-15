@@ -395,6 +395,82 @@
     opacity: 0.95;
 }
 
+/* Activity feed — who did what */
+.dashboard-activity-feed {
+    padding: 16px 18px;
+    margin-bottom: 20px;
+}
+
+.dashboard-activity-header {
+    margin-bottom: 12px;
+}
+
+.dashboard-activity-header h3 {
+    margin: 0 0 4px 0;
+    font-size: 1rem;
+    color: #1E293B;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dashboard-activity-header h3 i {
+    color: #14B8A6;
+}
+
+.dashboard-activity-sub {
+    font-size: 0.8rem;
+    color: #64748B;
+}
+
+.dashboard-activity-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.dashboard-activity-item {
+    display: grid;
+    grid-template-columns: minmax(100px, 1fr) 1fr auto;
+    gap: 8px 12px;
+    align-items: baseline;
+    padding: 8px 0;
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 0.875rem;
+}
+
+.dashboard-activity-item:last-child {
+    border-bottom: none;
+}
+
+.dashboard-activity-who {
+    font-weight: 600;
+    color: #0F172A;
+}
+
+.dashboard-activity-action {
+    color: #475569;
+}
+
+.dashboard-activity-meta {
+    font-size: 0.75rem;
+    color: #94A3B8;
+    grid-column: 1 / -1;
+}
+
+.dashboard-activity-when {
+    font-size: 0.75rem;
+    color: #94A3B8;
+    text-align: right;
+}
+
+.dashboard-activity-error {
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+}
+
 /* Summary / KPI Cards */
 .summary-cards {
     display: grid;

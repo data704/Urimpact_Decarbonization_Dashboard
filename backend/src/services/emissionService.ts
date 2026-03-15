@@ -26,8 +26,24 @@ function activityDateInRangeWhere(
   };
 }
 
+/** Same as activityDateInRangeWhere but scoped by organization (shared company dashboard) */
+function activityDateInRangeWhereOrg(
+  organizationId: string,
+  startDate: Date,
+  endDate: Date
+): { organizationId: string; OR: unknown[] } {
+  return {
+    organizationId,
+    OR: [
+      { billingPeriodStart: { gte: startDate, lte: endDate } },
+      { AND: [{ billingPeriodStart: null }, { calculatedAt: { gte: startDate, lte: endDate } }] },
+    ],
+  };
+}
+
 interface CreateEmissionInput {
   userId: string;
+  organizationId?: string | null;
   documentId?: string;
   scope: EmissionScope;
   category: EmissionCategory;
@@ -50,6 +66,7 @@ export async function createEmission(
   const emission = await prisma.emission.create({
     data: {
       userId: input.userId,
+      organizationId: input.organizationId ?? undefined,
       documentId: input.documentId,
       scope: input.scope,
       category: input.category,
@@ -206,16 +223,23 @@ export async function getUserEmissions(
 export async function getEmissionsSummaryByScope(
   userId: string,
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
+  organizationId?: string | null
 ) {
   const where: {
-    userId: string;
+    userId?: string;
+    organizationId?: string;
     calculatedAt?: { gte?: Date; lte?: Date };
     OR?: unknown[];
-  } = { userId };
+  } = organizationId ? { organizationId } : { userId };
 
   if (startDate && endDate) {
-    Object.assign(where, activityDateInRangeWhere(userId, startDate, endDate));
+    Object.assign(
+      where,
+      organizationId
+        ? activityDateInRangeWhereOrg(organizationId, startDate, endDate)
+        : activityDateInRangeWhere(userId, startDate, endDate)
+    );
   } else if (startDate || endDate) {
     where.calculatedAt = {};
     if (startDate) where.calculatedAt.gte = startDate;
@@ -251,16 +275,23 @@ export async function getEmissionsSummaryByScope(
 export async function getEmissionsSummaryByCategory(
   userId: string,
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
+  organizationId?: string | null
 ) {
   const where: {
-    userId: string;
+    userId?: string;
+    organizationId?: string;
     calculatedAt?: { gte?: Date; lte?: Date };
     OR?: unknown[];
-  } = { userId };
+  } = organizationId ? { organizationId } : { userId };
 
   if (startDate && endDate) {
-    Object.assign(where, activityDateInRangeWhere(userId, startDate, endDate));
+    Object.assign(
+      where,
+      organizationId
+        ? activityDateInRangeWhereOrg(organizationId, startDate, endDate)
+        : activityDateInRangeWhere(userId, startDate, endDate)
+    );
   } else if (startDate || endDate) {
     where.calculatedAt = {};
     if (startDate) where.calculatedAt.gte = startDate;
@@ -294,14 +325,17 @@ export async function getEmissionsSummaryByCategory(
  */
 export async function getEmissionsTrend(
   userId: string,
-  months = 12
+  months = 12,
+  organizationId?: string | null
 ) {
   const endDate = new Date();
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - months);
 
   const emissions = await prisma.emission.findMany({
-    where: activityDateInRangeWhere(userId, startDate, endDate),
+    where: organizationId
+      ? activityDateInRangeWhereOrg(organizationId, startDate, endDate)
+      : activityDateInRangeWhere(userId, startDate, endDate),
     select: {
       co2e: true,
       billingPeriodStart: true,
@@ -342,10 +376,13 @@ export async function getEmissionsTrend(
 export async function getEmissionsTrendForRange(
   userId: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  organizationId?: string | null
 ) {
   const emissions = await prisma.emission.findMany({
-    where: activityDateInRangeWhere(userId, startDate, endDate),
+    where: organizationId
+      ? activityDateInRangeWhereOrg(organizationId, startDate, endDate)
+      : activityDateInRangeWhere(userId, startDate, endDate),
     select: {
       co2e: true,
       billingPeriodStart: true,
@@ -391,24 +428,33 @@ export async function getEmissionsTrendForRange(
 export async function getTotalEmissions(
   userId: string,
   startDate?: Date,
-  endDate?: Date
+  endDate?: Date,
+  organizationId?: string | null
 ) {
   if (startDate && endDate) {
+    const withBillingWhere = organizationId
+      ? { organizationId, billingPeriodStart: { gte: startDate, lte: endDate } }
+      : { userId, billingPeriodStart: { gte: startDate, lte: endDate } };
+    const withoutBillingWhere = organizationId
+      ? {
+          organizationId,
+          billingPeriodStart: null,
+          calculatedAt: { gte: startDate, lte: endDate },
+        }
+      : {
+          userId,
+          billingPeriodStart: null,
+          calculatedAt: { gte: startDate, lte: endDate },
+        };
+
     const [withBilling, withoutBilling] = await Promise.all([
       prisma.emission.aggregate({
-        where: {
-          userId,
-          billingPeriodStart: { gte: startDate, lte: endDate },
-        },
+        where: withBillingWhere,
         _sum: { co2e: true, co2: true, ch4: true, n2o: true },
         _count: true,
       }),
       prisma.emission.aggregate({
-        where: {
-          userId,
-          billingPeriodStart: null,
-          calculatedAt: { gte: startDate, lte: endDate },
-        },
+        where: withoutBillingWhere,
         _sum: { co2e: true, co2: true, ch4: true, n2o: true },
         _count: true,
       }),
@@ -428,7 +474,11 @@ export async function getTotalEmissions(
     };
   }
 
-  const where: { userId: string; calculatedAt?: { gte?: Date; lte?: Date } } = { userId };
+  const where: {
+    userId?: string;
+    organizationId?: string;
+    calculatedAt?: { gte?: Date; lte?: Date };
+  } = organizationId ? { organizationId } : { userId };
   if (startDate || endDate) {
     where.calculatedAt = {};
     if (startDate) where.calculatedAt.gte = startDate;

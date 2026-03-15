@@ -166,6 +166,7 @@ export async function loginWithBackend(email, password) {
  * Backend requires: password min 8 chars, at least one uppercase, one lowercase, one number.
  */
 export async function registerWithBackend({ email, password, firstName, lastName, company }) {
+  const trimmedCompany = company != null && String(company).trim() !== '' ? String(company).trim() : undefined;
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -174,7 +175,7 @@ export async function registerWithBackend({ email, password, firstName, lastName
       password,
       firstName: firstName?.trim?.() ?? firstName,
       lastName: lastName?.trim?.() ?? lastName,
-      ...(company ? { company: company?.trim?.() ?? company } : {}),
+      ...(trimmedCompany !== undefined ? { company: trimmedCompany } : {}),
     }),
   });
 
@@ -285,6 +286,82 @@ export async function getReportNarratives(sections) {
  * Delete an emission record. Requires auth.
  * DELETE /api/emissions/:id
  */
+/**
+ * Admin: list users. Requires ADMIN or SUPER_ADMIN.
+ * Query: { search?, role?, isActive?, page?, limit? }
+ */
+export async function getAdminUsers(params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v != null && v !== '') qs.set(k, String(v));
+  });
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  const res = await fetch(`${API_BASE}/admin/users${query}`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || err.message || `Failed to load users: ${res.status}`);
+  }
+  const json = await res.json();
+  return {
+    data: json?.data ?? [],
+    pagination: json?.pagination ?? {},
+    organizationLimit: json?.organizationLimit,
+  };
+}
+
+/**
+ * Admin: create user so they can sign in. Body: { email, password, firstName, lastName, company?, role? }
+ */
+export async function createAdminUser(payload) {
+  const res = await fetch(`${API_BASE}/admin/users`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || err.message || `Create user failed: ${res.status}`);
+  }
+  const json = await res.json();
+  return json?.data ?? json;
+}
+
+/**
+ * Admin: update user (isActive, role, emailVerified).
+ */
+export async function updateAdminUser(userId, payload) {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || err.message || `Update user failed: ${res.status}`);
+  }
+  const json = await res.json();
+  return json?.data ?? json;
+}
+
+/**
+ * Recent activity (audit log) for dashboard — who did what.
+ */
+export async function getRecentActivity(limit = 25) {
+  const res = await fetch(`${API_BASE}/activity/recent?limit=${limit}`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || err.message || `Activity failed: ${res.status}`);
+  }
+  const json = await res.json();
+  return json?.data?.activities ?? json?.activities ?? [];
+}
+
 export async function deleteEmission(emissionId) {
   const res = await fetch(`${API_BASE}/emissions/${emissionId}`, {
     method: 'DELETE',

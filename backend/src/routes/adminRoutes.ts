@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getUsers,
   getUser,
+  createUser,
   updateUser,
   getAuditLogsHandler,
   getSystemStats,
@@ -17,6 +18,7 @@ router.use(adminOnly);
 
 // User management
 router.get('/users', getUsers);
+router.post('/users', createUser);
 router.get('/users/:id', getUser);
 router.put('/users/:id', updateUser);
 

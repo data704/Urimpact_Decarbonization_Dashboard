@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import prisma from '../config/database.js';
+import { createOrganization } from './organizationService.js';
 import { config } from '../config/index.js';
 import { AuthTokens, CreateUserInput, UserProfile } from '../types/index.js';
 import { ConflictError, UnauthorizedError, NotFoundError } from '../middleware/errorHandler.js';
@@ -76,14 +77,27 @@ export async function registerUser(input: CreateUserInput): Promise<UserProfile>
   // Hash password
   const hashedPassword = await hashPassword(input.password);
 
-  // Create user
+  // Normalize company: trim and use null if empty so profile shows user's choice, not org fallback
+  const companyToSave =
+    input.company != null && String(input.company).trim() !== ''
+      ? String(input.company).trim()
+      : null;
+
+  // New company tenant: create organization first, then admin user bound to it
+  const orgName =
+    companyToSave || `${input.firstName}'s Organization`.trim();
+  const organization = await createOrganization(orgName);
+
+  // Create user — self-signup is org admin; all data is scoped by organizationId
   const user = await prisma.user.create({
     data: {
       email: input.email.toLowerCase(),
       password: hashedPassword,
       firstName: input.firstName,
       lastName: input.lastName,
-      company: input.company,
+      company: companyToSave,
+      organizationId: organization.id,
+      role: UserRole.ADMINISTRATOR,
     },
     select: {
       id: true,
@@ -91,6 +105,7 @@ export async function registerUser(input: CreateUserInput): Promise<UserProfile>
       firstName: true,
       lastName: true,
       company: true,
+      organizationId: true,
       role: true,
       isActive: true,
       emailVerified: true,
@@ -157,6 +172,7 @@ export async function loginUser(
     firstName: user.firstName,
     lastName: user.lastName,
     company: user.company ?? undefined,
+    organizationId: user.organizationId ?? undefined,
     role: user.role,
     isActive: user.isActive,
     emailVerified: user.emailVerified,

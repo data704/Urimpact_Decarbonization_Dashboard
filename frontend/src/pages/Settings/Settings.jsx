@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import './Settings.css';
 
 function Settings() {
+    const { user } = useAuth();
     const [notification, setNotification] = useState(null);
     const [settings, setSettings] = useState({
         organization: {
-            name: 'URIMPACT Demo Corp',
+            name: '',
             industry: 'Technology',
             fiscalYear: 'January',
             currency: 'USD'
@@ -22,6 +24,18 @@ function Settings() {
             reportReminders: false
         }
     });
+
+    useEffect(() => {
+        if (user?.company != null && user.company !== '') {
+            setSettings(prev => ({
+                ...prev,
+                organization: {
+                    ...prev.organization,
+                    name: user.company
+                }
+            }));
+        }
+    }, [user?.company]);
 
     const showNotification = (message, type = 'success') => {
         setNotification({ message, type });

@@ -2,7 +2,14 @@ import { Response } from 'express';
 import prisma from '../config/database.js';
 import { AuthRequest } from '../types/index.js';
 import { sendSuccess, sendError, sendPaginated, parsePagination } from '../utils/helpers.js';
-import { getAuditLogs, logUserAction, AuditActions } from '../services/auditService.js';
+import { getAuditLogs, logUserAction, AuditActions, getRecentActivity } from '../services/auditService.js';
+import { hashPassword } from '../services/authService.js';
+import {
+  canAddUserToOrganization,
+  getOrganizationUserCount,
+  MAX_USERS_PER_ORGANIZATION,
+} from '../services/organizationService.js';
+import { validate, adminUserCreateSchema } from '../utils/validators.js';
 import { getAllDocuments } from '../services/documentService.js';
 import { logger } from '../utils/logger.js';
 import { UserRole } from '@prisma/client';
@@ -25,6 +32,7 @@ export async function getUsers(req: AuthRequest, res: Response): Promise<void> {
       isActive?: boolean;
       email?: { contains: string; mode: 'insensitive' };
       company?: { contains: string; mode: 'insensitive' };
+      organizationId?: string;
     } = {};
 
     if (req.query.role) {
@@ -41,6 +49,11 @@ export async function getUsers(req: AuthRequest, res: Response): Promise<void> {
 
     if (req.query.company) {
       filters.company = { contains: req.query.company as string, mode: 'insensitive' };
+    }
+
+    // Org admins only see users in their organization; super admins see all
+    if (req.user?.organizationId && req.user.role !== 'SUPER_ADMIN') {
+      filters.organizationId = req.user.organizationId;
     }
 
     const [users, total] = await Promise.all([
@@ -71,13 +84,120 @@ export async function getUsers(req: AuthRequest, res: Response): Promise<void> {
       prisma.user.count({ where: filters }),
     ]);
 
-    sendPaginated(res, users, { page, limit, total });
+    const orgId = req.user?.organizationId ?? null;
+    const organizationLimit =
+      orgId != null
+        ? {
+            userCount: await getOrganizationUserCount(orgId),
+            maxUsers: MAX_USERS_PER_ORGANIZATION,
+          }
+        : undefined;
+
+    sendPaginated(res, users, { page, limit, total }, { organizationLimit });
   } catch (error) {
     logger.error('Get users error:', error);
     if (error instanceof Error) {
       sendError(res, error.message, 500);
     } else {
       sendError(res, 'Failed to get users', 500);
+    }
+  }
+}
+
+/**
+ * Create user (admin only) — new users can sign in with the password set here.
+ * POST /api/admin/users
+ */
+export async function createUser(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    const validation = validate(adminUserCreateSchema, req.body);
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    const { email, password, firstName, lastName, company, role } = validation.data!;
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const existing = await prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+    if (existing) {
+      sendError(res, 'Email already registered', 409);
+      return;
+    }
+
+    const targetRole = (role ?? 'DATA_CONTRIBUTOR') as UserRole;
+    if (targetRole === 'SUPER_ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      sendError(res, 'Only super admin can assign super admin role', 403);
+      return;
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    const adminUser = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { organizationId: true, company: true },
+    });
+    const orgId = adminUser?.organizationId ?? undefined;
+
+    if (orgId) {
+      const canAdd = await canAddUserToOrganization(orgId);
+      if (!canAdd) {
+        sendError(
+          res,
+          `Your organization has reached the maximum of ${MAX_USERS_PER_ORGANIZATION} users. You cannot add more users.`,
+          403
+        );
+        return;
+      }
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        password: hashedPassword,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        company: company?.trim() || adminUser?.company || null,
+        organizationId: orgId,
+        role: targetRole,
+        isActive: true,
+        emailVerified: false,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        company: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.USER_CREATED_BY_ADMIN,
+      'user',
+      user.id,
+      { createdEmail: user.email, role: user.role },
+      req
+    );
+
+    sendSuccess(res, user, 'User created successfully', 201);
+  } catch (error) {
+    logger.error('Create user error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Failed to create user', 500);
     }
   }
 }

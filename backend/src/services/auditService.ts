@@ -232,4 +232,34 @@ export const AuditActions = {
   USER_ACTIVATED: 'USER_ACTIVATED',
   USER_DEACTIVATED: 'USER_DEACTIVATED',
   USER_ROLE_CHANGED: 'USER_ROLE_CHANGED',
+  USER_CREATED_BY_ADMIN: 'USER_CREATED_BY_ADMIN',
 } as const;
+
+/**
+ * Recent activity for dashboard (who did what). Any authenticated user can read.
+ * When organizationId is provided, only returns activity for users in that organization.
+ * When organizationId is null (e.g. super admin), returns all activity.
+ */
+export async function getRecentActivity(limit = 30, organizationId?: string | null) {
+  const take = Math.min(100, Math.max(1, limit));
+  const where: { user?: { organizationId: string } } = {};
+  if (organizationId != null && organizationId !== '') {
+    where.user = { organizationId };
+  }
+
+  return prisma.auditLog.findMany({
+    where,
+    take,
+    orderBy: { timestamp: 'desc' },
+    include: {
+      user: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+        },
+      },
+    },
+  });
+}

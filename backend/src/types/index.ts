@@ -7,6 +7,8 @@ export interface AuthRequest extends Request {
     userId: string;
     email: string;
     role: UserRole;
+    /** Tenant scope — dashboard/emissions aggregate by org, not single user */
+    organizationId?: string | null;
   };
 }
 
@@ -25,6 +27,8 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
     total: number;
     totalPages: number;
   };
+  /** Optional extra payload (e.g. organizationLimit for admin users list) */
+  organizationLimit?: { userCount: number; maxUsers: number };
 }
 
 // Pagination Query
@@ -174,6 +178,8 @@ export interface UserProfile {
   firstName: string;
   lastName: string;
   company?: string;
+  /** Tenant — all org members share one dashboard */
+  organizationId?: string | null;
   role: UserRole;
   isActive: boolean;
   emailVerified: boolean;

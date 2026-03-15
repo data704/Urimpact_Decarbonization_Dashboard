@@ -41,7 +41,7 @@ export async function authenticate(
     // Check if user exists and is active
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, email: true, role: true, isActive: true },
+      select: { id: true, email: true, role: true, isActive: true, organizationId: true },
     });
 
     if (!user) {
@@ -59,6 +59,7 @@ export async function authenticate(
       userId: user.id,
       email: user.email,
       role: user.role,
+      organizationId: user.organizationId ?? undefined,
     };
 
     next();
@@ -101,7 +102,7 @@ export async function optionalAuth(
     
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
-      select: { id: true, email: true, role: true, isActive: true },
+      select: { id: true, email: true, role: true, isActive: true, organizationId: true },
     });
 
     if (user && user.isActive) {
@@ -109,6 +110,7 @@ export async function optionalAuth(
         userId: user.id,
         email: user.email,
         role: user.role,
+        organizationId: user.organizationId ?? undefined,
       };
     }
 
@@ -151,8 +153,13 @@ export function adminOnly(
     return;
   }
 
-  if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
-    sendError(res, 'Admin access required', 403);
+  const r = String(req.user.role || '');
+  const isAdmin =
+    r === 'SUPER_ADMIN' ||
+    r === 'ADMINISTRATOR' ||
+    r === 'ADMIN'; // legacy
+  if (!isAdmin) {
+    sendError(res, 'Administrator access required', 403);
     return;
   }
 

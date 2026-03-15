@@ -5,6 +5,7 @@ import emissionRoutes from './emissionRoutes.js';
 import reportRoutes from './reportRoutes.js';
 import adminRoutes from './adminRoutes.js';
 import clientConfigRoutes from './clientConfigRoutes.js';
+import activityRoutes from './activityRoutes.js';
 
 const router = Router();
 
@@ -25,5 +26,6 @@ router.use('/emissions', emissionRoutes);
 router.use('/reports', reportRoutes);
 router.use('/client-config', clientConfigRoutes);
 router.use('/admin', adminRoutes);
+router.use('/activity', activityRoutes);
 
 export default router;

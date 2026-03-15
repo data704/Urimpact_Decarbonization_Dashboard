@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { getRecentActivity } from '../../api/client';
 import './Layout.css';
 
 function Header({ onMenuToggle }) {
@@ -11,12 +12,7 @@ function Header({ onMenuToggle }) {
     const notificationRef = useRef(null);
     const profileRef = useRef(null);
 
-    const notifications = [
-        { id: 1, type: 'success', message: 'Emission data verified successfully', time: '5 min ago', unread: true },
-        { id: 2, type: 'warning', message: 'Monthly target approaching limit', time: '1 hour ago', unread: true },
-        { id: 3, type: 'info', message: 'New report available for download', time: '2 hours ago', unread: false },
-        { id: 4, type: 'success', message: 'Carbon offset certificate generated', time: '1 day ago', unread: false },
-    ];
+    const [notifications, setNotifications] = useState([]);
 
     const currentDate = new Date().toLocaleDateString('en-US', {
         weekday: 'short',
@@ -24,6 +20,31 @@ function Header({ onMenuToggle }) {
         month: 'short',
         year: 'numeric'
     });
+
+    // Load recent activity for notification popup (top 5)
+    useEffect(() => {
+        getRecentActivity(5)
+            .then((logs) => {
+                const items = Array.isArray(logs) ? logs : [];
+                const mapped = items.map((log) => {
+                    const who = log.user
+                        ? `${log.user.firstName || ''} ${log.user.lastName || ''}`.trim() || log.user.email
+                        : 'System';
+                    const when = log.timestamp ? new Date(log.timestamp).toLocaleString() : '';
+                    const action = (log.action || '').replace(/_/g, ' ').toLowerCase();
+                    return {
+                        id: log.id,
+                        who,
+                        action,
+                        time: when,
+                    };
+                });
+                setNotifications(mapped);
+            })
+            .catch(() => {
+                setNotifications([]);
+            });
+    }, []);
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -45,7 +66,7 @@ function Header({ onMenuToggle }) {
         navigate('/login');
     };
 
-    const unreadCount = notifications.filter(n => n.unread).length;
+    const unreadCount = notifications.length;
 
     return (
         <header className="header">
@@ -98,21 +119,20 @@ function Header({ onMenuToggle }) {
                                     <button type="button" className="mark-all-read">Mark all read</button>
                                 </div>
                                 <div className="dropdown-content">
-                                    {notifications.map(notification => (
-                                        <div
-                                            key={notification.id}
-                                            className={`notification-item ${notification.unread ? 'unread' : ''}`}
-                                        >
-                                            <div className={`notification-icon ${notification.type}`}>
-                                                <i className={`fas fa-${
-                                                    notification.type === 'success' ? 'check' :
-                                                    notification.type === 'warning' ? 'exclamation-triangle' :
-                                                    notification.type === 'error' ? 'times' : 'info'
-                                                }`}></i>
-                                            </div>
+                                    {notifications.length === 0 && (
+                                        <div className="notification-item">
                                             <div className="notification-content">
-                                                <p>{notification.message}</p>
-                                                <span className="notification-time">{notification.time}</span>
+                                                <p>No recent activity</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {notifications.map((n) => (
+                                        <div key={n.id} className="notification-item unread">
+                                            <div className="notification-content">
+                                                <p>
+                                                    <strong>{n.who}</strong> {n.action}
+                                                </p>
+                                                <span className="notification-time">{n.time}</span>
                                             </div>
                                         </div>
                                     ))}

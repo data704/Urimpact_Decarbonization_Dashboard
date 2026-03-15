@@ -38,6 +38,12 @@
     font-size: 14px;
 }
 
+.page-header .user-limit-hint {
+    font-size: 13px;
+    color: #0F766E;
+    margin-top: 4px;
+}
+
 .btn {
     display: flex;
     align-items: center;
@@ -58,6 +64,12 @@
 
 .btn-primary:hover {
     background: var(--accent-hover);
+}
+
+.btn:disabled,
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 /* User Stats */
@@ -303,6 +315,87 @@
     .user-stats {
         grid-template-columns: repeat(2, 1fr);
     }
+}
+
+/* Modal + form */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 24px;
+}
+
+.modal-content {
+    max-width: 480px;
+    width: 100%;
+    padding: 24px;
+}
+
+.modal-content h3 {
+    margin: 0 0 8px 0;
+    color: #1E293B;
+}
+
+.modal-hint {
+    font-size: 0.875rem;
+    color: #64748B;
+    margin-bottom: 16px;
+}
+
+.modal-content label {
+    display: block;
+    margin-bottom: 12px;
+    font-size: 0.875rem;
+    color: #475569;
+}
+
+.modal-content input,
+.modal-content select {
+    width: 100%;
+    margin-top: 6px;
+    padding: 10px 12px;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--border-radius-sm);
+    font-size: 14px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.btn-ghost {
+    background: #F1F5F9;
+    color: #475569;
+}
+
+.btn-ghost:hover {
+    background: #E2E8F0;
+}
+
+.role-select {
+    padding: 6px 10px;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+}
+
+.notification.error {
+    background: #FEE2E2;
+    color: #991B1B;
 }
 
 @media (max-width: 768px) {

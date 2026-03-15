@@ -11,10 +11,14 @@ datasource db {
 }
 
 // Enums
+// Administrator = full org control; Data Contributor = upload only;
+// Analyst = reports/analytics only; Viewer = read-only; SUPER_ADMIN = platform
 enum UserRole {
-  USER
-  ADMIN
   SUPER_ADMIN
+  ADMINISTRATOR
+  DATA_CONTRIBUTOR
+  ANALYST
+  VIEWER
 }
 
 enum DocumentType {
@@ -51,29 +55,45 @@ enum EmissionCategory {
   OTHER
 }
 
+// Organization (tenant) — signup creates an org; all members share one dashboard
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
+  emissions Emission[]
+  documents Document[]
+
+  @@map("organizations")
+}
+
 // User Model
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  password      String
-  firstName     String
-  lastName      String
-  company       String?
-  role          UserRole  @default(USER)
-  isActive      Boolean   @default(true)
-  emailVerified Boolean   @default(false)
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  email          String    @unique
+  password       String
+  firstName      String
+  lastName       String
+  company        String?
+  organizationId String?
+  role           UserRole  @default(ADMINISTRATOR)
+  isActive       Boolean   @default(true)
+  emailVerified  Boolean   @default(false)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  // Relations
-  documents    Document[]
-  emissions    Emission[]
-  auditLogs    AuditLog[]
+  organization  Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  documents     Document[]
+  emissions     Emission[]
+  auditLogs     AuditLog[]
   clientConfigs ClientConfig[]
 
   @@index([email])
   @@index([company])
+  @@index([organizationId])
   @@map("users")
 }
 
@@ -97,8 +117,9 @@ model ClientConfig {
 
 // Document Model
 model Document {
-  id            String         @id @default(uuid())
-  userId        String
+  id             String         @id @default(uuid())
+  userId         String
+  organizationId String?
   fileName      String
   fileType      String
   fileSize      Int
@@ -115,10 +136,12 @@ model Document {
   deletedAt     DateTime?
 
   // Relations
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emissions Emission[]
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  emissions    Emission[]
 
   @@index([userId])
+  @@index([organizationId])
   @@index([status])
   @@index([documentType])
   @@index([uploadedAt])
@@ -129,6 +152,7 @@ model Document {
 model Emission {
   id                 String           @id @default(uuid())
   userId             String
+  organizationId     String?
   documentId         String?
   scope              EmissionScope
   category           EmissionCategory
@@ -152,10 +176,12 @@ model Emission {
   updatedAt          DateTime         @updatedAt
 
   // Relations
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  document Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  document     Document?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([organizationId])
   @@index([documentId])
   @@index([scope])
   @@index([category])
