@@ -9,6 +9,7 @@ import {
   getEmissionsSummaryByScope,
   getEmissionsSummaryByCategory,
   getEmissionsForExport,
+  deleteEmissionsBulk,
 } from '../services/emissionService.js';
 import { logUserAction, AuditActions } from '../services/auditService.js';
 import { emissionCalculationSchema, validate } from '../utils/validators.js';
@@ -19,6 +20,7 @@ import {
   canEditDeleteData,
   canExportDatasets,
   isOrgAdmin,
+  canAccessDashboard,
 } from '../utils/rolePermissions.js';
 
 /**
@@ -205,6 +207,60 @@ export async function removeEmission(req: AuthRequest, res: Response): Promise<v
       sendError(res, error.message, 500);
     } else {
       sendError(res, 'Failed to delete emission', 500);
+    }
+  }
+}
+
+/**
+ * Bulk delete emission records
+ * POST /api/emissions/bulk-delete
+ * Body: { ids: string[] }
+ *
+ * - Only roles that can access the dashboard (ADMINISTRATOR, ANALYST, SUPER_ADMIN, VIEWER) may call this.
+ * - Underlying service enforces per-record ownership and org admin checks.
+ */
+export async function bulkRemoveEmissions(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    if (!canAccessDashboard(req.user.role)) {
+      sendError(res, 'Your role cannot delete emissions in bulk', 403);
+      return;
+    }
+
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.filter((v) => typeof v === 'string') : [];
+    if (!ids.length) {
+      sendError(res, 'At least one emission ID is required', 400);
+      return;
+    }
+
+    const isAdmin = isOrgAdmin(req.user.role);
+
+    const { deletedCount } = await deleteEmissionsBulk(ids, req.user.userId, isAdmin);
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_DELETED,
+      'emission',
+      undefined,
+      { bulk: true, ids, deletedCount },
+      req
+    );
+
+    sendSuccess(res, { deletedCount }, 'Emission records deleted successfully');
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message.includes('access')) {
+        sendError(res, error.message, 403);
+        return;
+      }
+      logger.error('Bulk delete emissions error:', error);
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Failed to delete emissions', 500);
     }
   }
 }

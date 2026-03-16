@@ -21,8 +21,14 @@ function Header({ onMenuToggle }) {
         year: 'numeric'
     });
 
-    // Load recent activity for notification popup (top 5)
+    const isAdminUser = user?.role === 'ADMINISTRATOR' || user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+
+    // Load recent activity for notification popup (top 5) — administrators only
     useEffect(() => {
+        if (!isAdminUser) {
+            setNotifications([]);
+            return;
+        }
         getRecentActivity(5)
             .then((logs) => {
                 const items = Array.isArray(logs) ? logs : [];
@@ -44,7 +50,7 @@ function Header({ onMenuToggle }) {
             .catch(() => {
                 setNotifications([]);
             });
-    }, []);
+    }, [isAdminUser]);
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -102,46 +108,48 @@ function Header({ onMenuToggle }) {
                             <span className="user-name-header">{user?.firstName || 'User'}</span>
                         </div>
 
-                        <div className="header-notification-wrap" ref={notificationRef}>
-                            <button
-                                type="button"
-                                className="notification-trigger"
-                                onClick={(e) => { e.stopPropagation(); setShowNotifications(!showNotifications); }}
-                                aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
-                            >
-                                <i className="fas fa-bell"></i>
-                                {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
-                            </button>
+                        {isAdminUser && (
+                            <div className="header-notification-wrap" ref={notificationRef}>
+                                <button
+                                    type="button"
+                                    className="notification-trigger"
+                                    onClick={(e) => { e.stopPropagation(); setShowNotifications(!showNotifications); }}
+                                    aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+                                >
+                                    <i className="fas fa-bell"></i>
+                                    {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
+                                </button>
 
-                            <div className={`dropdown-menu notification-dropdown ${showNotifications ? 'active' : ''}`}>
-                                <div className="dropdown-header">
-                                    <h4>Notifications</h4>
-                                    <button type="button" className="mark-all-read">Mark all read</button>
-                                </div>
-                                <div className="dropdown-content">
-                                    {notifications.length === 0 && (
-                                        <div className="notification-item">
-                                            <div className="notification-content">
-                                                <p>No recent activity</p>
+                                <div className={`dropdown-menu notification-dropdown ${showNotifications ? 'active' : ''}`}>
+                                    <div className="dropdown-header">
+                                        <h4>Notifications</h4>
+                                        <button type="button" className="mark-all-read">Mark all read</button>
+                                    </div>
+                                    <div className="dropdown-content">
+                                        {notifications.length === 0 && (
+                                            <div className="notification-item">
+                                                <div className="notification-content">
+                                                    <p>No recent activity</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                    {notifications.map((n) => (
-                                        <div key={n.id} className="notification-item unread">
-                                            <div className="notification-content">
-                                                <p>
-                                                    <strong>{n.who}</strong> {n.action}
-                                                </p>
-                                                <span className="notification-time">{n.time}</span>
+                                        )}
+                                        {notifications.map((n) => (
+                                            <div key={n.id} className="notification-item unread">
+                                                <div className="notification-content">
+                                                    <p>
+                                                        <strong>{n.who}</strong> {n.action}
+                                                    </p>
+                                                    <span className="notification-time">{n.time}</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="dropdown-footer">
-                                    <Link to="/notifications">View all notifications</Link>
+                                        ))}
+                                    </div>
+                                    <div className="dropdown-footer">
+                                        <Link to="/notifications">View all notifications</Link>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         <button
                             type="button"

@@ -126,7 +126,7 @@ function computeReportOutputs({ config, totalTonnes, scope1Tonnes, scope2Tonnes,
 
     // ── ASSUMPTIONS ARRAY (spec §2.3) ─────────────────────────────────────────
     const assumptions = [
-        { assumption_id: 'scope', label: 'Scope boundary', value: 'Scope 1 & 2 only', unit: null, source: 'GHG Protocol', notes: 'Other scopes excluded by design' },
+        { assumption_id: 'boundary', label: 'Emissions boundary', value: 'Operational emissions included in this model only', unit: null, source: 'GHG Protocol', notes: 'Other emission sources and categories may be excluded by design' },
         { assumption_id: 'pathway_linearity', label: 'Pathway shape', value: 'Linear', unit: null, source: 'Model design', notes: 'Planning simplification; not a performance guarantee' },
         { assumption_id: 'tier_r_total', label: `R_total (${tierKey})`, value: R_total, unit: '%', source: `Policy v${POLICY_VERSION}`, notes: 'Policy-defined, not empirically measured' },
         { assumption_id: 'tier_residual', label: `StructuralResidual% (${tierKey})`, value: StructuralResidualPct, unit: '%', source: `Policy v${POLICY_VERSION}`, notes: 'Hardcoded to tier; policy-defined' },
@@ -152,10 +152,10 @@ function computeReportOutputs({ config, totalTonnes, scope1Tonnes, scope2Tonnes,
     }
     if (breakdown.length === 0) {
         // fallback from scope totals
-        breakdown = [
-            { name: 'Purchased Electricity', scope: 'Scope 2', tco2e: scope2_total, pct_of_total: parseFloat(((scope2_total / Math.max(1, baseline_total)) * 100).toFixed(1)) },
-            { name: 'Mobile Combustion',     scope: 'Scope 1', tco2e: Math.round(scope1_total * 0.6), pct_of_total: parseFloat(((Math.round(scope1_total * 0.6) / Math.max(1, baseline_total)) * 100).toFixed(1)) },
-            { name: 'Stationary Combustion', scope: 'Scope 1', tco2e: Math.round(scope1_total * 0.4), pct_of_total: parseFloat(((Math.round(scope1_total * 0.4) / Math.max(1, baseline_total)) * 100).toFixed(1)) },
+            breakdown = [
+            { name: 'Purchased Electricity', scope: 'Electricity', tco2e: scope2_total, pct_of_total: parseFloat(((scope2_total / Math.max(1, baseline_total)) * 100).toFixed(1)) },
+            { name: 'Mobile Combustion',     scope: 'Fuel (mobile)', tco2e: Math.round(scope1_total * 0.6), pct_of_total: parseFloat(((Math.round(scope1_total * 0.6) / Math.max(1, baseline_total)) * 100).toFixed(1)) },
+            { name: 'Stationary Combustion', scope: 'Fuel (stationary)', tco2e: Math.round(scope1_total * 0.4), pct_of_total: parseFloat(((Math.round(scope1_total * 0.4) / Math.max(1, baseline_total)) * 100).toFixed(1)) },
         ].filter((d) => d.tco2e > 0);
     }
 
@@ -711,7 +711,7 @@ function Reports() {
                                 <img src="/logo.svg" alt="URIMPACT" className="report-cover-brand-logo" />
                                 <h1 className="report-cover-title">Decarbonization Report</h1>
                                 <p className="report-cover-org">{outputs?.org?.name ?? 'Your Organization'}</p>
-                                <p className="report-cover-subtitle">Scope 1 &amp; 2 Emissions — {baseYear} Baseline &amp; Pathway to {outputs?.period?.target_year ?? '—'}</p>
+                                <p className="report-cover-subtitle">Operational Emissions — {baseYear} Baseline &amp; Pathway to {outputs?.period?.target_year ?? '—'}</p>
                                 <p className="report-cover-period">{reportPeriodLabel}</p>
                                 <p className="report-cover-period" style={{marginTop:'0.25rem',fontSize:'0.85em'}}>Ambition Tier: {outputs?.tier?.label ?? '—'} | Engine v{ENGINE_VERSION}</p>
                             </div>
@@ -726,7 +726,7 @@ function Reports() {
                                     <div className="card metric-card">
                                         <span className="metric-label">Baseline Emissions</span>
                                         <span className="metric-value">{fmt(outputs?.totals?.baseline_total)} tCO₂e</span>
-                                        <span className="metric-subtitle">Scope 1 + Scope 2 ({baseYear})</span>
+                                        <span className="metric-subtitle">Total operational emissions ({baseYear})</span>
                                     </div>
                                     <div className="card metric-card metric-positive">
                                         <span className="metric-label">Target-Year Emissions</span>
@@ -767,7 +767,7 @@ function Reports() {
                         <div className="report-print-page">
                             <section className="card report-section">
                                 <div className="section-title">S2 — Baseline Emissions Profile</div>
-                                <p className="body-text lead">Scope 1 &amp; 2 composition by source category</p>
+                                <p className="body-text lead">Emissions composition by source category</p>
                                 <div style={{ display:'flex', gap:'2rem', flexWrap:'wrap', alignItems:'flex-start' }}>
                                     <div id="baselinePieContainer" style={{ flex:'0 0 260px', height:260 }}>
                                         {pieData && (
@@ -931,7 +931,7 @@ function Reports() {
                                 <div className="methodology-list" style={{marginTop:'1rem'}}>
                                     <p className="body-text"><strong>Top Sources:</strong> {outputs?.breakdown?.slice(0,2).map(d => `${d.name} (${d.pct_of_total.toFixed(1)}%)`).join(', ')}</p>
                                     <p className="body-text"><strong>Annual Pace:</strong> {fmt(outputs?.pathway?.annual_reduction_tco2e)} tCO₂e/yr ({fmtPct(outputs?.pathway?.annual_reduction_pct_of_baseline ?? 0)} of baseline)</p>
-                                    <p className="body-text"><strong>Scope:</strong> Scope 1 &amp; 2 only. Financial projections and engineering feasibility are excluded from this model by design.</p>
+                                    <p className="body-text"><strong>Boundary:</strong> This model covers the operational emissions included in the current inventory. Financial projections and engineering feasibility are excluded by design.</p>
                             </div>
                             </section>
                             <div className="report-page-footer">{getPageNum('S8_strategy')} of {totalPages} | Generated by URIMPACT Platform</div>
@@ -973,7 +973,7 @@ function Reports() {
                                         <li>StructuralResidual% is a policy-defined governance parameter tied to ambition tier selection — not an empirical measurement of abatement capacity.</li>
                                         <li>The annual removal obligation equals the structural residual ceiling (one-to-one neutralisation principle).</li>
                                         <li>The linear pathway is a planning simplification, not a performance guarantee.</li>
-                                        <li>Scope boundary is Scope 1 &amp; 2 only. Financial projections and engineering feasibility are excluded by design.</li>
+                                        <li>The emissions boundary is limited to the sources and categories included in this model. Financial projections and engineering feasibility are excluded by design.</li>
                                         <li>Tier mapping is policy-defined and versioned. Policy version: {POLICY_VERSION}.</li>
                                         {outputs?.bau?.enabled && <li>BAU scenario is a comparator only; it does not affect pathway or residual calculations.</li>}
                                         {outputs?.trees?.enabled && <li>Tree equivalency is illustrative and uses the default sequestration rate (0.025 tCO₂e/tree/yr). Actual removal capacity requires third-party verification.</li>}
@@ -994,8 +994,8 @@ function Reports() {
                                     <thead><tr><th>Variable</th><th>Source</th><th>Formula</th><th>Value</th></tr></thead>
                                     <tbody>
                                         <tr><td>E (Baseline)</td><td>Client data</td><td>—</td><td>{fmt(outputs?.totals?.baseline_total)} tCO₂e</td></tr>
-                                        <tr><td>Scope 1</td><td>Client data</td><td>—</td><td>{fmt(outputs?.totals?.scope1_total)} tCO₂e</td></tr>
-                                        <tr><td>Scope 2</td><td>Client data</td><td>—</td><td>{fmt(outputs?.totals?.scope2_total)} tCO₂e</td></tr>
+                                        <tr><td>Operational segment A</td><td>Client data</td><td>—</td><td>{fmt(outputs?.totals?.scope1_total)} tCO₂e</td></tr>
+                                        <tr><td>Operational segment B</td><td>Client data</td><td>—</td><td>{fmt(outputs?.totals?.scope2_total)} tCO₂e</td></tr>
                                         <tr><td>Base Year</td><td>Client config</td><td>—</td><td>{outputs?.period?.base_year}</td></tr>
                                         <tr><td>Target Year</td><td>Client config</td><td>—</td><td>{outputs?.period?.target_year}</td></tr>
                                         <tr><td>n (Time Horizon)</td><td>Calculated</td><td>Target − Base</td><td>{outputs?.pathway?.years_to_target} years</td></tr>

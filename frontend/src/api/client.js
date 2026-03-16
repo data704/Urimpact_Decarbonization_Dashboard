@@ -347,6 +347,22 @@ export async function updateAdminUser(userId, payload) {
 }
 
 /**
+ * Admin: delete user (within organization for org admins, any non-super-admin for super admins).
+ */
+export async function deleteAdminUser(userId) {
+  const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || err.message || `Delete user failed: ${res.status}`);
+  }
+  const json = await res.json().catch(() => ({}));
+  return json?.data ?? json;
+}
+
+/**
  * Recent activity (audit log) for dashboard — who did what.
  */
 export async function getRecentActivity(limit = 25) {
@@ -371,6 +387,22 @@ export async function deleteEmission(emissionId) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
     throw new Error(err.error || err.message || `Delete failed: ${res.status}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return data?.data ?? data;
+}
+
+export async function deleteEmissionsBulk(ids) {
+  const res = await fetch(`${API_BASE}/emissions/bulk-delete`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: Array.isArray(ids) ? ids : [] }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || err.message || `Bulk delete failed: ${res.status}`);
   }
 
   const data = await res.json().catch(() => ({}));

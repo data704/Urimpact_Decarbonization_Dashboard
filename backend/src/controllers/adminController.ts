@@ -354,6 +354,86 @@ export async function updateUser(req: AuthRequest, res: Response): Promise<void>
 }
 
 /**
+ * Delete user (admin only)
+ * DELETE /api/admin/users/:id
+ *
+ * - Organization admins can delete users only within their organization.
+ * - Super admins can delete any non-super-admin user.
+ * - Users cannot delete themselves through this endpoint.
+ */
+export async function deleteUser(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    const { id } = req.params;
+
+    if (id === req.user.userId) {
+      sendError(res, 'You cannot delete your own account', 400);
+      return;
+    }
+
+    const requestingUser = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: { role: true, organizationId: true },
+    });
+
+    if (!requestingUser) {
+      sendError(res, 'Requesting user not found', 401);
+      return;
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, role: true, organizationId: true },
+    });
+
+    if (!targetUser) {
+      sendError(res, 'User not found', 404);
+      return;
+    }
+
+    if (targetUser.role === 'SUPER_ADMIN') {
+      sendError(res, 'Cannot delete super admin user', 403);
+      return;
+    }
+
+    if (
+      requestingUser.role !== 'SUPER_ADMIN' &&
+      requestingUser.organizationId &&
+      targetUser.organizationId !== requestingUser.organizationId
+    ) {
+      sendError(res, 'You can only delete users in your organization', 403);
+      return;
+    }
+
+    await prisma.user.delete({
+      where: { id },
+    });
+
+    await logUserAction(
+      req.user.userId,
+      'USER_DELETED_BY_ADMIN',
+      'user',
+      targetUser.id,
+      { deletedEmail: targetUser.email, deletedRole: targetUser.role },
+      req
+    );
+
+    sendSuccess(res, { id }, 'User deleted successfully');
+  } catch (error) {
+    logger.error('Delete user error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Failed to delete user', 500);
+    }
+  }
+}
+
+/**
  * Get audit logs (admin only)
  * GET /api/admin/audit-logs
  */

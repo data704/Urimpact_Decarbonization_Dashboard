@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getAdminUsers, createAdminUser, updateAdminUser } from '../../api/client';
+import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import './UserManagement.css';
 
@@ -40,6 +40,7 @@ function UserManagement() {
     const [error, setError] = useState(null);
     const [createOpen, setCreateOpen] = useState(false);
     const [organizationLimit, setOrganizationLimit] = useState(null);
+    const [deleteConfirmId, setDeleteConfirmId] = useState(null);
 
     const [createForm, setCreateForm] = useState({
         email: '',
@@ -124,6 +125,18 @@ function UserManagement() {
             await loadUsers();
         } catch (err) {
             showNotification(err?.message || 'Update failed', 'error');
+        }
+    };
+
+    const handleDeleteUser = async (u) => {
+        if (!u || !u.id) return;
+        try {
+            await deleteAdminUser(u.id);
+            showNotification('User deleted');
+            setDeleteConfirmId(null);
+            await loadUsers();
+        } catch (err) {
+            showNotification(err?.message || 'Failed to delete user', 'error');
         }
     };
 
@@ -309,16 +322,26 @@ function UserManagement() {
                                         <td>
                                             <div className="action-buttons">
                                                 {!isSelf && (
-                                                    <button
-                                                        type="button"
-                                                        className="action-btn"
-                                                        title={u.isActive ? 'Deactivate' : 'Activate'}
-                                                        onClick={() => handleToggleActive(u)}
-                                                    >
-                                                        <i
-                                                            className={`fas fa-${u.isActive ? 'user-slash' : 'user-check'}`}
-                                                        ></i>
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            className="action-btn"
+                                                            title={u.isActive ? 'Deactivate' : 'Activate'}
+                                                            onClick={() => handleToggleActive(u)}
+                                                        >
+                                                            <i
+                                                                className={`fas fa-${u.isActive ? 'user-slash' : 'user-check'}`}
+                                                            ></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="action-btn danger"
+                                                            title="Delete user"
+                                                            onClick={() => setDeleteConfirmId(u.id)}
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>
@@ -407,6 +430,36 @@ function UserManagement() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {deleteConfirmId && (
+                <div className="modal-overlay" onClick={() => setDeleteConfirmId(null)}>
+                    <div className="modal-content card" onClick={(e) => e.stopPropagation()}>
+                        <h3>Delete user</h3>
+                        <p className="modal-hint">
+                            This will permanently remove the user and their access. Emissions and documents they
+                            created will remain for reporting.
+                        </p>
+                        <div className="modal-actions">
+                            <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => setDeleteConfirmId(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-danger"
+                                onClick={() => {
+                                    const u = users.find((x) => x.id === deleteConfirmId);
+                                    handleDeleteUser(u);
+                                }}
+                            >
+                                Delete user
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

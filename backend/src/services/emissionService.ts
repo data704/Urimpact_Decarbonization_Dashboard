@@ -521,6 +521,31 @@ export async function deleteEmission(emissionId: string, userId: string, isAdmin
 }
 
 /**
+ * Bulk delete emission records.
+ * For each ID, enforces the same ownership / org-admin checks as deleteEmission.
+ */
+export async function deleteEmissionsBulk(
+  emissionIds: string[],
+  userId: string,
+  isAdmin = false
+): Promise<{ deletedCount: number }> {
+  let deletedCount = 0;
+
+  for (const id of emissionIds) {
+    try {
+      await deleteEmission(id, userId, isAdmin);
+      deletedCount += 1;
+    } catch (error) {
+      logger.warn(`Skipping emission ${id} during bulk delete: ${(error as Error)?.message ?? String(error)}`);
+      continue;
+    }
+  }
+
+  logger.info(`Bulk delete completed by user ${userId}. Deleted ${deletedCount} emissions out of ${emissionIds.length}.`);
+  return { deletedCount };
+}
+
+/**
  * Get emissions for export
  * When startDate/endDate are provided, filters and orders by activity date (billingPeriodStart ?? calculatedAt).
  */

@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import { useDataStore } from '../../context/DataStoreContext';
-import { getAuthToken, getDashboard, getEmissions, deleteEmission, getRecentActivity } from '../../api/client';
+import { getAuthToken, getDashboard, getEmissions, deleteEmission, deleteEmissionsBulk, getRecentActivity } from '../../api/client';
 import './Dashboard.css';
 
 const kgToTonnes = (kg) => (kg == null ? 0 : kg / 1000);
@@ -54,6 +54,7 @@ function Dashboard() {
     const [apiLoading, setApiLoading] = useState(true);
     const [apiError, setApiError] = useState(null);
     const [deletingId, setDeletingId] = useState(null);
+    const [selectedEmissionIds, setSelectedEmissionIds] = useState([]);
     const [deleteError, setDeleteError] = useState(null);
     const fromSubmit = location.state?.fromSubmit === true;
     const submitMessage = location.state?.submitMessage;
@@ -264,6 +265,27 @@ function Dashboard() {
             refreshDashboard();
         } catch (err) {
             setDeleteError(err?.message || 'Failed to delete');
+        } finally {
+            setDeletingId(null);
+        }
+    };
+
+    const toggleEmissionSelected = (emissionId) => {
+        setSelectedEmissionIds((prev) =>
+            prev.includes(emissionId) ? prev.filter((id) => id !== emissionId) : [...prev, emissionId]
+        );
+    };
+
+    const handleBulkDelete = async () => {
+        if (!hasToken || !selectedEmissionIds.length) return;
+        setDeleteError(null);
+        setDeletingId('bulk');
+        try {
+            await deleteEmissionsBulk(selectedEmissionIds);
+            setSelectedEmissionIds([]);
+            refreshDashboard();
+        } catch (err) {
+            setDeleteError(err?.message || 'Failed to delete selected records');
         } finally {
             setDeletingId(null);
         }
@@ -694,6 +716,26 @@ function Dashboard() {
                         <table>
                             <thead>
                                 <tr>
+                                    {hasToken && <th style={{ width: '2.5rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            aria-label="Select all Scope 1 rows"
+                                            checked={
+                                                scope1TableRows.length > 0 &&
+                                                scope1TableRows.every((entry) => entry.id && selectedEmissionIds.includes(entry.id))
+                                            }
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    const ids = scope1TableRows.map((entry) => entry.id).filter(Boolean);
+                                                    setSelectedEmissionIds((prev) => Array.from(new Set([...prev, ...ids])));
+                                                } else {
+                                                    setSelectedEmissionIds((prev) =>
+                                                        prev.filter((id) => !scope1TableRows.some((entry) => entry.id === id))
+                                                    );
+                                                }
+                                            }}
+                                        />
+                                    </th>}
                                     <th>Source</th>
                                     <th>Amount</th>
                                     <th>Emissions</th>
@@ -713,6 +755,18 @@ function Dashboard() {
                                     const dataSource = isApi && entry.dataSource ? entry.dataSource : '—';
                                     return (
                                         <tr key={entry.id || index}>
+                                            {hasToken && (
+                                                <td>
+                                                    {entry.id && (
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedEmissionIds.includes(entry.id)}
+                                                            onChange={() => toggleEmissionSelected(entry.id)}
+                                                            aria-label="Select this emission"
+                                                        />
+                                                    )}
+                                                </td>
+                                            )}
                                             <td>
                                                 <i className="fas fa-fire"></i>
                                                 {source}
@@ -750,7 +804,7 @@ function Dashboard() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan="2"><strong>Total Scope 1</strong></td>
+                                    <td colSpan={hasToken ? 2 : 1}><strong>Total Scope 1</strong></td>
                                     <td colSpan={hasToken ? 4 : 3}><strong>{formatNumber(scope1Total)} tCO₂e</strong></td>
                                 </tr>
                             </tfoot>
@@ -774,6 +828,26 @@ function Dashboard() {
                         <table>
                             <thead>
                                 <tr>
+                                    {hasToken && <th style={{ width: '2.5rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            aria-label="Select all Scope 2 rows"
+                                            checked={
+                                                scope2TableRows.length > 0 &&
+                                                scope2TableRows.every((entry) => entry.id && selectedEmissionIds.includes(entry.id))
+                                            }
+                                            onChange={(e) => {
+                                                if (e.target.checked) {
+                                                    const ids = scope2TableRows.map((entry) => entry.id).filter(Boolean);
+                                                    setSelectedEmissionIds((prev) => Array.from(new Set([...prev, ...ids])));
+                                                } else {
+                                                    setSelectedEmissionIds((prev) =>
+                                                        prev.filter((id) => !scope2TableRows.some((entry) => entry.id === id))
+                                                    );
+                                                }
+                                            }}
+                                        />
+                                    </th>}
                                     <th>Source</th>
                                     <th>Amount</th>
                                     <th>Emissions</th>
@@ -793,6 +867,18 @@ function Dashboard() {
                                     const dataSource = isApi && entry.dataSource ? entry.dataSource : '—';
                                     return (
                                         <tr key={entry.id || index}>
+                                            {hasToken && (
+                                                <td>
+                                                    {entry.id && (
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedEmissionIds.includes(entry.id)}
+                                                            onChange={() => toggleEmissionSelected(entry.id)}
+                                                            aria-label="Select this emission"
+                                                        />
+                                                    )}
+                                                </td>
+                                            )}
                                             <td>
                                                 <i className="fas fa-plug"></i>
                                                 {source}
@@ -830,7 +916,7 @@ function Dashboard() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan="2"><strong>Total Scope 2</strong></td>
+                                    <td colSpan={hasToken ? 2 : 1}><strong>Total Scope 2</strong></td>
                                     <td colSpan={hasToken ? 4 : 3}><strong>{formatNumber(scope2Total)} tCO₂e</strong></td>
                                 </tr>
                             </tfoot>
@@ -840,7 +926,7 @@ function Dashboard() {
             </div>
 
             {/* Recent Activities */}
-            <div className="card facility-card">
+                <div className="card facility-card">
                 <div className="card-header">
                     <h2>
                         <i className="fas fa-history"></i>
@@ -851,6 +937,26 @@ function Dashboard() {
                     <table className="facility-table">
                         <thead>
                             <tr>
+                                {hasToken && <th style={{ width: '2.5rem' }}>
+                                    <input
+                                        type="checkbox"
+                                        aria-label="Select all recent activity rows"
+                                        checked={
+                                            recentActivitiesRows.length > 0 &&
+                                            recentActivitiesRows.every((activity) => activity.id && selectedEmissionIds.includes(activity.id))
+                                        }
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                const ids = recentActivitiesRows.map((a) => a.id).filter(Boolean);
+                                                setSelectedEmissionIds((prev) => Array.from(new Set([...prev, ...ids])));
+                                            } else {
+                                                setSelectedEmissionIds((prev) =>
+                                                    prev.filter((id) => !recentActivitiesRows.some((a) => a.id === id))
+                                                );
+                                            }
+                                        }}
+                                    />
+                                </th>}
                                 <th>Source</th>
                                 <th>Date</th>
                                 <th>Type</th>
@@ -863,6 +969,18 @@ function Dashboard() {
                         <tbody>
                             {recentActivitiesRows.map((activity, index) => (
                                 <tr key={activity.id || index}>
+                                    {hasToken && (
+                                        <td>
+                                            {activity.id && (
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedEmissionIds.includes(activity.id)}
+                                                    onChange={() => toggleEmissionSelected(activity.id)}
+                                                    aria-label="Select this emission"
+                                                />
+                                            )}
+                                        </td>
+                                    )}
                                     <td>{activity.source}</td>
                                     <td>{activity.date ? formatDate(activity.date) : '—'}</td>
                                     <td>
@@ -897,6 +1015,33 @@ function Dashboard() {
                     </table>
                 </div>
             </div>
+
+            {hasToken && (
+                <div className="dashboard-bulk-actions">
+                    <button
+                        type="button"
+                        className="btn btn-danger"
+                        disabled={!selectedEmissionIds.length || deletingId === 'bulk'}
+                        onClick={handleBulkDelete}
+                        title={selectedEmissionIds.length ? `Delete ${selectedEmissionIds.length} selected record(s)` : 'Select records to enable'}
+                    >
+                        {deletingId === 'bulk' ? (
+                            <>
+                                <i className="fas fa-spinner fa-spin"></i> Deleting…
+                            </>
+                        ) : (
+                            <>
+                                <i className="fas fa-trash-alt"></i> Delete selected
+                            </>
+                        )}
+                    </button>
+                    {selectedEmissionIds.length > 0 && (
+                        <span className="dashboard-bulk-count">
+                            {selectedEmissionIds.length} selected
+                        </span>
+                    )}
+                </div>
+            )}
 
             {/* Footer */}
             <div className="dashboard-footer">

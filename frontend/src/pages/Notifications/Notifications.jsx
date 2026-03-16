@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getRecentActivity, getAuthToken } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import './Notifications.css';
 
 function formatAction(action = '') {
@@ -18,13 +19,15 @@ function formatAction(action = '') {
 }
 
 function Notifications() {
+    const { user } = useAuth();
+    const isAdminUser = user?.role === 'ADMINISTRATOR' || user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
     const hasToken = Boolean(getAuthToken());
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        if (!hasToken) {
+        if (!hasToken || !isAdminUser) {
             setLogs([]);
             setLoading(false);
             return;
@@ -50,7 +53,7 @@ function Notifications() {
         return () => {
             cancelled = true;
         };
-    }, [hasToken]);
+    }, [hasToken, isAdminUser]);
 
     return (
         <div className="notifications-page">
@@ -61,6 +64,15 @@ function Notifications() {
                 </div>
             </div>
 
+            {!isAdminUser && (
+                <div className="card dashboard-activity-feed" aria-label="Recent activity list">
+                    <div style={{ padding: '1.5rem', fontSize: '0.9rem', color: '#64748B' }}>
+                        Notifications are only available to administrators.
+                    </div>
+                </div>
+            )}
+
+            {isAdminUser && (
             <div className="card dashboard-activity-feed" aria-label="Recent activity list">
                 {loading && <div style={{ padding: '1.5rem' }}>Loading activity…</div>}
                 {error && !loading && (
@@ -106,6 +118,7 @@ function Notifications() {
                     </>
                 )}
             </div>
+            )}
         </div>
     );
 }

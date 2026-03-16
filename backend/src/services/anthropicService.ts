@@ -540,7 +540,7 @@ function buildSectionPrompt(slot_id: string, bindings: SectionBindings): string 
   const prompts: Record<string, string> = {
     'exec.narrative': `Write 2–3 sentences summarising: (1) the baseline emissions and the absolute target-year reduction outcome, (2) the required annual reduction pace, (3) that the removal obligation addresses the structural residual only and does not substitute reductions. Data: ${b}`,
 
-    'baseline.caption': `Write 2–3 sentences explaining: (1) the top 1–2 contributors by share of total baseline emissions, (2) the Scope 1 vs Scope 2 split, (3) what that distribution implies for priority decarbonisation levers. Do not suggest new initiatives. Data: ${b}`,
+    'baseline.caption': `Write 2–3 sentences explaining: (1) the top 1–2 contributors by share of total baseline emissions, (2) the relative contribution of the main emission sources, (3) what that distribution implies for priority decarbonisation levers. Do not suggest new initiatives. Data: ${b}`,
 
     'sources.caption': `Write exactly 2 sentences: (1) describe the overall distribution across emission sources, (2) highlight the top 1–2 sources as the primary reduction levers. Data: ${b}`,
 
@@ -566,7 +566,7 @@ Phase 3 – Residual Management: Explain how the company approaches the final st
 
 The roadmap must explicitly reference: the dominant emissions sources, the annual reduction pace required, and the transition from reduction to residual management. Do not mention costs, speculative technologies, or generic sustainability language. Output plain paragraphs only; no markdown or bullet lists. Data: ${b}`,
 
-    'assumptions.bullets': `Write 5–8 concise bullet points (each starting with a dash "-") covering: the Scope 1 & 2 only boundary, the linear pathway as a planning simplification, that the tier mapping is policy-defined (not empirically measured), that the structural residual ceiling is policy-defined and hardcoded to the tier${(bindings as {bau_enabled?: boolean}).bau_enabled ? ', that the BAU scenario is a comparator only and does not affect pathway maths' : ''}${(bindings as {trees_enabled?: boolean}).trees_enabled ? ', that tree equivalency is illustrative and uses the default sequestration rate' : ''}, that no financial modelling or third-party verification is included. Max 120 words total. Data: ${b}`,
+    'assumptions.bullets': `Write 5–8 concise bullet points (each starting with a dash "-") covering: the emissions boundary used for this model, the linear pathway as a planning simplification, that the tier mapping is policy-defined (not empirically measured), that the structural residual ceiling is policy-defined and hardcoded to the tier${(bindings as {bau_enabled?: boolean}).bau_enabled ? ', that the BAU scenario is a comparator only and does not affect pathway maths' : ''}${(bindings as {trees_enabled?: boolean}).trees_enabled ? ', that tree equivalency is illustrative and uses the default sequestration rate' : ''}, that no financial modelling or third-party verification is included. Max 120 words total. Data: ${b}`,
   };
   return prompts[slot_id] ?? `Write 1–2 sentences summarising this section concisely. Data: ${b}`;
 }
