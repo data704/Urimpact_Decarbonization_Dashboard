@@ -12,11 +12,6 @@ function Settings() {
             fiscalYear: 'January',
             currency: 'USD'
         },
-        emissionFactors: {
-            database: 'IPCC 2021',
-            gwpValues: 'AR5',
-            defaultGridRegion: 'US - WECC'
-        },
         notifications: {
             emailAlerts: true,
             weeklyDigest: true,
@@ -69,7 +64,7 @@ function Settings() {
             {/* Page Header */}
             <div className="page-header">
                 <h1>Settings</h1>
-                <p>Configure your organization and emission calculation preferences</p>
+                <p>Configure your organization and notification preferences</p>
             </div>
 
             {/* Organization Settings */}
@@ -129,58 +124,6 @@ function Settings() {
                             <option value="EUR">EUR (€)</option>
                             <option value="GBP">GBP (£)</option>
                             <option value="CAD">CAD ($)</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            {/* Emission Factor Settings */}
-            <div className="card settings-section">
-                <div className="section-header">
-                    <div className="section-icon">
-                        <i className="fas fa-calculator"></i>
-                    </div>
-                    <div>
-                        <h2>Emission Factors</h2>
-                        <p>Configure calculation methodologies</p>
-                    </div>
-                </div>
-
-                <div className="settings-grid">
-                    <div className="form-group">
-                        <label>Emission Factor Database</label>
-                        <select
-                            value={settings.emissionFactors.database}
-                            onChange={(e) => updateSetting('emissionFactors', 'database', e.target.value)}
-                        >
-                            <option value="IPCC 2021">IPCC 2021</option>
-                            <option value="EPA 2023">EPA 2023</option>
-                            <option value="DEFRA 2023">DEFRA 2023</option>
-                            <option value="GHG Protocol">GHG Protocol</option>
-                        </select>
-                    </div>
-                    <div className="form-group">
-                        <label>GWP Values</label>
-                        <select
-                            value={settings.emissionFactors.gwpValues}
-                            onChange={(e) => updateSetting('emissionFactors', 'gwpValues', e.target.value)}
-                        >
-                            <option value="AR5">AR5 (2014)</option>
-                            <option value="AR6">AR6 (2021)</option>
-                            <option value="AR4">AR4 (2007)</option>
-                        </select>
-                    </div>
-                    <div className="form-group">
-                        <label>Default Grid Region</label>
-                        <select
-                            value={settings.emissionFactors.defaultGridRegion}
-                            onChange={(e) => updateSetting('emissionFactors', 'defaultGridRegion', e.target.value)}
-                        >
-                            <option value="US - WECC">US - WECC</option>
-                            <option value="US - RFC">US - RFC</option>
-                            <option value="US - SERC">US - SERC</option>
-                            <option value="EU - Average">EU - Average</option>
-                            <option value="UK - Grid">UK - Grid</option>
                         </select>
                     </div>
                 </div>

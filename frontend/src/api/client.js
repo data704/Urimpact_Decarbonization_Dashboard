@@ -5,6 +5,8 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const AUTH_TOKEN_KEY = 'urimpact_access_token';
+const AUTH_USER_KEY = 'urimpact_user';
+const SESSION_EXPIRED_EVENT = 'urimpact:session-expired';
 
 export function getApiUrl() {
   return API_BASE;
@@ -26,6 +28,36 @@ function authHeaders() {
   return headers;
 }
 
+function handleAuthFailure() {
+  setAuthToken(null);
+  localStorage.removeItem(AUTH_USER_KEY);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+  }
+}
+
+function isAuthErrorMessage(message = '') {
+  const value = String(message || '').toLowerCase();
+  return (
+    value.includes('token has expired') ||
+    value.includes('access token is required') ||
+    value.includes('invalid token') ||
+    value.includes('authentication failed')
+  );
+}
+
+async function buildApiError(response, fallbackLabel) {
+  const err = await response.json().catch(() => ({ error: response.statusText }));
+  const message = err.error || err.message || `${fallbackLabel}: ${response.status}`;
+
+  if (response.status === 401 || isAuthErrorMessage(message)) {
+    handleAuthFailure();
+    return 'Session expired. Please log in again.';
+  }
+
+  return message;
+}
+
 /**
  * Upload a receipt and run AI extraction. Returns { documentId, extractedFields } for verification.
  */
@@ -40,8 +72,7 @@ export async function uploadReceiptAndExtract(file) {
   });
 
   if (!uploadRes.ok) {
-    const err = await uploadRes.json().catch(() => ({ error: uploadRes.statusText }));
-    throw new Error(err.error || err.message || `Upload failed: ${uploadRes.status}`);
+    throw new Error(await buildApiError(uploadRes, 'Upload failed'));
   }
 
   const uploadData = await uploadRes.json();
@@ -67,8 +98,7 @@ export async function uploadReceiptsMultiple(files) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Upload failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Upload failed'));
   }
 
   const json = await res.json();
@@ -85,8 +115,7 @@ export async function processDocument(documentId, fileName = '') {
   });
 
   if (!processRes.ok) {
-    const err = await processRes.json().catch(() => ({ error: processRes.statusText }));
-    throw new Error(err.error || err.message || `Extraction failed: ${processRes.status}`);
+    throw new Error(await buildApiError(processRes, 'Extraction failed'));
   }
 
   const processData = await processRes.json();
@@ -106,8 +135,7 @@ export async function submitReceiptExtraction(documentId, payload) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Submit failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Submit failed'));
   }
 
   const data = await res.json();
@@ -126,8 +154,7 @@ export async function submitReceiptBatch(documentId, entries) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Batch submit failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Batch submit failed'));
   }
 
   const data = await res.json();
@@ -205,8 +232,7 @@ export async function getDashboard(params = {}) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Dashboard failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Dashboard failed'));
   }
 
   const json = await res.json();
@@ -226,8 +252,7 @@ export async function submitManualEmission(payload) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Emission calculation failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Emission calculation failed'));
   }
 
   const data = await res.json();
@@ -252,8 +277,7 @@ export async function getEmissions(params = {}) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Emissions failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Emissions failed'));
   }
 
   const json = await res.json();
@@ -274,8 +298,7 @@ export async function getReportNarratives(sections) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Narrative generation failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Narrative generation failed'));
   }
 
   const json = await res.json();
@@ -301,8 +324,7 @@ export async function getAdminUsers(params = {}) {
     headers: authHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Failed to load users: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Failed to load users'));
   }
   const json = await res.json();
   return {
@@ -322,8 +344,7 @@ export async function createAdminUser(payload) {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Create user failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Create user failed'));
   }
   const json = await res.json();
   return json?.data ?? json;
@@ -339,8 +360,7 @@ export async function updateAdminUser(userId, payload) {
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Update user failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Update user failed'));
   }
   const json = await res.json();
   return json?.data ?? json;
@@ -355,8 +375,7 @@ export async function deleteAdminUser(userId) {
     headers: authHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Delete user failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Delete user failed'));
   }
   const json = await res.json().catch(() => ({}));
   return json?.data ?? json;
@@ -371,8 +390,7 @@ export async function getRecentActivity(limit = 25) {
     headers: authHeaders(),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Activity failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Activity failed'));
   }
   const json = await res.json();
   return json?.data?.activities ?? json?.activities ?? [];
@@ -385,8 +403,7 @@ export async function deleteEmission(emissionId) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Delete failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Delete failed'));
   }
 
   const data = await res.json().catch(() => ({}));
@@ -401,8 +418,7 @@ export async function deleteEmissionsBulk(ids) {
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || err.message || `Bulk delete failed: ${res.status}`);
+    throw new Error(await buildApiError(res, 'Bulk delete failed'));
   }
 
   const data = await res.json().catch(() => ({}));

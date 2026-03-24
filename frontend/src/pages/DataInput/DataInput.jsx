@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { useDataStore } from '../../context/DataStoreContext';
 import { uploadReceiptAndExtract, uploadReceiptsMultiple, processDocument, submitReceiptExtraction, submitReceiptBatch, submitManualEmission, getAuthToken } from '../../api/client.js';
 import './DataInput.css';
@@ -11,14 +12,171 @@ const MAX_FILE_SIZE_MB = 10;
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+const SITES_KEY_PREFIX = 'urimpact_data_input_sites_';
+const ACTIVITY_KEY_PREFIX = 'urimpact_site_activity_';
+
+const COUNTRY_OPTIONS = [
+    'United Arab Emirates',
+    'Saudi Arabia',
+    'Qatar',
+    'Kuwait',
+    'Bahrain',
+    'Oman',
+];
+const FACILITY_TYPES = ['Office', 'Warehouse', 'Manufacturing Plant', 'Distribution Centre', 'Data Centre', 'Retail Outlet'];
+const BOUNDARY_OPTIONS = ['Operational Control', 'Financial Control', 'Equity Share'];
+const CURRENCY_OPTIONS = ['AED — UAE Dirham', 'SAR — Saudi Riyal', 'USD — US Dollar', 'EUR — Euro', 'GBP — British Pound'];
+
+function sitesStorageKey(orgKey) {
+    return `${SITES_KEY_PREFIX}${orgKey}`;
+}
+
+function defaultSites() {
+    const t = Date.now();
+    return [
+        {
+            id: `site-${t}-a`,
+            name: 'Dubai Warehouse',
+            code: 'DXB-WH-01',
+            country: 'United Arab Emirates',
+            city: 'Dubai',
+            facilityType: 'Warehouse',
+            boundary: 'Operational Control',
+            currency: 'AED — UAE Dirham',
+            utilityProvider: 'DEWA',
+        },
+        {
+            id: `site-${t}-b`,
+            name: 'Riyadh Office',
+            code: 'RUH-OFC-01',
+            country: 'Saudi Arabia',
+            city: 'Riyadh',
+            facilityType: 'Office',
+            boundary: 'Operational Control',
+            currency: 'SAR — Saudi Riyal',
+            utilityProvider: '',
+        },
+    ];
+}
+
+function loadSites(orgKey) {
+    try {
+        const raw = localStorage.getItem(sitesStorageKey(orgKey));
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+    } catch (_) { /* ignore */ }
+    const seed = defaultSites();
+    try {
+        localStorage.setItem(sitesStorageKey(orgKey), JSON.stringify(seed));
+    } catch (_) { /* ignore */ }
+    return seed;
+}
+
+function saveSitesList(orgKey, list) {
+    localStorage.setItem(sitesStorageKey(orgKey), JSON.stringify(list));
+}
+
+function countryChip(country) {
+    const m = {
+        'United Arab Emirates': 'UAE',
+        'Saudi Arabia': 'KSA',
+        Qatar: 'Qatar',
+        Kuwait: 'Kuwait',
+        Bahrain: 'Bahrain',
+        Oman: 'Oman',
+    };
+    return m[country] || (country && String(country).slice(0, 4)) || '—';
+}
+
+function formatLastUpload(iso) {
+    if (!iso) return '—';
+    const t = new Date(iso).getTime();
+    if (Number.isNaN(t)) return '—';
+    const diff = Date.now() - t;
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
+    if (diff < 604800000) return `${Math.floor(diff / 86400000)} days ago`;
+    return new Date(iso).toLocaleDateString();
+}
+
+function bumpSiteActivity(orgKey, siteId, periodKey, { docCount = 0, manualRows = 0 }) {
+    if (!siteId || !periodKey) return;
+    const key = `${ACTIVITY_KEY_PREFIX}${orgKey}`;
+    let data = {};
+    try {
+        data = JSON.parse(localStorage.getItem(key) || '{}');
+    } catch (_) {
+        data = {};
+    }
+    if (!data[siteId]) data[siteId] = { periods: {}, lastUploadAt: null };
+    if (!data[siteId].periods[periodKey]) data[siteId].periods[periodKey] = { docs: 0, manualRows: 0 };
+    data[siteId].periods[periodKey].docs += docCount;
+    data[siteId].periods[periodKey].manualRows += manualRows;
+    if (docCount > 0 || manualRows > 0) data[siteId].lastUploadAt = new Date().toISOString();
+    localStorage.setItem(key, JSON.stringify(data));
+}
+
+function readSiteActivity(orgKey) {
+    try {
+        return JSON.parse(localStorage.getItem(`${ACTIVITY_KEY_PREFIX}${orgKey}`) || '{}');
+    } catch (_) {
+        return {};
+    }
+}
+
 const FUEL_ACTIVITY_TYPES = ['diesel', 'petrol', 'gasoline', 'natural_gas', 'natural-gas', 'lpg', 'biodiesel'];
 const isFuelActivity = (activityType) =>
     FUEL_ACTIVITY_TYPES.some(f => String(activityType || '').toLowerCase().trim().includes(f));
 
 function DataInput() {
     const navigate = useNavigate();
+    const { user } = useAuth();
+    const orgKey = user?.organizationId != null ? String(user.organizationId) : user?.id != null ? String(user.id) : 'guest';
     const { addScope1Entry, addScope2Entry } = useDataStore();
     const [inputMethod, setInputMethod] = useState('upload');
+    const [sites, setSites] = useState(() => loadSites(orgKey));
+    const [selectedSiteId, setSelectedSiteId] = useState(() => {
+        const list = loadSites(orgKey);
+        return list[0]?.id ?? 'all';
+    });
+    const [reportingYear, setReportingYear] = useState(() => new Date().getFullYear());
+    const [addSiteOpen, setAddSiteOpen] = useState(false);
+    const [newSite, setNewSite] = useState({
+        name: '',
+        code: '',
+        country: 'United Arab Emirates',
+        city: '',
+        facilityType: '',
+        boundary: 'Operational Control',
+        currency: 'AED — UAE Dirham',
+        utilityProvider: '',
+    });
+    const [activityTick, setActivityTick] = useState(0);
+
+    useEffect(() => {
+        const list = loadSites(orgKey);
+        setSites(list);
+        if (selectedSiteId !== 'all' && !list.some((s) => s.id === selectedSiteId)) {
+            setSelectedSiteId(list[0]?.id ?? 'all');
+        }
+    }, [orgKey]);
+
+    const persistSites = useCallback(
+        (next) => {
+            saveSitesList(orgKey, next);
+            setSites(next);
+        },
+        [orgKey]
+    );
+
+    const currentSite = useMemo(
+        () => (selectedSiteId === 'all' ? null : sites.find((s) => s.id === selectedSiteId) ?? null),
+        [sites, selectedSiteId]
+    );
+
     const [notification, setNotification] = useState(null);
     
     // Scope 1 entries state
@@ -128,7 +286,12 @@ function DataInput() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
+        if (selectedSiteId === 'all' || !currentSite) {
+            showNotification('Select a site to attribute manual entries.', 'error');
+            return;
+        }
+
         const scope1Valid = scope1Entries.filter(entry => entry.date && entry.amount);
         const scope2Valid = scope2Entries.filter(entry => entry.date && entry.electricity);
         if (scope1Valid.length === 0 && scope2Valid.length === 0) {
@@ -172,8 +335,14 @@ function DataInput() {
             const totalCo2e = results.reduce((sum, r) => sum + (r?.co2e ?? 0), 0);
             const count = results.length;
 
-            scope1Valid.forEach(entry => addScope1Entry({ ...entry, amount: parseFloat(entry.amount) }));
-            scope2Valid.forEach(entry => addScope2Entry({ ...entry, electricity: parseFloat(entry.electricity) }));
+            const ymd = scope1Valid[0]?.date || scope2Valid[0]?.date;
+            const actKey =
+                ymd && ymd.length >= 7 ? `${ymd.slice(0, 4)}-${ymd.slice(5, 7)}` : periodKey;
+            bumpSiteActivity(orgKey, selectedSiteId, actKey, { manualRows: count });
+            setActivityTick((t) => t + 1);
+
+            scope1Valid.forEach(entry => addScope1Entry({ ...entry, amount: parseFloat(entry.amount), siteId: selectedSiteId, siteName: currentSite.name }));
+            scope2Valid.forEach(entry => addScope2Entry({ ...entry, electricity: parseFloat(entry.electricity), siteId: selectedSiteId, siteName: currentSite.name }));
 
         setScope1Entries([{
             id: 1,
@@ -211,6 +380,23 @@ function DataInput() {
     const now = new Date();
     const [expectedDocMonth, setExpectedDocMonth] = useState(now.getMonth() + 1); // 1-12
     const [expectedDocYear, setExpectedDocYear] = useState(now.getFullYear());
+
+    const periodKey = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
+    const siteActivity = useMemo(() => {
+        void activityTick;
+        return readSiteActivity(orgKey);
+    }, [orgKey, activityTick]);
+
+    const summaryStats = useMemo(() => {
+        if (!currentSite) return { docs: 0, manualRows: 0, lastUpload: null };
+        const act = siteActivity[currentSite.id];
+        const p = act?.periods?.[periodKey];
+        return {
+            docs: p?.docs ?? 0,
+            manualRows: p?.manualRows ?? 0,
+            lastUpload: act?.lastUploadAt ?? null,
+        };
+    }, [currentSite, siteActivity, periodKey]);
     const [submittingId, setSubmittingId] = useState(null);
     const [submittingBatchId, setSubmittingBatchId] = useState(null);
     const [submittingAll, setSubmittingAll] = useState(false);
@@ -230,7 +416,7 @@ function DataInput() {
     const getExpectedDateString = () =>
         `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}-01`;
 
-    const buildPendingItem = (documentId, fileName, fields, expectedDate) => {
+    const buildPendingItem = (documentId, fileName, fields, expectedDate, siteMeta) => {
         const extracted = dateFromExtraction(fields);
         const expectedYear = expectedDate ? parseInt(expectedDate.slice(0, 4), 10) : null;
         const expectedMonth = expectedDate ? parseInt(expectedDate.slice(5, 7), 10) : null;
@@ -250,12 +436,21 @@ function DataInput() {
             billingPeriodStart: fields?.billingPeriodStart ?? '',
             billingPeriodEnd: fields?.billingPeriodEnd ?? '',
             dateMismatch,
+            siteId: siteMeta?.siteId,
+            siteName: siteMeta?.siteName,
         };
     };
 
     const handleFileUpload = async (e) => {
         const fileList = e.target.files;
         if (!fileList?.length) return;
+
+        if (selectedSiteId === 'all' || !currentSite) {
+            showNotification('Select a specific site before uploading documents.', 'error');
+            e.target.value = '';
+            return;
+        }
+        const siteMeta = { siteId: selectedSiteId, siteName: currentSite.name };
 
         const token = getAuthToken();
         if (!token) {
@@ -290,7 +485,7 @@ function DataInput() {
                 const docId = result?.documentId;
                 const expectedDate = getExpectedDateString();
                 if (result?.multiple && Array.isArray(result?.extractedFields)) {
-                    const newItems = result.extractedFields.map((fields) => buildPendingItem(docId, fileName, fields, expectedDate));
+                    const newItems = result.extractedFields.map((fields) => buildPendingItem(docId, fileName, fields, expectedDate, siteMeta));
                     setPendingVerifications(prev => [...prev, ...newItems]);
                     if (newItems.some((i) => i.dateMismatch)) {
                         showNotification(`The date on the receipt doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the date in the table below before submitting.`, 'warning');
@@ -299,7 +494,7 @@ function DataInput() {
                     }
                 } else {
                     const fields = result?.extractedFields || {};
-                    const item = buildPendingItem(docId, fileName, fields, expectedDate);
+                    const item = buildPendingItem(docId, fileName, fields, expectedDate, siteMeta);
                     setPendingVerifications(prev => [...prev, item]);
                     if (item.dateMismatch) {
                         showNotification(`The date on the receipt doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the date in the table below before submitting.`, 'warning');
@@ -319,13 +514,13 @@ function DataInput() {
                     const fileName = result?.fileName || documents[i].fileName;
                     const docId = result?.documentId;
                     if (result?.multiple && Array.isArray(result?.extractedFields)) {
-                        const newItems = result.extractedFields.map((fields) => buildPendingItem(docId, fileName, fields, expectedDate));
+                        const newItems = result.extractedFields.map((fields) => buildPendingItem(docId, fileName, fields, expectedDate, siteMeta));
                         if (newItems.some((it) => it.dateMismatch)) hasDateMismatch = true;
                         setPendingVerifications(prev => [...prev, ...newItems]);
                         totalEntries += newItems.length;
                     } else {
                         const fields = result?.extractedFields || {};
-                        const item = buildPendingItem(docId, fileName, fields, expectedDate);
+                        const item = buildPendingItem(docId, fileName, fields, expectedDate, siteMeta);
                         if (item.dateMismatch) hasDateMismatch = true;
                         setPendingVerifications(prev => [...prev, item]);
                         totalEntries += 1;
@@ -383,6 +578,11 @@ function DataInput() {
                 documentDate: dateToSend || undefined,
             });
             showNotification(`Saved: ${result?.emission?.co2e?.toFixed(2) ?? '—'} kg CO2e. Taking you to Dashboard…`, 'success');
+            const pk = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
+            if (item.siteId) {
+                bumpSiteActivity(orgKey, item.siteId, pk, { docCount: 1 });
+                setActivityTick((x) => x + 1);
+            }
             setPendingVerifications(prev => prev.filter((_, i) => i !== index));
             navigate('/', { state: { fromSubmit: true, submitMessage: `${result?.emission?.co2e?.toFixed(2) ?? '—'} kg CO₂e saved`, count: 1 } });
         } catch (err) {
@@ -422,6 +622,12 @@ function DataInput() {
                 ? `${count} emission(s) saved, ${skipped} row(s) skipped (invalid data). Taking you to Dashboard…`
                 : `${count} emission(s) saved. Taking you to Dashboard…`;
             showNotification(msg, 'success');
+            const pk = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
+            const sid = indices[0]?.item?.siteId;
+            if (sid) {
+                bumpSiteActivity(orgKey, sid, pk, { docCount: count });
+                setActivityTick((x) => x + 1);
+            }
             const removeIndices = new Set(indices.map(({ i }) => i));
             setPendingVerifications(prev => prev.filter((_, i) => !removeIndices.has(i)));
             navigate('/', { state: { fromSubmit: true, submitMessage: `${count} emission(s) saved`, count } });
@@ -441,18 +647,23 @@ function DataInput() {
      * Groups by documentId and calls submit (single) or submit-batch (multi) per document in parallel.
      */
     const handleSubmitAll = async () => {
-        if (pendingVerifications.length === 0) return;
+        const scoped = pendingVerifications
+            .map((item, i) => ({ item, i }))
+            .filter(({ item }) => item.siteId === selectedSiteId);
+        if (scoped.length === 0) return;
 
         const docIdsSeen = new Set();
         const groups = [];
-        pendingVerifications.forEach((item) => {
+        scoped.forEach(({ item, i }) => {
             if (docIdsSeen.has(item.documentId)) return;
             docIdsSeen.add(item.documentId);
-            const indices = pendingVerifications.map((p, i) => i).filter(i => pendingVerifications[i].documentId === item.documentId);
+            const indices = scoped.filter((x) => x.item.documentId === item.documentId).map((x) => x.i);
             groups.push({ documentId: item.documentId, indices });
         });
 
-        const invalid = pendingVerifications.find(p => !p.activityType || Number.isNaN(Number(p.activityAmount)) || !p.activityUnit);
+        const invalid = scoped.find(
+            ({ item: p }) => !p.activityType || Number.isNaN(Number(p.activityAmount)) || !p.activityUnit
+        );
         if (invalid) {
             showNotification('Please fill in Activity type, Amount, and Unit for all entries before submitting all.', 'error');
             return;
@@ -498,8 +709,19 @@ function DataInput() {
 
             const results = await Promise.all(promises);
             const totalCount = results.reduce((sum, r) => sum + r.count, 0);
+            const pk = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
+            groups.forEach((group, gi) => {
+                const item = pendingVerifications[group.indices[0]];
+                const sid = item?.siteId;
+                const c = results[gi]?.count ?? 0;
+                if (sid && c > 0) {
+                    bumpSiteActivity(orgKey, sid, pk, { docCount: c });
+                }
+            });
+            setActivityTick((x) => x + 1);
             showNotification(`${totalCount} emission(s) saved. Taking you to Dashboard…`, 'success');
-            setPendingVerifications([]);
+            const removeSet = new Set(groups.flatMap((g) => g.indices));
+            setPendingVerifications((prev) => prev.filter((_, idx) => !removeSet.has(idx)));
             navigate('/', { state: { fromSubmit: true, submitMessage: `${totalCount} emission(s) saved`, count: totalCount } });
         } catch (err) {
             showNotification(err?.message || 'Submit all failed', 'error');
@@ -507,6 +729,39 @@ function DataInput() {
             setSubmittingAll(false);
         }
     };
+
+    const handleSaveNewSite = () => {
+        if (!newSite.name.trim() || !newSite.code.trim() || !newSite.city.trim() || !newSite.facilityType) {
+            showNotification('Please fill Site name, code, city, and facility type.', 'error');
+            return;
+        }
+        const id = `site-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const row = { id, ...newSite, name: newSite.name.trim(), code: newSite.code.trim(), city: newSite.city.trim() };
+        persistSites([...sites, row]);
+        setSelectedSiteId(id);
+        setAddSiteOpen(false);
+        setNewSite({
+            name: '',
+            code: '',
+            country: 'United Arab Emirates',
+            city: '',
+            facilityType: '',
+            boundary: 'Operational Control',
+            currency: 'AED — UAE Dirham',
+            utilityProvider: '',
+        });
+        showNotification(`Site "${row.name}" added for your organization.`, 'success');
+    };
+
+    useEffect(() => {
+        const onKey = (e) => {
+            if (e.key === 'Escape') setAddSiteOpen(false);
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, []);
+
+    const siteNameDisplay = currentSite?.name ?? 'Site';
 
     return (
         <div className="data-input-content">
@@ -518,40 +773,96 @@ function DataInput() {
                 </div>
             )}
 
-            {/* Page Header */}
-            <div className="page-header">
+            <div className="page-header di-page-header">
                 <h1>Data Input</h1>
-                <p>Enter your emission data manually or upload documents</p>
+                <p>Upload and manage emissions data by site</p>
             </div>
 
-            {/* Emission Data & Receipt Upload */}
+            <div className="di-site-context-card">
+                <div className="di-site-context-top">
+                    <div className="di-site-selector-group">
+                        <span className="di-field-label">Selected Site</span>
+                        <div className="di-site-select-wrap">
+                            <i className="fas fa-map-marker-alt di-site-select-icon" aria-hidden />
+                            <select
+                                className="di-site-dropdown"
+                                value={selectedSiteId}
+                                onChange={(e) => setSelectedSiteId(e.target.value)}
+                            >
+                                <option value="all">All Sites</option>
+                                {sites.map((s) => (
+                                    <option key={s.id} value={s.id}>{s.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    {currentSite && (
+                        <div className="di-site-meta-chips">
+                            <span className="di-chip"><i className="fas fa-globe" /> {countryChip(currentSite.country)}</span>
+                            <span className="di-chip"><i className="fas fa-industry" /> {currentSite.facilityType}</span>
+                            <span className="di-chip"><i className="fas fa-border-all" /> {currentSite.boundary || '—'}</span>
+                        </div>
+                    )}
+                    <div className="di-year-selector-group">
+                        <span className="di-field-label">Reporting Year</span>
+                        <select className="di-year-dropdown" value={reportingYear} onChange={(e) => setReportingYear(Number(e.target.value))}>
+                            {Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button type="button" className="di-add-site-btn" onClick={() => setAddSiteOpen(true)}>
+                        <i className="fas fa-plus" /> Add Site
+                    </button>
+                </div>
+                <div className="di-site-pills-bar">
+                    <button type="button" className={`di-site-pill${selectedSiteId === 'all' ? ' active' : ''}`} onClick={() => setSelectedSiteId('all')}>All Sites</button>
+                    {sites.map((s) => (
+                        <button key={s.id} type="button" className={`di-site-pill${selectedSiteId === s.id ? ' active' : ''}`} onClick={() => setSelectedSiteId(s.id)}>
+                            <span className="di-pill-dot" /> {s.name}
+                        </button>
+                    ))}
+                    <button type="button" className="di-pill-add-btn" onClick={() => setAddSiteOpen(true)}>
+                        <i className="fas fa-plus" /> Add Site
+                    </button>
+                </div>
+            </div>
+
+            <div className={`di-all-sites-banner${selectedSiteId === 'all' ? ' di-visible' : ''}`}>
+                <i className="fas fa-exclamation-triangle" />
+                <div className="di-all-sites-banner-text">
+                    <strong>No site selected</strong>
+                    <span>Choose a site from the dropdown or tabs to upload documents or enter data manually. Use Add Site to register each facility.</span>
+                </div>
+            </div>
+
+            {selectedSiteId !== 'all' && currentSite && (
             <>
-            {/* Input Method Selection - Upload first, Manual second */}
-            <div className="method-selection">
-                <div 
-                    className={`method-card ${inputMethod === 'upload' ? 'active' : ''}`}
-                    onClick={() => setInputMethod('upload')}
-                >
-                    <div className="method-icon">
-                        <i className="fas fa-file-upload"></i>
+            <div className="di-method-row">
+                <button type="button" className={`di-method-card${inputMethod === 'upload' ? ' active' : ''}`} onClick={() => setInputMethod('upload')}>
+                    <div className="di-method-icon"><i className="fas fa-cloud-upload-alt" /></div>
+                    <div className="di-method-text">
+                        <h3>Upload Receipts</h3>
+                        <p>Upload invoices or bills for automatic AI extraction</p>
+                        <span className="di-site-context-label">Upload documents for {siteNameDisplay}</span>
                     </div>
-                    <h3>Upload Receipts</h3>
-                    <p>Upload invoices or bills for automatic extraction</p>
-                </div>
-                <div 
-                    className={`method-card ${inputMethod === 'manual' ? 'active' : ''}`}
-                    onClick={() => setInputMethod('manual')}
-                >
-                    <div className="method-icon">
-                        <i className="fas fa-keyboard"></i>
+                </button>
+                <button type="button" className={`di-method-card${inputMethod === 'manual' ? ' active' : ''}`} onClick={() => setInputMethod('manual')}>
+                    <div className="di-method-icon"><i className="fas fa-table" /></div>
+                    <div className="di-method-text">
+                        <h3>Manual Entry</h3>
+                        <p>Enter emission data directly into forms</p>
+                        <span className="di-site-context-label">Enter emissions data manually for {siteNameDisplay}</span>
                     </div>
-                    <h3>Manual Entry</h3>
-                    <p>Enter emission data directly into forms</p>
-                </div>
+                </button>
             </div>
 
+            <div className="di-upload-layout">
+            <div className="di-upload-main">
             {inputMethod === 'manual' ? (
-                <form onSubmit={handleSubmit}>
+                <form className="di-manual-panel card data-section" onSubmit={handleSubmit} style={{ marginBottom: 0 }}>
+                    <h4 className="di-manual-title">Manual Data Entry — {siteNameDisplay}</h4>
+                    <p className="di-manual-intro">Scope 1 &amp; 2 entries below are saved for this site. Same layout as before: add rows, then Submit Data.</p>
                     {/* Scope 1 Section */}
                     <div className="card data-section">
                         <div className="section-header">
@@ -807,13 +1118,17 @@ function DataInput() {
                                 </select>
                             </div>
                         </div>
+                        <div className="di-uploading-for-badge">
+                            <i className="fas fa-map-marker-alt" /> Uploading for: <strong>{siteNameDisplay}</strong>
+                        </div>
                     </div>
-                    <div className={`upload-area ${uploadingReceipt ? 'upload-area--loading' : ''}`}>
+                    <div className={`upload-area di-dropzone ${uploadingReceipt ? 'upload-area--loading' : ''}`}>
                         <div className="upload-icon">
                             <i className={`fas ${uploadingReceipt ? 'fa-spinner fa-spin' : 'fa-cloud-upload-alt'}`}></i>
                         </div>
                         <h3>{uploadingReceipt ? 'Reading receipt(s) with AI...' : 'Drag & Drop Receipts Here'}</h3>
                         <p>{uploadingReceipt ? 'URIMPACT AI is extracting numbers, then emissions are calculated and saved.' : 'or click to browse – you can select multiple files (PDF, Excel, JPEG, PNG). Max ' + MAX_FILE_SIZE_MB + ' MB per file, up to ' + MAX_FILES_COUNT + ' files.'}</p>
+                        <div className="di-dropzone-site-badge"><i className="fas fa-map-marker-alt" /> Files go to: <strong>{siteNameDisplay}</strong></div>
                         <input 
                             type="file" 
                             accept=".pdf,.xlsx,.xls,.jpg,.jpeg,.png,.gif,.webp"
@@ -822,27 +1137,31 @@ function DataInput() {
                             disabled={uploadingReceipt}
                         />
                     </div>
-                    {pendingVerifications.length > 0 && (() => {
+                    {pendingVerifications.some((p) => p.siteId === selectedSiteId) && (() => {
+                        const scoped = pendingVerifications
+                            .map((item, index) => ({ item, index }))
+                            .filter((x) => x.item.siteId === selectedSiteId);
                         const docIdsSeen = new Set();
                         const groups = [];
-                        pendingVerifications.forEach((item, index) => {
+                        scoped.forEach(({ item, index: idx }) => {
                             if (docIdsSeen.has(item.documentId)) return;
                             docIdsSeen.add(item.documentId);
-                            const indices = pendingVerifications.map((p, i) => i).filter(i => pendingVerifications[i].documentId === item.documentId);
+                            const indices = scoped.filter((x) => x.item.documentId === item.documentId).map((x) => x.index);
                             groups.push({ documentId: item.documentId, fileName: item.fileName, indices });
                         });
+                        const n = scoped.length;
                         return (
                         <div className="upload-verify-list">
                             <div className="upload-verify-list-header">
                                 <div>
-                                    <h4><i className="fas fa-check-double"></i> Verify numbers from URIMPACT AI ({pendingVerifications.length} receipt{pendingVerifications.length !== 1 ? 's' : ''} / entries)</h4>
-                                    <p className="upload-verify-hint">Edit if needed. Add the date if not extracted. Use &quot;Submit all&quot; below to send every receipt at once, or submit per file.</p>
+                                    <h4><i className="fas fa-check-double"></i> Verify — {siteNameDisplay} ({n} entr{n !== 1 ? 'ies' : 'y'})</h4>
+                                    <p className="upload-verify-hint">Edit if needed. &quot;Submit all&quot; saves only receipts for this site.</p>
                                 </div>
                                 <button
                                     type="button"
                                     className="btn btn-primary btn-submit-all"
                                     onClick={handleSubmitAll}
-                                    disabled={submittingAll || pendingVerifications.length === 0}
+                                    disabled={submittingAll || n === 0}
                                 >
                                     {submittingAll ? <><i className="fas fa-spinner fa-spin"></i> Submitting all…</> : <><i className="fas fa-paper-plane"></i> Submit all</>}
                                 </button>
@@ -972,8 +1291,133 @@ function DataInput() {
                     </div>
                 </div>
             )}
-
+            </div>
+            <aside className="di-summary-panel">
+                <div className="di-summary-card">
+                    <div className="di-summary-card-header">
+                        <h4>Site Summary</h4>
+                        <i className="fas fa-map-marker-alt di-summary-icon" />
+                    </div>
+                    <div className="di-summary-site-name">
+                        <i className="fas fa-map-marker-alt" /> {siteNameDisplay}
+                    </div>
+                    <div className="di-summary-stat-row">
+                        <span className="di-summary-stat-label">Receipts saved (this period)</span>
+                        <span className="di-summary-stat-value">{summaryStats.docs}</span>
+                    </div>
+                    <div className="di-summary-stat-row">
+                        <span className="di-summary-stat-label">Manual rows saved (period)</span>
+                        <span className="di-summary-stat-value">{summaryStats.manualRows}</span>
+                    </div>
+                    <div className="di-summary-stat-row">
+                        <span className="di-summary-stat-label">Last activity</span>
+                        <span className="di-summary-stat-value">{formatLastUpload(summaryStats.lastUpload)}</span>
+                    </div>
+                    <div className="di-summary-stat-row">
+                        <span className="di-summary-stat-label">Reporting period</span>
+                        <span className="di-summary-stat-value">{MONTHS[expectedDocMonth - 1]} {expectedDocYear}</span>
+                    </div>
+                    <div className="di-summary-stat-row">
+                        <span className="di-summary-stat-label">Facility type</span>
+                        <span className="di-summary-stat-value">{currentSite?.facilityType ?? '—'}</span>
+                    </div>
+                    <div className="di-summary-stat-row">
+                        <span className="di-summary-stat-label">Site code</span>
+                        <span className="di-summary-stat-value">{currentSite?.code ?? '—'}</span>
+                    </div>
+                </div>
+                <div className="di-summary-card di-quick-tips">
+                    <div className="di-summary-card-header">
+                        <h4>Quick Tips</h4>
+                        <i className="fas fa-lightbulb di-summary-icon" />
+                    </div>
+                    <ul className="di-tips-list">
+                        <li><i className="fas fa-check" /> Verify the site before uploading</li>
+                        <li><i className="fas fa-check" /> Upload original bills when possible</li>
+                        <li><i className="fas fa-check" /> Review AI-extracted data before submit</li>
+                        <li><i className="fas fa-check" /> Add every facility as its own site</li>
+                    </ul>
+                </div>
+            </aside>
+            </div>
             </>
+            )}
+
+            {addSiteOpen && (
+                <div className="di-modal-overlay" role="presentation" onClick={(e) => e.target === e.currentTarget && setAddSiteOpen(false)}>
+                    <div className="di-modal" role="dialog" aria-labelledby="di-modal-title">
+                        <div className="di-modal-header">
+                            <div className="di-modal-header-left">
+                                <div className="di-modal-header-icon"><i className="fas fa-map-marker-alt" /></div>
+                                <div>
+                                    <h2 id="di-modal-title">Add New Site</h2>
+                                    <p>Register a facility for this organization</p>
+                                </div>
+                            </div>
+                            <button type="button" className="di-modal-close" onClick={() => setAddSiteOpen(false)} aria-label="Close">
+                                <i className="fas fa-times" />
+                            </button>
+                        </div>
+                        <div className="di-modal-body">
+                            <div className="di-modal-form-grid">
+                                <div className="form-group">
+                                    <label>Site Name <span className="di-req">*</span></label>
+                                    <input className="di-modal-input" value={newSite.name} onChange={(e) => setNewSite((s) => ({ ...s, name: e.target.value }))} placeholder="e.g. Sharjah Distribution Centre" />
+                                </div>
+                                <div className="form-group">
+                                    <label>Site Code <span className="di-req">*</span></label>
+                                    <input className="di-modal-input" value={newSite.code} onChange={(e) => setNewSite((s) => ({ ...s, code: e.target.value }))} placeholder="e.g. SHJ-DC-01" />
+                                </div>
+                                <div className="form-group">
+                                    <label>Country <span className="di-req">*</span></label>
+                                    <select className="di-modal-input" value={newSite.country} onChange={(e) => setNewSite((s) => ({ ...s, country: e.target.value }))}>
+                                        {COUNTRY_OPTIONS.map((c) => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>City <span className="di-req">*</span></label>
+                                    <input className="di-modal-input" value={newSite.city} onChange={(e) => setNewSite((s) => ({ ...s, city: e.target.value }))} placeholder="e.g. Sharjah" />
+                                </div>
+                                <div className="form-group">
+                                    <label>Facility Type <span className="di-req">*</span></label>
+                                    <select className="di-modal-input" value={newSite.facilityType} onChange={(e) => setNewSite((s) => ({ ...s, facilityType: e.target.value }))}>
+                                        <option value="">Select type…</option>
+                                        {FACILITY_TYPES.map((f) => (
+                                            <option key={f} value={f}>{f}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Reporting boundary</label>
+                                    <select className="di-modal-input" value={newSite.boundary} onChange={(e) => setNewSite((s) => ({ ...s, boundary: e.target.value }))}>
+                                        {BOUNDARY_OPTIONS.map((b) => (
+                                            <option key={b} value={b}>{b}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Default currency</label>
+                                    <select className="di-modal-input" value={newSite.currency} onChange={(e) => setNewSite((s) => ({ ...s, currency: e.target.value }))}>
+                                        {CURRENCY_OPTIONS.map((c) => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Utility provider <span className="di-opt">(optional)</span></label>
+                                    <input className="di-modal-input" value={newSite.utilityProvider} onChange={(e) => setNewSite((s) => ({ ...s, utilityProvider: e.target.value }))} placeholder="e.g. DEWA, SEC" />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="di-modal-footer">
+                            <button type="button" className="btn btn-secondary" onClick={() => setAddSiteOpen(false)}>Cancel</button>
+                            <button type="button" className="btn btn-primary" onClick={handleSaveNewSite}><i className="fas fa-check" /> Save Site</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

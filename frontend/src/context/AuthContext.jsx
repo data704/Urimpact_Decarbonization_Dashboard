@@ -4,6 +4,7 @@ import { loginWithBackend, registerWithBackend, setAuthToken } from '../api/clie
 const AuthContext = createContext();
 
 const AUTH_KEY = 'urimpact_user';
+const SESSION_EXPIRED_EVENT = 'urimpact:session-expired';
 
 function toFrontendUser(backendUser) {
     return {
@@ -32,6 +33,17 @@ export function AuthProvider({ children }) {
             }
         }
         setLoading(false);
+    }, []);
+
+    useEffect(() => {
+        const onSessionExpired = () => {
+            setUser(null);
+            localStorage.removeItem(AUTH_KEY);
+            setAuthToken(null);
+        };
+
+        window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+        return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
     }, []);
 
     const login = async (email, password) => {
