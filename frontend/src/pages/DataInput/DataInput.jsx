@@ -214,6 +214,59 @@ function DataInput() {
         setTimeout(() => setNotification(null), 3000);
     };
 
+    const kgToTonnes = (kg) => {
+        if (kg == null || Number.isNaN(Number(kg))) return 0;
+        return Number(kg) / 1000;
+    };
+
+    const normalizeDate = (d) => {
+        if (!d) return '';
+        if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+        const dt = new Date(d);
+        if (Number.isNaN(dt.getTime())) return '';
+        return dt.toISOString().slice(0, 10);
+    };
+
+    const addDemoEntryFromBackendEmission = (opts) => {
+        const { emission, scope, siteId, siteName, date } = opts || {};
+        const tonnes = kgToTonnes(emission?.co2e ?? emission?.co2eKg ?? emission?.kg ?? emission?.value);
+        if (tonnes <= 0) return;
+
+        const scopeUpper = String(scope || '').toUpperCase();
+        if (
+            scopeUpper.includes('SCOPE_2') ||
+            scopeUpper.includes('SCOPE2') ||
+            scopeUpper.includes('SCOPE-2') ||
+            scopeUpper.includes('SCOPE 2') ||
+            scopeUpper.includes('SCOPE2E')
+        ) {
+            addScope2Entry({
+                date: normalizeDate(date),
+                electricity: 0,
+                unit: 'kWh',
+                gridRegion: '',
+                emissions: tonnes,
+                siteId,
+                siteName,
+                currency: 'USD',
+            });
+            return;
+        }
+
+        // Default to Scope 1
+        addScope1Entry({
+            date: normalizeDate(date),
+            fuelType: 'Diesel',
+            combustionType: 'mobile',
+            amount: 0,
+            unit: 'Liters',
+            emissions: tonnes,
+            siteId,
+            siteName,
+            currency: 'USD',
+        });
+    };
+
     // Scope 1 handlers
     const addScope1Row = () => {
         setScope1Entries([...scope1Entries, {
@@ -316,6 +369,8 @@ function DataInput() {
                     scope: 'SCOPE_1',
                     category: fuelTypeToCategory(entry.fuelType),
                     region: 'AE',
+                    siteId: selectedSiteId,
+                    siteName: currentSite.name,
                     billingPeriodStart: entry.date ? new Date(entry.date + 'T00:00:00.000Z').toISOString() : undefined,
                 });
             });
@@ -327,6 +382,8 @@ function DataInput() {
                     scope: 'SCOPE_2',
                     category: 'ELECTRICITY',
                     region: gridRegionToRegion(entry.gridRegion),
+                    siteId: selectedSiteId,
+                    siteName: currentSite.name,
                     billingPeriodStart: entry.date ? new Date(entry.date + 'T00:00:00.000Z').toISOString() : undefined,
                 });
             });
@@ -573,10 +630,22 @@ function DataInput() {
                 region: item.region || 'AE',
                 scope: item.scope || undefined,
                 category: item.category || undefined,
+                siteId: item.siteId ?? undefined,
+                siteName: item.siteName ?? undefined,
                 billingPeriodStart: dateToSend || undefined,
                 billingPeriodEnd: item.billingPeriodEnd || undefined,
                 documentDate: dateToSend || undefined,
             });
+
+            // Keep local demo data in sync for dashboard filtering if the token expires later.
+            addDemoEntryFromBackendEmission({
+                emission: result?.emission,
+                scope: item.scope,
+                siteId: item.siteId,
+                siteName: item.siteName,
+                date: item.billingPeriodStart || item.date || undefined,
+            });
+
             showNotification(`Saved: ${result?.emission?.co2e?.toFixed(2) ?? '—'} kg CO2e. Taking you to Dashboard…`, 'success');
             const pk = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
             if (item.siteId) {
@@ -604,6 +673,8 @@ function DataInput() {
             region: item.region || 'AE',
             scope: item.scope || undefined,
             category: item.category || undefined,
+            siteId: item.siteId ?? undefined,
+            siteName: item.siteName ?? undefined,
             documentDate: item.date || item.billingPeriodStart || undefined,
             billingPeriodStart: item.billingPeriodStart || undefined,
             billingPeriodEnd: item.billingPeriodEnd || undefined,
@@ -622,6 +693,21 @@ function DataInput() {
                 ? `${count} emission(s) saved, ${skipped} row(s) skipped (invalid data). Taking you to Dashboard…`
                 : `${count} emission(s) saved. Taking you to Dashboard…`;
             showNotification(msg, 'success');
+
+            // Keep demo/local data in sync for dashboard filtering if the token expires later.
+            const emissionsList = Array.isArray(result?.emissions) ? result.emissions : [];
+            if (skipped === 0 && emissionsList.length === entries.length) {
+                emissionsList.forEach((emission, i) => {
+                    addDemoEntryFromBackendEmission({
+                        emission,
+                        scope: emission?.scope ?? entries[i]?.scope,
+                        siteId: entries[i]?.siteId,
+                        siteName: entries[i]?.siteName,
+                        date: entries[i]?.billingPeriodStart || entries[i]?.documentDate || entries[i]?.date || undefined,
+                    });
+                });
+            }
+
             const pk = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
             const sid = indices[0]?.item?.siteId;
             if (sid) {
@@ -683,6 +769,8 @@ function DataInput() {
                         region: item.region || 'AE',
                         scope: item.scope || undefined,
                         category: item.category || undefined,
+                        siteId: item.siteId ?? undefined,
+                        siteName: item.siteName ?? undefined,
                         documentDate: dateToSend || undefined,
                         billingPeriodStart: item.billingPeriodStart || undefined,
                         billingPeriodEnd: item.billingPeriodEnd || undefined,
@@ -696,20 +784,50 @@ function DataInput() {
                         region: entries[0].region,
                         scope: entries[0].scope,
                         category: entries[0].category,
+                        siteId: entries[0].siteId,
+                        siteName: entries[0].siteName,
                         billingPeriodStart: entries[0].billingPeriodStart,
                         billingPeriodEnd: entries[0].billingPeriodEnd,
                         documentDate: entries[0].documentDate,
-                    }).then((result) => ({ count: 1, emissions: result?.emission ? [result.emission] : [] }));
+                    }).then((result) => ({
+                        count: 1,
+                        emissions: result?.emission ? [result.emission] : [],
+                        entries,
+                        skipped: 0,
+                    }));
                 }
                 return submitReceiptBatch(group.documentId, entries).then((result) => ({
                     count: result?.emissions?.length ?? entries.length,
                     emissions: result?.emissions ?? [],
+                    entries,
+                    skipped: result?.skipped?.length ?? 0,
                 }));
             });
 
             const results = await Promise.all(promises);
             const totalCount = results.reduce((sum, r) => sum + r.count, 0);
             const pk = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
+
+            // Keep demo/local data in sync for dashboard filtering if the token expires later.
+            results.forEach((r) => {
+                const emissionsList = Array.isArray(r?.emissions) ? r.emissions : [];
+                const usedEntries = Array.isArray(r?.entries) ? r.entries : [];
+                const skipped = Number(r?.skipped ?? 0);
+
+                if (skipped !== 0) return;
+                if (!emissionsList.length || emissionsList.length !== usedEntries.length) return;
+
+                emissionsList.forEach((emission, i) => {
+                    addDemoEntryFromBackendEmission({
+                        emission,
+                        scope: emission?.scope ?? usedEntries[i]?.scope,
+                        siteId: usedEntries[i]?.siteId,
+                        siteName: usedEntries[i]?.siteName,
+                        date: usedEntries[i]?.billingPeriodStart || usedEntries[i]?.documentDate || usedEntries[i]?.date || undefined,
+                    });
+                });
+            });
+
             groups.forEach((group, gi) => {
                 const item = pendingVerifications[group.indices[0]];
                 const sid = item?.siteId;

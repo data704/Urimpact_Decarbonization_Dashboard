@@ -5,6 +5,7 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const AUTH_TOKEN_KEY = 'urimpact_access_token';
+const REFRESH_TOKEN_KEY = 'urimpact_refresh_token';
 const AUTH_USER_KEY = 'urimpact_user';
 const SESSION_EXPIRED_EVENT = 'urimpact:session-expired';
 
@@ -21,6 +22,15 @@ export function setAuthToken(token) {
   else localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
+export function getRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+export function setRefreshToken(token) {
+  if (token) localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  else localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
 function authHeaders() {
   const token = getAuthToken();
   const headers = { Accept: 'application/json' };
@@ -30,19 +40,88 @@ function authHeaders() {
 
 function handleAuthFailure() {
   setAuthToken(null);
+  setRefreshToken(null);
   localStorage.removeItem(AUTH_USER_KEY);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   }
 }
 
+async function refreshAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return null;
+
+  // Endpoint is assumed to exist. If it doesn't, we fall back to normal session-expired handling.
+  const res = await fetch(`${API_BASE}/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ refreshToken }),
+  });
+
+  if (!res.ok) return null;
+
+  const data = await res.json().catch(() => ({}));
+  const payload = data?.data ?? data;
+  const nextAccessToken = payload?.accessToken;
+  const nextRefreshToken = payload?.refreshToken;
+
+  if (!nextAccessToken) return null;
+
+  setAuthToken(nextAccessToken);
+  if (nextRefreshToken) setRefreshToken(nextRefreshToken);
+  return nextAccessToken;
+}
+
+async function authFetch(url, options, { retryOnAuth = true } = {}) {
+  const mergedHeaders = { ...(options?.headers ? options.headers : {}), ...authHeaders() };
+  let res = await fetch(url, { ...options, headers: mergedHeaders });
+
+  // Retry once after access-token expiration (401 or error-body token messages).
+  if (retryOnAuth) {
+    let shouldRefresh = res.status === 401;
+
+    if (!shouldRefresh && !res.ok) {
+      const cloned = res.clone();
+      const err = await cloned.json().catch(() => ({}));
+      const message = err?.error || err?.message;
+      shouldRefresh = isAuthErrorMessage(message);
+    }
+
+    if (shouldRefresh) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed) {
+        const retryHeaders = { ...(options?.headers ? options.headers : {}), ...authHeaders() };
+        res = await fetch(url, { ...options, headers: retryHeaders });
+      } else {
+        handleAuthFailure();
+      }
+    }
+  }
+
+  return res;
+}
+
 function isAuthErrorMessage(message = '') {
-  const value = String(message || '').toLowerCase();
+  // Backend sometimes returns auth errors as:
+  // - plain string (e.g. "Token has expired")
+  // - { message: "Token has expired" }
+  // - { error: "..." } or nested objects.
+  // Normalize to a lowercase string for reliable detection.
+  const value =
+    typeof message === 'string'
+      ? message
+      : (message && typeof message === 'object'
+          ? JSON.stringify(message)
+          : String(message || '')
+        );
+  const normalized = String(value || '').toLowerCase();
   return (
-    value.includes('token has expired') ||
-    value.includes('access token is required') ||
-    value.includes('invalid token') ||
-    value.includes('authentication failed')
+    normalized.includes('token has expired') ||
+    normalized.includes('access token is required') ||
+    normalized.includes('invalid token') ||
+    normalized.includes('authentication failed') ||
+    normalized.includes('jwt expired') ||
+    normalized.includes('expired') // broad fallback; guarded by auth keywords above in practice
   );
 }
 
@@ -226,7 +305,7 @@ export async function getDashboard(params = {}) {
   if (params.startDate) qs.set('startDate', params.startDate);
   if (params.endDate) qs.set('endDate', params.endDate);
   const query = qs.toString() ? `?${qs.toString()}` : '';
-  const res = await fetch(`${API_BASE}/reports/dashboard${query}`, {
+  const res = await authFetch(`${API_BASE}/reports/dashboard${query}`, {
     method: 'GET',
     headers: authHeaders(),
   });
@@ -271,7 +350,7 @@ export async function getEmissions(params = {}) {
   });
   const query = qs.toString() ? `?${qs.toString()}` : '';
 
-  const res = await fetch(`${API_BASE}/emissions${query}`, {
+  const res = await authFetch(`${API_BASE}/emissions${query}`, {
     method: 'GET',
     headers: authHeaders(),
   });
@@ -385,7 +464,7 @@ export async function deleteAdminUser(userId) {
  * Recent activity (audit log) for dashboard — who did what.
  */
 export async function getRecentActivity(limit = 25) {
-  const res = await fetch(`${API_BASE}/activity/recent?limit=${limit}`, {
+  const res = await authFetch(`${API_BASE}/activity/recent?limit=${limit}`, {
     method: 'GET',
     headers: authHeaders(),
   });
@@ -397,7 +476,7 @@ export async function getRecentActivity(limit = 25) {
 }
 
 export async function deleteEmission(emissionId) {
-  const res = await fetch(`${API_BASE}/emissions/${emissionId}`, {
+  const res = await authFetch(`${API_BASE}/emissions/${emissionId}`, {
     method: 'DELETE',
     headers: authHeaders(),
   });
@@ -411,7 +490,7 @@ export async function deleteEmission(emissionId) {
 }
 
 export async function deleteEmissionsBulk(ids) {
-  const res = await fetch(`${API_BASE}/emissions/bulk-delete`, {
+  const res = await authFetch(`${API_BASE}/emissions/bulk-delete`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids: Array.isArray(ids) ? ids : [] }),

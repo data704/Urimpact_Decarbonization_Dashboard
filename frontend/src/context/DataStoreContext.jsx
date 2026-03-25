@@ -109,6 +109,7 @@ const getDemoActivities = () => [
 
 // Emission calculation functions
 const calculateScope1Emissions = (entry) => {
+    if (!entry || entry.amount == null || Number(entry.amount) <= 0) return 0;
     const factors = {
         'Diesel': { 'Liters': 2.68, 'Gallons': 10.15, 'kg': 3.16 },
         'Gasoline/Petrol': { 'Liters': 2.31, 'Gallons': 8.74, 'kg': 3.08 },
@@ -118,10 +119,11 @@ const calculateScope1Emissions = (entry) => {
     };
     
     const factor = factors[entry.fuelType]?.[entry.unit] || 2.5;
-    return Math.round(entry.amount * factor / 1000 * 100) / 100;
+    return Math.round(Number(entry.amount) * factor / 1000 * 100) / 100;
 };
 
 const calculateScope2Emissions = (entry) => {
+    if (!entry || entry.electricity == null || Number(entry.electricity) <= 0) return 0;
     const gridFactors = {
         'US - WECC': 0.000322,
         'US - RFC': 0.000440,
@@ -144,33 +146,48 @@ export function DataStoreProvider({ children }) {
     const [scope2Entries, setScope2Entries] = useState([]);
     const [activities, setActivities] = useState([]);
 
-    // When user is logged in to backend, do not use demo or persisted local data
-    useEffect(() => {
-        const token = getAuthToken();
-        if (token) {
-            setScope1Entries([]);
-            setScope2Entries([]);
-            setActivities([]);
-            [KEYS.SCOPE1_ENTRIES, KEYS.SCOPE2_ENTRIES, KEYS.ACTIVITIES].forEach((key) => localStorage.removeItem(key));
-            return;
-        }
+    const SESSION_EXPIRED_EVENT = 'urimpact:session-expired';
+
+    const loadDemoDataFromStorage = () => {
         const storedScope1 = localStorage.getItem(KEYS.SCOPE1_ENTRIES);
         const storedScope2 = localStorage.getItem(KEYS.SCOPE2_ENTRIES);
         const storedActivities = localStorage.getItem(KEYS.ACTIVITIES);
+
         setScope1Entries(storedScope1 ? JSON.parse(storedScope1) : []);
         setScope2Entries(storedScope2 ? JSON.parse(storedScope2) : []);
         setActivities(storedActivities ? JSON.parse(storedActivities) : []);
+    };
+
+    // When user is logged in to backend, do not use demo/local state.
+    // IMPORTANT: we keep localStorage data so if the access token expires later,
+    // the dashboard can fall back to demo data instead of going empty.
+    useEffect(() => {
+        loadDemoDataFromStorage();
+    }, []);
+
+    // If the backend session expires (token becomes invalid), reload demo state from localStorage.
+    useEffect(() => {
+        const onSessionExpired = () => {
+            const token = getAuthToken();
+            if (token) return;
+            loadDemoDataFromStorage();
+        };
+        window.addEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
+        return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
     }, []);
 
     // Add Scope 1 entry
     const addScope1Entry = (entry) => {
+        const precomputedTonnes = entry?.emissions != null ? Number(entry.emissions) : null;
         const newEntry = {
             ...entry,
             id: Date.now(),
             status: 'verified',
             costAmount: Number(entry.costAmount) || 0,
             currency: entry.currency || 'USD',
-            emissions: calculateScope1Emissions(entry)
+            emissions: precomputedTonnes != null && !Number.isNaN(precomputedTonnes)
+                ? precomputedTonnes
+                : calculateScope1Emissions(entry)
         };
 
         const newEntries = [newEntry, ...scope1Entries];
@@ -184,7 +201,9 @@ export function DataStoreProvider({ children }) {
             date: entry.date,
             status: 'verified',
             amount: newEntry.emissions,
-            type: 'scope1'
+            type: 'scope1',
+            siteId: entry.siteId ?? null,
+            siteName: entry.siteName ?? null,
         });
 
         return newEntry;
@@ -192,13 +211,16 @@ export function DataStoreProvider({ children }) {
 
     // Add Scope 2 entry
     const addScope2Entry = (entry) => {
+        const precomputedTonnes = entry?.emissions != null ? Number(entry.emissions) : null;
         const newEntry = {
             ...entry,
             id: Date.now(),
             status: 'verified',
             costAmount: Number(entry.costAmount) || 0,
             currency: entry.currency || 'USD',
-            emissions: calculateScope2Emissions(entry)
+            emissions: precomputedTonnes != null && !Number.isNaN(precomputedTonnes)
+                ? precomputedTonnes
+                : calculateScope2Emissions(entry)
         };
 
         const newEntries = [newEntry, ...scope2Entries];
@@ -212,7 +234,9 @@ export function DataStoreProvider({ children }) {
             date: entry.date,
             status: 'verified',
             amount: newEntry.emissions,
-            type: 'scope2'
+            type: 'scope2',
+            siteId: entry.siteId ?? null,
+            siteName: entry.siteName ?? null,
         });
 
         return newEntry;

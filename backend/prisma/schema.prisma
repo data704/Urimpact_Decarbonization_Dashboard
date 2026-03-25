@@ -154,6 +154,8 @@ model Emission {
   userId             String
   organizationId     String?
   documentId         String?
+  siteId             String?
+  siteName           String?
   scope              EmissionScope
   category           EmissionCategory
   activityType       String

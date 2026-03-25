@@ -134,6 +134,8 @@ export async function calculateEmission(req: AuthRequest, res: Response): Promis
       billingPeriodStart: data.billingPeriodStart ? new Date(data.billingPeriodStart) : undefined,
       billingPeriodEnd: data.billingPeriodEnd ? new Date(data.billingPeriodEnd) : undefined,
       notes: data.notes,
+      siteId: data.siteId ?? undefined,
+      siteName: data.siteName ?? undefined,
     });
 
     // Log audit

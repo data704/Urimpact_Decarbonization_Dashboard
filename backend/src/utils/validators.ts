@@ -56,6 +56,9 @@ export const emissionCalculationSchema = z.object({
   billingPeriodStart: z.string().datetime().optional(),
   billingPeriodEnd: z.string().datetime().optional(),
   notes: z.string().optional(),
+  // Optional site attribution (used by DataInput + dashboard SITE column)
+  siteId: z.string().optional(),
+  siteName: z.string().optional(),
 });
 
 // Emission Filter Schema

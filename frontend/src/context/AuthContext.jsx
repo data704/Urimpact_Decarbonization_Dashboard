@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { loginWithBackend, registerWithBackend, setAuthToken } from '../api/client.js';
+import { loginWithBackend, registerWithBackend, setAuthToken, setRefreshToken } from '../api/client.js';
 
 const AuthContext = createContext();
 
@@ -47,11 +47,12 @@ export function AuthProvider({ children }) {
     }, []);
 
     const login = async (email, password) => {
-        const { user: backendUser, accessToken } = await loginWithBackend(email, password);
+        const { user: backendUser, accessToken, refreshToken } = await loginWithBackend(email, password);
         const userData = toFrontendUser(backendUser);
         setUser(userData);
         localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
         setAuthToken(accessToken);
+        if (refreshToken) setRefreshToken(refreshToken);
         return userData;
     };
 
@@ -64,11 +65,12 @@ export function AuthProvider({ children }) {
             company: userData.company,
         });
         // Auto-login after signup to get token
-        const { user: backendUser, accessToken } = await loginWithBackend(userData.email, userData.password);
+        const { user: backendUser, accessToken, refreshToken } = await loginWithBackend(userData.email, userData.password);
         const frontendUser = toFrontendUser(backendUser);
         setUser(frontendUser);
         localStorage.setItem(AUTH_KEY, JSON.stringify(frontendUser));
         setAuthToken(accessToken);
+        if (refreshToken) setRefreshToken(refreshToken);
         return frontendUser;
     };
 
@@ -76,6 +78,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         localStorage.removeItem(AUTH_KEY);
         setAuthToken(null);
+        setRefreshToken(null);
     };
 
     const updateProfile = (updates) => {

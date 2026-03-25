@@ -45,6 +45,8 @@ interface CreateEmissionInput {
   userId: string;
   organizationId?: string | null;
   documentId?: string;
+  siteId?: string | null;
+  siteName?: string | null;
   scope: EmissionScope;
   category: EmissionCategory;
   activityType: string;
@@ -68,6 +70,8 @@ export async function createEmission(
       userId: input.userId,
       organizationId: input.organizationId ?? undefined,
       documentId: input.documentId,
+      siteId: input.siteId ?? undefined,
+      siteName: input.siteName ?? undefined,
       scope: input.scope,
       category: input.category,
       activityType: input.activityType,

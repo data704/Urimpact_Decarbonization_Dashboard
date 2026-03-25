@@ -425,6 +425,8 @@ export async function submitDocument(req: AuthRequest, res: Response): Promise<v
     const activityAmount = Number(body.activityAmount ?? extracted.activityAmount);
     const activityUnit = (body.activityUnit ?? extracted.activityUnit) as string;
     const region = (body.region ?? extracted.region ?? 'AE') as string;
+    const siteId = (body.siteId ?? extracted.siteId) as string | undefined;
+    const siteName = (body.siteName ?? extracted.siteName) as string | undefined;
 
     if (!activityType || Number.isNaN(activityAmount) || !activityUnit) {
       sendError(res, 'Missing or invalid activityType, activityAmount, or activityUnit', 400);
@@ -447,6 +449,8 @@ export async function submitDocument(req: AuthRequest, res: Response): Promise<v
         userId: req.user.userId,
         organizationId: req.user.organizationId,
         documentId: id,
+        siteId,
+        siteName,
         scope,
         category,
         activityType,
@@ -535,6 +539,8 @@ export async function submitDocumentBatch(req: AuthRequest, res: Response): Prom
       const activityAmount = Number(row.activityAmount ?? def.activityAmount);
       const activityUnit = String(row.activityUnit ?? def.activityUnit ?? '').trim();
       const region = String(row.region ?? def.region ?? 'AE').trim() || 'AE';
+      const siteId = (row.siteId ?? def.siteId) as string | undefined;
+      const siteName = (row.siteName ?? def.siteName) as string | undefined;
 
       // Skip rows that are fundamentally unusable — don't abort the whole batch
       if (!activityType || Number.isNaN(activityAmount) || activityAmount <= 0 || !activityUnit) {
@@ -562,6 +568,8 @@ export async function submitDocumentBatch(req: AuthRequest, res: Response): Prom
             userId: req.user!.userId,
             organizationId: req.user!.organizationId,
             documentId: id,
+            siteId,
+            siteName,
             scope,
             category,
             activityType,
