@@ -77,16 +77,54 @@ jobs:
           script: |
             set -e
 
+            IMAGE_REPO="725948481931.dkr.ecr.eu-central-1.amazonaws.com/carbonemission-backend"
+            IMAGE_TAG="latest"
+            IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
+            MIN_FREE_KB=2097152 # 2GB
+
+            print_disk() {
+              echo "💽 Disk usage:"
+              df -h /
+            }
+
+            ensure_disk_space() {
+              local free_kb
+              free_kb=$(df -Pk / | awk 'NR==2 {print $4}')
+              if [ "$free_kb" -lt "$MIN_FREE_KB" ]; then
+                echo "⚠️ Low disk space detected (<2GB). Running Docker cleanup..."
+                docker container prune -f || true
+                docker image prune -af || true
+                docker builder prune -af || true
+                docker volume prune -f || true
+                # Optional host log cleanup; safe no-op if unavailable
+                sudo journalctl --vacuum-time=3d >/dev/null 2>&1 || true
+              fi
+
+              free_kb=$(df -Pk / | awk 'NR==2 {print $4}')
+              if [ "$free_kb" -lt "$MIN_FREE_KB" ]; then
+                echo "❌ Not enough disk space after cleanup. Need >= 2GB free."
+                print_disk
+                exit 1
+              fi
+            }
+
             echo "🔐 Login to ECR"
             aws ecr get-login-password --region eu-central-1 | \
               docker login -u AWS --password-stdin 725948481931.dkr.ecr.eu-central-1.amazonaws.com
 
+            print_disk
+            ensure_disk_space
+
             echo "📥 Pull image"
-            docker pull 725948481931.dkr.ecr.eu-central-1.amazonaws.com/carbonemission-backend:latest
+            docker pull "$IMAGE"
 
             echo "🛑 Stop old container"
             docker stop carbonemission-backend || true
             docker rm carbonemission-backend || true
+
+            # Remove dangling/old layers before next run to avoid disk exhaustion.
+            docker image prune -af || true
+            docker builder prune -af || true
 
             echo "🔑 Fetch secrets from AWS Secrets Manager"
             export DATABASE_URL=$(aws secretsmanager get-secret-value \
@@ -128,7 +166,7 @@ jobs:
               -e CORS_ORIGIN="${{ secrets.CORS_ORIGIN }}" \
               -e REDIS_HOST="${{ secrets.REDIS_HOST }}" \
               -e UPLOADS_S3_BUCKET="${{ secrets.UPLOADS_S3_BUCKET }}" \
-              725948481931.dkr.ecr.eu-central-1.amazonaws.com/carbonemission-backend:latest
+              "$IMAGE"
 
             echo "⏳ Waiting for health check"
             sleep 10
