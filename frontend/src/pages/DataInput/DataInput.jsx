@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDataStore } from '../../context/DataStoreContext';
 import { uploadReceiptAndExtract, uploadReceiptsMultiple, processDocument, submitReceiptExtraction, submitReceiptBatch, submitManualEmission, getAuthToken } from '../../api/client.js';
+import { isAdministrator } from '../../utils/roles';
 import './DataInput.css';
 
 // Upload limits (must match backend: MAX_FILE_SIZE, uploadMultiple.files)
@@ -124,6 +125,21 @@ function readSiteActivity(orgKey) {
         return JSON.parse(localStorage.getItem(`${ACTIVITY_KEY_PREFIX}${orgKey}`) || '{}');
     } catch (_) {
         return {};
+    }
+}
+
+function removeSiteActivity(orgKey, siteId) {
+    if (!siteId) return;
+    const key = `${ACTIVITY_KEY_PREFIX}${orgKey}`;
+    let data = {};
+    try {
+        data = JSON.parse(localStorage.getItem(key) || '{}');
+    } catch (_) {
+        data = {};
+    }
+    if (data && typeof data === 'object' && siteId in data) {
+        delete data[siteId];
+        localStorage.setItem(key, JSON.stringify(data));
     }
 }
 
@@ -458,6 +474,7 @@ function DataInput() {
     const [submittingBatchId, setSubmittingBatchId] = useState(null);
     const [submittingAll, setSubmittingAll] = useState(false);
     const [submittingManual, setSubmittingManual] = useState(false);
+    const canManageSites = isAdministrator(user?.role);
 
     const dateFromExtraction = (fields) =>
         fields?.billingPeriodStart || fields?.documentDate || fields?.billingPeriodEnd || '';
@@ -871,6 +888,35 @@ function DataInput() {
         showNotification(`Site "${row.name}" added for your organization.`, 'success');
     };
 
+    const handleDeleteSelectedSite = () => {
+        if (!canManageSites) {
+            showNotification('Only administrators can delete sites.', 'error');
+            return;
+        }
+        if (!selectedSiteId || selectedSiteId === 'all' || !currentSite) {
+            showNotification('Select a site to delete.', 'warning');
+            return;
+        }
+        if (sites.length <= 1) {
+            showNotification('At least one site must remain.', 'warning');
+            return;
+        }
+        const hasPendingForSite = pendingVerifications.some((p) => p.siteId === selectedSiteId);
+        if (hasPendingForSite) {
+            showNotification('Submit or clear pending verification rows for this site before deleting it.', 'warning');
+            return;
+        }
+        const ok = window.confirm(`Delete site "${currentSite.name}"? This removes it from site lists and local site activity history.`);
+        if (!ok) return;
+
+        const nextSites = sites.filter((s) => s.id !== selectedSiteId);
+        persistSites(nextSites);
+        removeSiteActivity(orgKey, selectedSiteId);
+        setActivityTick((t) => t + 1);
+        setSelectedSiteId(nextSites[0]?.id ?? 'all');
+        showNotification(`Site "${currentSite.name}" deleted.`, 'success');
+    };
+
     useEffect(() => {
         const onKey = (e) => {
             if (e.key === 'Escape') setAddSiteOpen(false);
@@ -929,9 +975,22 @@ function DataInput() {
                             ))}
                         </select>
                     </div>
-                    <button type="button" className="di-add-site-btn" onClick={() => setAddSiteOpen(true)}>
-                        <i className="fas fa-plus" /> Add Site
-                    </button>
+                    <div className="di-site-actions">
+                        <button type="button" className="di-add-site-btn" onClick={() => setAddSiteOpen(true)}>
+                            <i className="fas fa-plus" /> Add Site
+                        </button>
+                        {canManageSites && (
+                            <button
+                                type="button"
+                                className="di-delete-site-btn"
+                                onClick={handleDeleteSelectedSite}
+                                disabled={selectedSiteId === 'all' || !currentSite || sites.length <= 1}
+                                title={selectedSiteId === 'all' ? 'Select a site to delete' : 'Delete selected site'}
+                            >
+                                <i className="fas fa-trash-alt" /> Delete Site
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="di-site-pills-bar">
                     <button type="button" className={`di-site-pill${selectedSiteId === 'all' ? ' active' : ''}`} onClick={() => setSelectedSiteId('all')}>All Sites</button>

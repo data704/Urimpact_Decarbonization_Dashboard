@@ -1081,6 +1081,37 @@
     background: #f0fdfa;
 }
 
+.di-site-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.di-delete-site-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid #fecaca;
+    background: #fff1f2;
+    color: #b91c1c;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.di-delete-site-btn:hover:not(:disabled) {
+    background: #fee2e2;
+    border-color: #fca5a5;
+}
+
+.di-delete-site-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .di-site-pills-bar {
     display: flex;
     flex-wrap: wrap;

@@ -44,12 +44,36 @@ const DECARB_CONFIG_KEY = 'urimpact_decarbonization_config';
 const generateTreeCount = () => Math.floor(Math.random() * (6000 - 3000 + 1)) + 3000;
 
 function Decarbonization() {
-    const { getTotalEmissions } = useDataStore();
+    const { getTotalEmissions, scope1Entries, scope2Entries } = useDataStore();
     const [apiDashboard, setApiDashboard] = useState(null);
     const [apiLoading, setApiLoading] = useState(false);
     const hasToken = Boolean(getAuthToken());
+    const currentYear = new Date().getFullYear();
+    const [baselineYear, setBaselineYear] = useState(currentYear);
 
-    const totalEmissionsFromStore = getTotalEmissions();
+    const baselineYearOptions = useMemo(
+        () => Array.from({ length: 11 }, (_, i) => currentYear - 5 + i),
+        [currentYear]
+    );
+
+    const localTotalForBaselineYear = useMemo(() => {
+        const inYear = (dateValue) => {
+            if (!dateValue) return false;
+            const d = new Date(dateValue);
+            if (Number.isNaN(d.getTime())) return false;
+            return d.getFullYear() === baselineYear;
+        };
+
+        const scope1 = (scope1Entries || [])
+            .filter((e) => inYear(e?.date))
+            .reduce((sum, e) => sum + (Number(e?.emissions) || 0), 0);
+        const scope2 = (scope2Entries || [])
+            .filter((e) => inYear(e?.date))
+            .reduce((sum, e) => sum + (Number(e?.emissions) || 0), 0);
+        return scope1 + scope2;
+    }, [scope1Entries, scope2Entries, baselineYear]);
+
+    const totalEmissionsFromStore = hasToken ? localTotalForBaselineYear : getTotalEmissions();
     const totalEmissionsFromApi = apiDashboard?.emissions?.total?.totalCo2eTonnes;
     const currentTotalEmissions = totalEmissionsFromApi ?? totalEmissionsFromStore;
 
@@ -60,18 +84,19 @@ function Decarbonization() {
     useEffect(() => {
         if (!hasToken) {
             setApiDashboard(null);
+            setApiLoading(false);
             return;
         }
         let cancelled = false;
         setApiLoading(true);
-        const start = new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10);
-        const end = new Date(new Date().getFullYear(), 11, 31).toISOString().slice(0, 10);
+        const start = new Date(baselineYear, 0, 1).toISOString().slice(0, 10);
+        const end = new Date(baselineYear, 11, 31).toISOString().slice(0, 10);
         getDashboard({ startDate: start, endDate: end })
             .then((d) => { if (!cancelled) setApiDashboard(d); })
             .catch(() => { if (!cancelled) setApiDashboard(null); })
             .finally(() => { if (!cancelled) setApiLoading(false); });
         return () => { cancelled = true; };
-    }, [hasToken]);
+    }, [hasToken, baselineYear]);
 
     // Inputs & Constraints (decarbonisation strategy) — persisted for Reports access
     const [configForm, setConfigForm] = useState(() => {
@@ -246,14 +271,28 @@ function Decarbonization() {
                     <h1 className="decarb-main-title">Decarbonization scenario</h1>
                     <p className="decarb-main-subtitle">See how planting trees offsets your residual emissions (post-pathway). Baseline uses report residual from your ambition level.</p>
                 </div>
-                <button
-                    type="button"
-                    className="btn btn-primary btn-config-open"
-                    onClick={() => setConfigModalOpen(true)}
-                >
-                    <i className="fas fa-sliders-h"></i>
-                    Inputs & Constraints
-                </button>
+                <div className="decarb-header-actions">
+                    <div className="decarb-year-filter">
+                        <label htmlFor="decarb-baseline-year">Baseline Year</label>
+                        <select
+                            id="decarb-baseline-year"
+                            value={baselineYear}
+                            onChange={(e) => setBaselineYear(Number(e.target.value))}
+                        >
+                            {baselineYearOptions.map((y) => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <button
+                        type="button"
+                        className="btn btn-primary btn-config-open"
+                        onClick={() => setConfigModalOpen(true)}
+                    >
+                        <i className="fas fa-sliders-h"></i>
+                        Inputs & Constraints
+                    </button>
+                </div>
             </div>
 
             {/* Inputs & Constraints Modal */}
@@ -397,6 +436,9 @@ function Decarbonization() {
 
             {apiLoading && (
                 <p className="decarb-loading">Loading emissions data…</p>
+            )}
+            {!apiLoading && (
+                <p className="decarb-loading">Using baseline year: {baselineYear}</p>
             )}
 
             <div className="decarb-grid">
