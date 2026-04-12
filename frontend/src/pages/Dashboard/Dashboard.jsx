@@ -14,7 +14,6 @@ import {
     Filler
 } from 'chart.js';
 import { Bar, Doughnut, Line } from 'react-chartjs-2';
-import { useAuth } from '../../context/AuthContext';
 import { useDataStore } from '../../context/DataStoreContext';
 import { getAuthToken, getDashboard, getEmissions, deleteEmission, deleteEmissionsBulk, getRecentActivity } from '../../api/client';
 import './Dashboard.css';
@@ -22,57 +21,6 @@ import './Dashboard.css';
 const kgToTonnes = (kg) => (kg == null ? 0 : kg / 1000);
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
-const SITES_KEY_PREFIX = 'urimpact_data_input_sites_';
-const SITE_COLORS = ['#0d9488', '#3b82f6', '#8b5cf6', '#14B8A6', '#6366F1'];
-
-function sitesStorageKey(orgKey) {
-    return `${SITES_KEY_PREFIX}${orgKey}`;
-}
-
-function defaultSites() {
-    const t = Date.now();
-    return [
-        {
-            id: `site-${t}-a`,
-            name: 'Dubai Warehouse',
-            code: 'DXB-WH-01',
-            country: 'United Arab Emirates',
-            city: 'Dubai',
-            facilityType: 'Warehouse',
-            boundary: 'Operational Control',
-            currency: 'AED — UAE Dirham',
-            utilityProvider: 'DEWA',
-        },
-        {
-            id: `site-${t}-b`,
-            name: 'Riyadh Office',
-            code: 'RUH-OFC-01',
-            country: 'Saudi Arabia',
-            city: 'Riyadh',
-            facilityType: 'Office',
-            boundary: 'Operational Control',
-            currency: 'SAR — Saudi Riyal',
-            utilityProvider: '',
-        },
-    ];
-}
-
-function loadSitesForOrg(orgKey) {
-    if (typeof window === 'undefined') return [];
-    try {
-        const raw = localStorage.getItem(sitesStorageKey(orgKey));
-        if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-    } catch (_) { /* ignore */ }
-    const seed = defaultSites();
-    try {
-        localStorage.setItem(sitesStorageKey(orgKey), JSON.stringify(seed));
-    } catch (_) { /* ignore */ }
-    return seed;
-}
 
 // Register Chart.js components
 ChartJS.register(
@@ -90,7 +38,6 @@ ChartJS.register(
 
 function Dashboard() {
     const location = useLocation();
-    const { user } = useAuth();
     const { 
         scope1Entries, 
         scope2Entries, 
@@ -125,35 +72,6 @@ function Dashboard() {
     const [activityError, setActivityError] = useState(null);
 
     const hasToken = Boolean(getAuthToken());
-    const orgKey =
-        user?.organizationId != null
-            ? String(user.organizationId)
-            : user?.id != null
-                ? String(user.id)
-                : 'guest';
-
-    // Demo-only UI for single-site vs multi-site compare
-    const [sites, setSites] = useState([]);
-    const [viewMode, setViewMode] = useState('all'); // 'all' | 'single' | 'compare'
-    const [selectedSiteId, setSelectedSiteId] = useState('all');
-    const [compareSiteIds, setCompareSiteIds] = useState([]);
-
-    useEffect(() => {
-        setSites(loadSitesForOrg(orgKey));
-    }, [orgKey]);
-
-    useEffect(() => {
-        if (viewMode !== 'single') return;
-        if (selectedSiteId !== 'all' && sites.some((s) => s.id === selectedSiteId)) return;
-        setSelectedSiteId(sites[0]?.id ?? 'all');
-    }, [viewMode, selectedSiteId, sites]);
-
-    useEffect(() => {
-        setCompareSiteIds((prev) => prev.filter((id) => sites.some((s) => s.id === id)));
-    }, [sites]);
-
-    const showSiteControls = sites.length > 0;
-    const showSiteColumn = showSiteControls;
 
     const dateRange = useMemo(() => {
         const start = new Date(filterYear, 0, 1);
@@ -376,253 +294,32 @@ function Dashboard() {
     const scope1List = useMemo(() => apiEmissions.filter((e) => e.scope === 'SCOPE_1'), [apiEmissions]);
     const scope2List = useMemo(() => apiEmissions.filter((e) => e.scope === 'SCOPE_2'), [apiEmissions]);
 
-    const demoSiteFilterIds = useMemo(() => {
-        if (!showSiteControls) return null;
-        if (viewMode === 'all') return null;
-        if (viewMode === 'single') return selectedSiteId !== 'all' ? [selectedSiteId] : null;
-        if (viewMode === 'compare') return compareSiteIds;
-        return null;
-    }, [showSiteControls, viewMode, selectedSiteId, compareSiteIds]);
-
-    const normalizeKey = (v) => {
-        if (v == null) return null;
-        const s = String(v).trim();
-        return s === '' ? null : s;
-    };
-
-    // Normalize IDs so lookups work even if backend returns "001" vs "1".
-    const normalizeSiteIdKey = (v) => {
-        const s = normalizeKey(v);
-        if (s == null) return null;
-        return /^\d+$/.test(s) ? String(parseInt(s, 10)) : s;
-    };
-
-    const getApiSiteId = (entry) => {
-        const v =
-            entry?.siteId ??
-            entry?.site_id ??
-            entry?.site?.id ??
-            entry?.site?.siteId ??
-            entry?.site?.facilityId ??
-            entry?.site?.facility_id ??
-            entry?.site?.facility?.id ??
-            entry?.facilityId ??
-            entry?.facility_id ??
-            entry?.facility?.id ??
-            entry?.facility?.facilityId ??
-            entry?.facility?.siteId ??
-            entry?.facility?.site_id ??
-            null;
-        return normalizeSiteIdKey(v);
-    };
-
-    const getApiSiteName = (entry) => {
-        const v =
-            entry?.siteName ??
-            entry?.site_name ??
-            entry?.site?.name ??
-            entry?.site?.siteName ??
-            entry?.site?.site_name ??
-            entry?.site?.facilityName ??
-            entry?.site?.facility_name ??
-            entry?.facilityName ??
-            entry?.facility_name ??
-            entry?.facility?.name ??
-            entry?.facility?.facilityName ??
-            entry?.facility?.facility_name ??
-            entry?.facility?.siteName ??
-            entry?.facility?.site_name ??
-            entry?.site?.facilityName ??
-            entry?.facility?.facilityName ??
-            null;
-        return normalizeKey(v);
-    };
-
-    const apiEmissionsFilteredBySite = useMemo(() => {
-        if (!hasToken) return apiEmissions;
-        if (demoSiteFilterIds == null) return apiEmissions;
-
-        // Normalize selected ids so set matching works with backend id formats.
-        const set = new Set(
-            (demoSiteFilterIds || [])
-                .map(normalizeSiteIdKey)
-                .filter(Boolean)
-        );
-        const normalizeName = (v) => {
-            const s = normalizeKey(v);
-            return s ? s.toLowerCase().replace(/\s+/g, ' ') : null;
-        };
-
-        const selectedNames = new Set(
-            (sites || [])
-                .filter((s) => set.has(normalizeSiteIdKey(s.id)))
-                .map((s) => normalizeName(s.name))
-                .filter(Boolean)
-        );
-
-        const filtered = apiEmissions.filter((e) => {
-            const apiSiteId = getApiSiteId(e);
-            const apiSiteName = getApiSiteName(e);
-            const idMatch = apiSiteId != null && set.has(apiSiteId);
-            const apiNameNorm = normalizeName(apiSiteName);
-            const nameMatch =
-                apiNameNorm != null &&
-                (selectedNames.has(apiNameNorm) ||
-                    Array.from(selectedNames).some((n) => apiNameNorm.includes(n) || n.includes(apiNameNorm)));
-            return idMatch || nameMatch;
-        });
-
-        if (filtered.length) return filtered;
-        // If user hasn't picked any sites for compare mode, show empty state.
-        if (set.size === 0) return [];
-        // If backend returns some site info but none match the selected site,
-        // show empty (so filtering is actually correct).
-        const hasAnySiteInfo = apiEmissions.some(
-            (e) => getApiSiteId(e) != null || getApiSiteName(e) != null
-        );
-        // If backend never returns site info at all, keep previous behavior (show everything).
-        return hasAnySiteInfo ? [] : apiEmissions;
-    }, [apiEmissions, demoSiteFilterIds, hasToken, sites]);
-
-    const scope1ListFiltered = useMemo(
-        () => apiEmissionsFilteredBySite.filter((e) => e.scope === 'SCOPE_1'),
-        [apiEmissionsFilteredBySite]
-    );
-
-    const scope2ListFiltered = useMemo(
-        () => apiEmissionsFilteredBySite.filter((e) => e.scope === 'SCOPE_2'),
-        [apiEmissionsFilteredBySite]
-    );
-
-    const demoFilteredScope1Entries = useMemo(() => {
-        if (!showSiteControls || demoSiteFilterIds == null) return scope1Entries;
-        if (!demoSiteFilterIds.length) return [];
-        const set = new Set(
-            (demoSiteFilterIds || [])
-                .map(normalizeSiteIdKey)
-                .filter(Boolean)
-        );
-        return scope1Entries.filter((e) => set.has(normalizeSiteIdKey(e.siteId)));
-    }, [showSiteControls, demoSiteFilterIds, scope1Entries]);
-
-    const demoFilteredScope2Entries = useMemo(() => {
-        if (!showSiteControls || demoSiteFilterIds == null) return scope2Entries;
-        if (!demoSiteFilterIds.length) return [];
-        const set = new Set(
-            (demoSiteFilterIds || [])
-                .map(normalizeSiteIdKey)
-                .filter(Boolean)
-        );
-        return scope2Entries.filter((e) => set.has(normalizeSiteIdKey(e.siteId)));
-    }, [showSiteControls, demoSiteFilterIds, scope2Entries]);
-
-    const demoScope1Total = useMemo(
-        () => demoFilteredScope1Entries.reduce((sum, e) => sum + (e.emissions || 0), 0),
-        [demoFilteredScope1Entries]
-    );
-
-    const demoScope2Total = useMemo(
-        () => demoFilteredScope2Entries.reduce((sum, e) => sum + (e.emissions || 0), 0),
-        [demoFilteredScope2Entries]
-    );
-
-    const demoTotalEmissions = demoScope1Total + demoScope2Total;
-
-    const apiTotalEmissions = apiDashboard?.emissions?.total?.totalCo2eTonnes ?? null;
-    const apiScope1Total = apiDashboard?.emissions?.byScope?.SCOPE_1?.totalTonnes ?? null;
-    const apiScope2Total = apiDashboard?.emissions?.byScope?.SCOPE_2?.totalTonnes ?? null;
-
-    const totalEmissions = hasToken ? (apiTotalEmissions ?? getTotalEmissions()) : demoTotalEmissions;
-    const scope1Total = hasToken ? (apiScope1Total ?? getTotalScope1()) : demoScope1Total;
-    const scope2Total = hasToken ? (apiScope2Total ?? getTotalScope2()) : demoScope2Total;
+    const totalEmissions = apiDashboard?.emissions?.total?.totalCo2eTonnes ?? getTotalEmissions();
+    const scope1Total = apiDashboard?.emissions?.byScope?.SCOPE_1?.totalTonnes ?? getTotalScope1();
+    const scope2Total = apiDashboard?.emissions?.byScope?.SCOPE_2?.totalTonnes ?? getTotalScope2();
 
     const monthlyData = useMemo(() => {
-        // Token mode (backend): use site-filtered API emissions when not in "All Sites" mode.
-        if (hasToken) {
-            if (viewMode === 'all' && apiDashboard?.emissions?.trend?.length) {
-                const trend = apiDashboard.emissions.trend;
-                const labels = trend.map((t) => MONTHS[parseInt(t.month.slice(5, 7), 10) - 1]);
-                const scope1Data = trend.map((t) => kgToTonnes(t.scope1 || 0));
-                const scope2Data = trend.map((t) => kgToTonnes(t.scope2 || 0));
-                return { labels, scope1: scope1Data, scope2: scope2Data };
-            }
-
-            const scope1Data = new Array(12).fill(0);
-            const scope2Data = new Array(12).fill(0);
-
-            apiEmissionsFilteredBySite.forEach((e) => {
-                const activityDate = e.billingPeriodStart || e.calculatedAt;
-                if (!activityDate) return;
-                const d = new Date(activityDate);
-                if (Number.isNaN(d.getTime())) return;
-                const m = d.getMonth();
-                if (m < 0 || m > 11) return;
-
-                const emissionsT = kgToTonnes(e.co2e || 0);
-                if (e.scope === 'SCOPE_1') scope1Data[m] += emissionsT;
-                if (e.scope === 'SCOPE_2') scope2Data[m] += emissionsT;
-            });
-
-            return {
-                labels: MONTHS,
-                scope1: scope1Data.map((v) => Math.round(v * 100) / 100),
-                scope2: scope2Data.map((v) => Math.round(v * 100) / 100),
-            };
+        if (apiDashboard?.emissions?.trend?.length) {
+            const trend = apiDashboard.emissions.trend;
+            const labels = trend.map((t) => MONTHS[parseInt(t.month.slice(5, 7), 10) - 1]);
+            const scope1Data = trend.map((t) => kgToTonnes(t.scope1 || 0));
+            const scope2Data = trend.map((t) => kgToTonnes(t.scope2 || 0));
+            return { labels, scope1: scope1Data, scope2: scope2Data };
         }
-
-        // Demo mode: compute monthly totals based on selected site(s)
-        const scope1Data = new Array(12).fill(0);
-        const scope2Data = new Array(12).fill(0);
-
-        demoFilteredScope1Entries.forEach((e) => {
-            if (!e?.date) return;
-            const d = new Date(e.date);
-            if (Number.isNaN(d.getTime())) return;
-            const m = d.getMonth();
-            if (m >= 0 && m <= 11) scope1Data[m] += e.emissions || 0;
-        });
-
-        demoFilteredScope2Entries.forEach((e) => {
-            if (!e?.date) return;
-            const d = new Date(e.date);
-            if (Number.isNaN(d.getTime())) return;
-            const m = d.getMonth();
-            if (m >= 0 && m <= 11) scope2Data[m] += e.emissions || 0;
-        });
-
-        return {
-            labels: MONTHS,
-            scope1: scope1Data.map((v) => Math.round(v * 100) / 100),
-            scope2: scope2Data.map((v) => Math.round(v * 100) / 100),
-        };
-    }, [
-        hasToken,
-        viewMode,
-        apiDashboard,
-        apiEmissionsFilteredBySite,
-        demoFilteredScope1Entries,
-        demoFilteredScope2Entries,
-    ]);
+        return getMonthlyData();
+    }, [apiDashboard, getMonthlyData]);
 
     const scope1Breakdown = useMemo(() => {
-        if (scope1ListFiltered.length) {
+        if (scope1List.length) {
             const byCat = {};
-            scope1ListFiltered.forEach((e) => {
+            scope1List.forEach((e) => {
                 const label = e.category?.replace(/_/g, ' ') ?? 'Other';
                 byCat[label] = (byCat[label] || 0) + kgToTonnes(e.co2e);
             });
             return Object.keys(byCat).length ? byCat : { 'No data': 0 };
         }
-        if (!hasToken && showSiteControls) {
-            const breakdown = { 'Mobile Combustion': 0, 'Stationary Combustion': 0 };
-            demoFilteredScope1Entries.forEach((e) => {
-                const label = e.combustionType === 'mobile' ? 'Mobile Combustion' : 'Stationary Combustion';
-                breakdown[label] += e.emissions || 0;
-            });
-            return breakdown;
-        }
         return getScope1Breakdown();
-    }, [scope1ListFiltered, hasToken, showSiteControls, demoFilteredScope1Entries, getScope1Breakdown]);
+    }, [scope1List, getScope1Breakdown]);
 
     // Chart options
     const lineChartOptions = {
@@ -694,204 +391,6 @@ function Dashboard() {
         ]
     };
 
-    const siteMetaById = useMemo(() => {
-        const map = {};
-        (sites || []).forEach((s, i) => {
-            const key = normalizeSiteIdKey(s.id);
-            if (!key) return;
-            map[key] = {
-                name: s.name,
-                color: SITE_COLORS[i % SITE_COLORS.length],
-            };
-        });
-        return map;
-    }, [sites]);
-
-    const barChartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            // We already render a custom legend (site chips) above for compare mode.
-            legend: { display: false },
-            tooltip: {
-                backgroundColor: '#1E293B',
-                titleColor: '#F8FAFC',
-                bodyColor: '#94A3B8',
-                padding: 12,
-                cornerRadius: 8,
-                displayColors: true,
-            },
-        },
-        scales: {
-            x: {
-                grid: {
-                    display: false,
-                },
-                ticks: {
-                    color: '#64748B',
-                },
-                categoryPercentage: 0.85,
-                barPercentage: 0.9,
-            },
-            y: {
-                grid: {
-                    color: 'rgba(148, 163, 184, 0.1)',
-                },
-                ticks: {
-                    color: '#64748B',
-                    callback: (value) => `${value}`,
-                },
-                beginAtZero: true,
-            },
-        },
-        elements: {
-            bar: {
-                borderRadius: 8,
-                borderSkipped: false,
-            },
-        },
-    };
-
-    const compareBarChartData = useMemo(() => {
-        if (!showSiteControls || viewMode !== 'compare') return null;
-        const selected = compareSiteIds || [];
-        const unique = Array.from(new Set(selected));
-        if (!unique.length) return null;
-
-        const labels = MONTHS;
-
-        const computeMonthlyTotalsForSite = (siteId) => {
-            const siteName = siteMetaById?.[siteId]?.name ?? siteId;
-            const color = siteMetaById?.[siteId]?.color ?? SITE_COLORS[0];
-            const scope1Totals = new Array(12).fill(0);
-            const scope2Totals = new Array(12).fill(0);
-
-            if (hasToken) {
-                apiEmissions
-                    .filter((e) => getApiSiteId(e) === siteId)
-                    .forEach((e) => {
-                        const activityDate = e.billingPeriodStart || e.calculatedAt;
-                        if (!activityDate) return;
-                        const d = new Date(activityDate);
-                        if (Number.isNaN(d.getTime())) return;
-                        const m = d.getMonth();
-                        if (m < 0 || m > 11) return;
-                        const emissionsT = kgToTonnes(e.co2e || 0);
-                        if (e.scope === 'SCOPE_1') scope1Totals[m] += emissionsT;
-                        if (e.scope === 'SCOPE_2') scope2Totals[m] += emissionsT;
-                    });
-            } else {
-                scope1Entries
-                    .filter((e) => e?.siteId === siteId)
-                    .forEach((e) => {
-                        if (!e?.date) return;
-                        const d = new Date(e.date);
-                        if (Number.isNaN(d.getTime())) return;
-                        const m = d.getMonth();
-                        if (m >= 0 && m <= 11) scope1Totals[m] += e.emissions || 0;
-                    });
-
-                scope2Entries
-                    .filter((e) => e?.siteId === siteId)
-                    .forEach((e) => {
-                        if (!e?.date) return;
-                        const d = new Date(e.date);
-                        if (Number.isNaN(d.getTime())) return;
-                        const m = d.getMonth();
-                        if (m >= 0 && m <= 11) scope2Totals[m] += e.emissions || 0;
-                    });
-            }
-
-            return {
-                siteId,
-                siteName,
-                color,
-                scope1Totals,
-                scope2Totals,
-            };
-        };
-
-        const perSite = unique.map((siteId) => computeMonthlyTotalsForSite(siteId));
-        const anySiteHasData = perSite.some((s) => s.scope1Totals.some((v) => v > 0) || s.scope2Totals.some((v) => v > 0));
-
-        // If backend doesn't return per-site identifiers, fall back to using all emissions totals for each selected site.
-        if (hasToken) {
-            const anySiteHasData = perSite.some(
-                (s) => s.scope1Totals.some((v) => v > 0) || s.scope2Totals.some((v) => v > 0)
-            );
-
-            if (!anySiteHasData && apiEmissions.length) {
-                const overallScope1 = new Array(12).fill(0);
-                const overallScope2 = new Array(12).fill(0);
-
-                apiEmissions.forEach((e) => {
-                    const activityDate = e.billingPeriodStart || e.calculatedAt;
-                    if (!activityDate) return;
-                    const d = new Date(activityDate);
-                    if (Number.isNaN(d.getTime())) return;
-                    const m = d.getMonth();
-                    if (m < 0 || m > 11) return;
-                    const emissionsT = kgToTonnes(e.co2e || 0);
-                    if (e.scope === 'SCOPE_1') overallScope1[m] += emissionsT;
-                    if (e.scope === 'SCOPE_2') overallScope2[m] += emissionsT;
-                });
-
-                const datasets = perSite.flatMap((s) => [
-                    {
-                        label: `${s.siteName} (Scope 1)`,
-                        data: overallScope1.map((v) => Math.round(v * 100) / 100),
-                        backgroundColor: `${s.color}CC`,
-                        borderColor: s.color,
-                        borderWidth: 1,
-                        barThickness: 14,
-                    },
-                    {
-                        label: `${s.siteName} (Scope 2)`,
-                        data: overallScope2.map((v) => Math.round(v * 100) / 100),
-                        backgroundColor: `${s.color}55`,
-                        borderColor: s.color,
-                        borderWidth: 1,
-                        barThickness: 14,
-                    },
-                ]);
-
-                return { labels, datasets };
-            }
-        }
-
-        // Compare view: grouped bars (Scope 1 and Scope 2 side-by-side) per site and month.
-        const datasets = perSite.flatMap((s) => [
-            {
-                label: `${s.siteName} (Scope 1)`,
-                data: s.scope1Totals.map((v) => Math.round(v * 100) / 100),
-                backgroundColor: `${s.color}CC`,
-                borderColor: s.color,
-                borderWidth: 1,
-                barThickness: 14,
-            },
-            {
-                label: `${s.siteName} (Scope 2)`,
-                data: s.scope2Totals.map((v) => Math.round(v * 100) / 100),
-                backgroundColor: `${s.color}55`,
-                borderColor: s.color,
-                borderWidth: 1,
-                barThickness: 14,
-            },
-        ]);
-
-        return { labels, datasets };
-    }, [
-        showSiteControls,
-        viewMode,
-        compareSiteIds,
-        siteMetaById,
-        hasToken,
-        apiEmissions,
-        scope1Entries,
-        scope2Entries,
-        getApiSiteId,
-    ]);
-
     const scope1Labels = Object.keys(scope1Breakdown);
     const scope1Values = Object.values(scope1Breakdown);
     const scope1Colors = ['#14B8A6', '#0D9488', '#0F766E', '#115E59', '#134E4A'].slice(0, Math.max(scope1Labels.length, 1));
@@ -926,179 +425,19 @@ function Dashboard() {
         });
     };
 
-    const activePerformanceSiteIds = useMemo(() => {
-        // Prefer the user-selected sites (when compare/single mode is used) to match expectations.
-        if (showSiteControls && viewMode === 'compare' && compareSiteIds?.length) {
-            return Array.from(new Set(compareSiteIds));
-        }
-        if (showSiteControls && viewMode === 'single' && selectedSiteId && selectedSiteId !== 'all') {
-            return [selectedSiteId];
-        }
-
-        if (sites?.length) return sites.map((s) => s.id);
-
-        // Fallback: derive from API records.
-        if (hasToken) {
-            const set = new Set();
-            apiEmissions.forEach((e) => set.add(getApiSiteId(e)));
-            return Array.from(set).filter(Boolean);
-        }
-
-        return [];
-    }, [showSiteControls, viewMode, compareSiteIds, selectedSiteId, sites, hasToken, apiEmissions]);
-
-    const sitePerformanceRows = useMemo(() => {
-        const ids = activePerformanceSiteIds || [];
-        if (!ids.length) return [];
-        const idSet = new Set(ids);
-
-        const totalsBySite = {};
-        ids.forEach((id) => {
-            totalsBySite[id] = { scope1: 0, scope2: 0 };
-        });
-
-        if (hasToken) {
-            apiEmissions.forEach((e) => {
-                const siteId = getApiSiteId(e);
-                if (!siteId || !idSet.has(siteId)) return;
-                const tonnes = kgToTonnes(e.co2e || 0);
-                if (e.scope === 'SCOPE_1') totalsBySite[siteId].scope1 += tonnes;
-                if (e.scope === 'SCOPE_2') totalsBySite[siteId].scope2 += tonnes;
-            });
-        } else {
-            scope1Entries.forEach((e) => {
-                if (!e?.siteId || !idSet.has(e.siteId)) return;
-                totalsBySite[e.siteId].scope1 += e.emissions || 0;
-            });
-            scope2Entries.forEach((e) => {
-                if (!e?.siteId || !idSet.has(e.siteId)) return;
-                totalsBySite[e.siteId].scope2 += e.emissions || 0;
-            });
-        }
-
-        const rows = ids.map((siteId) => {
-            const siteMeta = siteMetaById?.[siteId];
-            const scope1 = totalsBySite[siteId]?.scope1 ?? 0;
-            const scope2 = totalsBySite[siteId]?.scope2 ?? 0;
-            const total = scope1 + scope2;
-            return {
-                siteId,
-                siteName: siteMeta?.name ?? siteId,
-                color: siteMeta?.color ?? SITE_COLORS[0],
-                scope1,
-                scope2,
-                total,
-            };
-        });
-
-        return rows
-            .filter((r) => r.total > 0 || (showSiteControls && viewMode !== 'compare')) // keep some rows visible
-            .sort((a, b) => b.total - a.total);
-    }, [
-        activePerformanceSiteIds,
-        hasToken,
-        apiEmissions,
-        scope1Entries,
-        scope2Entries,
-        siteMetaById,
-        showSiteControls,
-        viewMode,
-    ]);
-
-    const sitePerformanceMax = useMemo(() => {
-        const max = Math.max(0, ...sitePerformanceRows.map((r) => r.total || 0));
-        return max || 1;
-    }, [sitePerformanceRows]);
-
-    // If backend rows don't include `siteName`, we can still show the correct
-    // name using the local (DataInput) entries stored in context for this session.
-    const localSiteNameById = useMemo(() => {
-        const map = {};
-        const add = (entry) => {
-            const sid = normalizeSiteIdKey(entry?.siteId);
-            const name = entry?.siteName;
-            if (!sid || !name) return;
-            map[sid] = name;
-        };
-
-        (scope1Entries || []).forEach(add);
-        (scope2Entries || []).forEach(add);
-        (activities || []).forEach(add);
-        return map;
-    }, [scope1Entries, scope2Entries, activities]);
-
-    const getSiteDisplayName = (entry) => {
-        const apiName = getApiSiteName(entry);
-        const apiSiteId = getApiSiteId(entry);
-        const localName =
-            apiSiteId
-                ? siteMetaById?.[apiSiteId]?.name ?? localSiteNameById?.[apiSiteId]
-                : null;
-        const directName = entry?.siteName;
-
-        const resolved =
-            directName ||
-            apiName ||
-            localName ||
-            null;
-
-        // If backend doesn't provide a name at all, but user is in single-site mode,
-        // show the selected site name (since rows should already be filtered).
-        if (!resolved && viewMode === 'single' && selectedSiteId && selectedSiteId !== 'all') {
-            return (
-                siteMetaById?.[normalizeSiteIdKey(selectedSiteId)]?.name ||
-                sites?.find((s) => normalizeSiteIdKey(s.id) === normalizeSiteIdKey(selectedSiteId))?.name ||
-                apiSiteId ||
-                '—'
-            );
-        }
-
-        return (resolved || apiSiteId || '—');
-    };
-
-    const selectedSiteNameForSingle =
-        viewMode === 'single' &&
-        selectedSiteId &&
-        selectedSiteId !== 'all'
-            ? (siteMetaById?.[normalizeSiteIdKey(selectedSiteId)]?.name ??
-                sites?.find((s) => normalizeSiteIdKey(s.id) === normalizeSiteIdKey(selectedSiteId))?.name ??
-                null)
-            : null;
-
-    const scope1TableRows = hasToken
-        ? scope1ListFiltered.slice(0, 5)
-        : demoFilteredScope1Entries.slice(0, 5);
-    const scope2TableRows = hasToken
-        ? scope2ListFiltered.slice(0, 5)
-        : demoFilteredScope2Entries.slice(0, 5);
-
-    const recentActivitiesRows = hasToken
-        ? apiEmissionsFilteredBySite.slice(0, 5).map((e) => {
-            const siteName =
-                getApiSiteName(e) ||
-                getSiteDisplayName(e);
-            return {
-                id: e.id,
-                source: e.activityType,
-                date: e.billingPeriodStart || e.calculatedAt,
-                type: e.scope === 'SCOPE_1' ? 'scope1' : e.scope === 'SCOPE_2' ? 'scope2' : 'scope3',
-                amount: kgToTonnes(e.co2e),
-                dataSource: e.dataSource || '—',
-                status: 'verified',
-                siteId: getApiSiteId(e) ?? null,
-                siteName: siteName || null,
-            };
-        })
-        : (demoSiteFilterIds == null
-            ? activities.slice(0, 5)
-            : activities
-                .filter((a) => {
-                    if (a?.siteId == null) return false;
-                    const set = new Set((demoSiteFilterIds || []).map(normalizeSiteIdKey).filter(Boolean));
-                    return set.has(normalizeSiteIdKey(a.siteId));
-                })
-                .slice(0, 5)
-        );
+    const scope1TableRows = hasToken && apiEmissions.length ? scope1List.slice(0, 5) : scope1Entries.slice(0, 5);
+    const scope2TableRows = hasToken && apiEmissions.length ? scope2List.slice(0, 5) : scope2Entries.slice(0, 5);
+    const recentActivitiesRows = hasToken && apiEmissions.length
+        ? apiEmissions.slice(0, 5).map((e) => ({
+            id: e.id,
+            source: e.activityType,
+            date: e.billingPeriodStart || e.calculatedAt,
+            type: e.scope === 'SCOPE_1' ? 'scope1' : e.scope === 'SCOPE_2' ? 'scope2' : 'scope3',
+            amount: kgToTonnes(e.co2e),
+            dataSource: e.dataSource || '—',
+            status: 'verified',
+        }))
+        : activities.slice(0, 5);
 
     return (
         <div className="dashboard-content">
@@ -1112,106 +451,6 @@ function Dashboard() {
                     <span className="dashboard-filter-label">{periodLabel} – {filterYear}</span>
                 )}
             </div>
-
-            {/* Demo-only: Single site vs multi-site compare */}
-            {showSiteControls && (
-                <div className="dashboard-site-compare-controls">
-                    <div className="dashboard-view-mode-bar" role="tablist" aria-label="Site view mode">
-                        <button
-                            type="button"
-                            className={`dashboard-view-mode-btn${viewMode === 'all' ? ' active' : ''}`}
-                            onClick={() => {
-                                setViewMode('all');
-                                setSelectedSiteId('all');
-                                setCompareSiteIds([]);
-                            }}
-                            role="tab"
-                            aria-selected={viewMode === 'all'}
-                        >
-                            All Sites
-                        </button>
-                        <button
-                            type="button"
-                            className={`dashboard-view-mode-btn${viewMode === 'single' ? ' active' : ''}`}
-                            onClick={() => setViewMode('single')}
-                            role="tab"
-                            aria-selected={viewMode === 'single'}
-                        >
-                            Single Site
-                        </button>
-                        <button
-                            type="button"
-                            className={`dashboard-view-mode-btn${viewMode === 'compare' ? ' active' : ''}`}
-                            onClick={() => setViewMode('compare')}
-                            role="tab"
-                            aria-selected={viewMode === 'compare'}
-                        >
-                            Compare Sites
-                        </button>
-                    </div>
-
-                    {viewMode === 'single' && (
-                        <div className="dashboard-site-selector-row">
-                            <span className="dashboard-site-selector-label">Site</span>
-                            <select
-                                className="dashboard-site-selector"
-                                value={selectedSiteId}
-                                onChange={(e) => setSelectedSiteId(e.target.value)}
-                                aria-label="Select site"
-                            >
-                                <option value="all">All Sites</option>
-                                {sites.map((s) => (
-                                    <option key={s.id} value={s.id}>{s.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-
-                    {viewMode === 'compare' && (
-                        <>
-                            <div className="dashboard-compare-chips">
-                                {sites.map((s) => {
-                                    const selected = compareSiteIds.includes(s.id);
-                                    const color = siteMetaById?.[s.id]?.color ?? SITE_COLORS[0];
-                                    return (
-                                        <button
-                                            key={s.id}
-                                            type="button"
-                                            className={`dashboard-compare-chip${selected ? ' selected' : ''}`}
-                                            style={{
-                                                borderColor: selected ? 'transparent' : color,
-                                                background: selected ? color : 'transparent',
-                                                color: selected ? '#fff' : '#334155',
-                                            }}
-                                            onClick={() => {
-                                                setCompareSiteIds((prev) => {
-                                                    const isSelected = prev.includes(s.id);
-                                                    if (isSelected) {
-                                                        // keep at least 2 selected when possible
-                                                        if (prev.length <= 2) return prev;
-                                                        return prev.filter((id) => id !== s.id);
-                                                    }
-                                                    if (prev.length >= 3) return prev;
-                                                    return [...prev, s.id];
-                                                });
-                                            }}
-                                            aria-pressed={selected}
-                                        >
-                                            <span className="dashboard-compare-chip-dot" style={{ background: selected ? '#fff' : color }} />
-                                            {s.name}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                            {compareSiteIds.length < 2 && (
-                                <div className="dashboard-compare-hint">
-                                    Select <strong>at least 2</strong> sites to compare.
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-            )}
 
             {/* Date Filter */}
             {hasToken && (
@@ -1393,46 +632,22 @@ function Dashboard() {
                 <div className="card chart-card trend-chart">
                     <div className="card-header">
                         <h2>
-                            <i className={`fas ${showSiteControls && viewMode === 'compare' ? 'fa-chart-bar' : 'fa-chart-line'}`}></i>
-                            {showSiteControls && viewMode === 'compare' ? 'Monthly Emissions Trend (Compare Sites)' : 'Monthly Emission Trend'}
+                            <i className="fas fa-chart-line"></i>
+                            Monthly Emission Trend
                         </h2>
-                        {showSiteControls && viewMode === 'compare' ? (
-                            <div className="chart-legend-inline">
-                                {Array.from(new Set(compareSiteIds)).map((siteId) => (
-                                    <div key={siteId} className="legend-item">
-                                        <span
-                                            className="legend-color"
-                                            style={{ background: siteMetaById?.[siteId]?.color ?? SITE_COLORS[0] }}
-                                        ></span>
-                                        <span>{siteMetaById?.[siteId]?.name ?? siteId}</span>
-                                    </div>
-                                ))}
+                        <div className="chart-legend-inline">
+                            <div className="legend-item">
+                                <span className="legend-color scope1-color"></span>
+                                <span>Scope 1</span>
                             </div>
-                        ) : (
-                            <div className="chart-legend-inline">
-                                <div className="legend-item">
-                                    <span className="legend-color scope1-color"></span>
-                                    <span>Scope 1</span>
-                                </div>
-                                <div className="legend-item">
-                                    <span className="legend-color scope2-color"></span>
-                                    <span>Scope 2</span>
-                                </div>
+                            <div className="legend-item">
+                                <span className="legend-color scope2-color"></span>
+                                <span>Scope 2</span>
                             </div>
-                        )}
+                        </div>
                     </div>
                     <div className="chart-container">
-                        {showSiteControls && viewMode === 'compare' ? (
-                            compareBarChartData ? (
-                                <Bar data={compareBarChartData} options={barChartOptions} />
-                            ) : (
-                                <div className="dashboard-chart-empty">
-                                    Select 2–3 sites to compare.
-                                </div>
-                            )
-                        ) : (
-                            <Line data={lineChartData} options={lineChartOptions} />
-                        )}
+                        <Line data={lineChartData} options={lineChartOptions} />
                     </div>
                 </div>
 
@@ -1483,39 +698,6 @@ function Dashboard() {
                 </div>
             </div>
 
-            {/* Site Performance */}
-            <div className="card site-performance-card">
-                <div className="card-header">
-                    <h2>
-                        <i className="fas fa-chart-bar"></i>
-                        Site Performance
-                    </h2>
-                    <span className="site-performance-sub">Total tCO2e</span>
-                </div>
-                <div className="site-performance-body">
-                    {sitePerformanceRows.length ? (
-                        sitePerformanceRows.map((r, idx) => {
-                            const pct = (r.total / sitePerformanceMax) * 100;
-                            return (
-                                <div key={r.siteId} className="site-perf-row">
-                                    <div className={`site-perf-rank${idx === 0 ? ' first' : ''}`}>{idx + 1}</div>
-                                    <div className="site-perf-site">{r.siteName}</div>
-                                    <div className="site-perf-bar-wrap">
-                                        <div
-                                            className="site-perf-bar"
-                                            style={{ width: `${pct}%`, background: r.color }}
-                                        />
-                                    </div>
-                                    <div className="site-perf-val">{formatNumber(r.total)} t</div>
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <div className="site-performance-empty">No site performance data available.</div>
-                    )}
-                </div>
-            </div>
-
             {/* Detailed Sections */}
             <div className="detailed-sections">
                 {/* Scope 1 Details */}
@@ -1558,7 +740,6 @@ function Dashboard() {
                                     <th>Amount</th>
                                     <th>Emissions</th>
                                     <th>Data source</th>
-                                    {showSiteColumn && <th>Site</th>}
                                     <th>Status</th>
                                     {hasToken && <th className="th-actions">Actions</th>}
                                 </tr>
@@ -1598,23 +779,6 @@ function Dashboard() {
                                                 {formatNumber(emissions)} tCO₂e
                                             </td>
                                             <td><span className="source-badge">{dataSource}</span></td>
-                                            {showSiteColumn && (
-                                                <td>
-                                                    <span className="site-pill">
-                                                        <span
-                                                            className="site-pill-dot"
-                                                            style={{
-                                                                background:
-                                                                    siteMetaById?.[getApiSiteId(entry)]?.color ??
-                                                                    SITE_COLORS[0],
-                                                            }}
-                                                        />
-                                                    <span className="site-pill-text">
-                                                        {selectedSiteNameForSingle ?? getSiteDisplayName(entry)}
-                                                    </span>
-                                                    </span>
-                                                </td>
-                                            )}
                                             <td>
                                                 <span className="status-badge verified">verified</span>
                                             </td>
@@ -1640,8 +804,8 @@ function Dashboard() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={hasToken ? 2 : 4}><strong>Total Scope 1</strong></td>
-                                    <td colSpan={hasToken ? 4 : 2}><strong>{formatNumber(scope1Total)} tCO₂e</strong></td>
+                                    <td colSpan={hasToken ? 2 : 1}><strong>Total Scope 1</strong></td>
+                                    <td colSpan={hasToken ? 4 : 3}><strong>{formatNumber(scope1Total)} tCO₂e</strong></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1688,7 +852,6 @@ function Dashboard() {
                                     <th>Amount</th>
                                     <th>Emissions</th>
                                     <th>Data source</th>
-                                    {showSiteColumn && <th>Site</th>}
                                     <th>Status</th>
                                     {hasToken && <th className="th-actions">Actions</th>}
                                 </tr>
@@ -1728,23 +891,6 @@ function Dashboard() {
                                                 {formatNumber(emissions)} tCO₂e
                                             </td>
                                             <td><span className="source-badge">{dataSource}</span></td>
-                                            {showSiteColumn && (
-                                                <td>
-                                                    <span className="site-pill">
-                                                        <span
-                                                            className="site-pill-dot"
-                                                            style={{
-                                                                background:
-                                                                    siteMetaById?.[getApiSiteId(entry)]?.color ??
-                                                                    SITE_COLORS[0],
-                                                            }}
-                                                        />
-                                                    <span className="site-pill-text">
-                                                        {selectedSiteNameForSingle ?? getSiteDisplayName(entry)}
-                                                    </span>
-                                                    </span>
-                                                </td>
-                                            )}
                                             <td>
                                                 <span className="status-badge verified">verified</span>
                                             </td>
@@ -1770,8 +916,8 @@ function Dashboard() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={hasToken ? 2 : 4}><strong>Total Scope 2</strong></td>
-                                    <td colSpan={hasToken ? 4 : 2}><strong>{formatNumber(scope2Total)} tCO₂e</strong></td>
+                                    <td colSpan={hasToken ? 2 : 1}><strong>Total Scope 2</strong></td>
+                                    <td colSpan={hasToken ? 4 : 3}><strong>{formatNumber(scope2Total)} tCO₂e</strong></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1816,7 +962,6 @@ function Dashboard() {
                                 <th>Type</th>
                                 <th>Emissions</th>
                                 <th>Data source</th>
-                                {showSiteColumn && <th>Site</th>}
                                 <th>Status</th>
                                 {hasToken && <th className="th-actions">Actions</th>}
                             </tr>
@@ -1845,19 +990,6 @@ function Dashboard() {
                                     </td>
                                     <td>{formatNumber(activity.amount)} tCO₂e</td>
                                     <td><span className="source-badge">{activity.dataSource || '—'}</span></td>
-                                    {showSiteColumn && (
-                                        <td>
-                                            <span className="site-pill">
-                                                <span
-                                                    className="site-pill-dot"
-                                                    style={{ background: siteMetaById?.[activity.siteId]?.color ?? SITE_COLORS[0] }}
-                                                />
-                                            <span className="site-pill-text">
-                                                {selectedSiteNameForSingle ?? activity.siteName ?? activity.siteId ?? '—'}
-                                            </span>
-                                            </span>
-                                        </td>
-                                    )}
                                     <td>
                                         <span className="status-badge verified">verified</span>
                                     </td>

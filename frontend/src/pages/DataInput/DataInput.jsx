@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDataStore } from '../../context/DataStoreContext';
-import { uploadReceiptAndExtract, uploadReceiptsMultiple, processDocument, submitReceiptExtraction, submitReceiptBatch, submitManualEmission, getAuthToken } from '../../api/client.js';
+import { uploadReceiptAndExtract, uploadReceiptsMultiple, processDocument, submitReceiptExtraction, submitReceiptBatch, submitManualEmission, getAuthToken, getEmissions, deleteEmission, deleteEmissionsBulk } from '../../api/client.js';
 import { isAdministrator } from '../../utils/roles';
 import './DataInput.css';
+import '../Dashboard/Dashboard.css';
 
 // Upload limits (must match backend: MAX_FILE_SIZE, uploadMultiple.files)
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -142,6 +143,8 @@ function removeSiteActivity(orgKey, siteId) {
         localStorage.setItem(key, JSON.stringify(data));
     }
 }
+
+const kgToTonnes = (kg) => (kg == null ? 0 : kg / 1000);
 
 const FUEL_ACTIVITY_TYPES = ['diesel', 'petrol', 'gasoline', 'natural_gas', 'natural-gas', 'lpg', 'biodiesel'];
 const isFuelActivity = (activityType) =>
@@ -474,7 +477,132 @@ function DataInput() {
     const [submittingBatchId, setSubmittingBatchId] = useState(null);
     const [submittingAll, setSubmittingAll] = useState(false);
     const [submittingManual, setSubmittingManual] = useState(false);
+    const hasToken = Boolean(getAuthToken());
+    const [diEmissions, setDiEmissions] = useState([]);
+    const [diEmissionsLoading, setDiEmissionsLoading] = useState(false);
+    const [diEmissionsError, setDiEmissionsError] = useState(null);
+    const [diDeletingId, setDiDeletingId] = useState(null);
+    const [diSelectedEmissionIds, setDiSelectedEmissionIds] = useState([]);
+    const [diDeleteError, setDiDeleteError] = useState(null);
     const canManageSites = isAdministrator(user?.role);
+
+    useEffect(() => {
+        if (!hasToken || selectedSiteId === 'all' || !currentSite) {
+            setDiEmissions([]);
+            setDiEmissionsError(null);
+            setDiEmissionsLoading(false);
+            return;
+        }
+        let cancelled = false;
+        setDiEmissionsLoading(true);
+        setDiEmissionsError(null);
+        const startStr = `${reportingYear}-01-01`;
+        const endStr = `${reportingYear}-12-31`;
+        getEmissions({ startDate: startStr, endDate: endStr, limit: '100' })
+            .then(({ data }) => {
+                if (cancelled) return;
+                const list = data || [];
+                const filtered = list.filter((e) => e.siteId == null || e.siteId === selectedSiteId);
+                setDiEmissions(filtered);
+            })
+            .catch((err) => {
+                if (!cancelled) setDiEmissionsError(err?.message || 'Failed to load submissions');
+            })
+            .finally(() => {
+                if (!cancelled) setDiEmissionsLoading(false);
+            });
+        return () => { cancelled = true; };
+    }, [hasToken, reportingYear, selectedSiteId, currentSite, activityTick]);
+
+    const sortedDiEmissions = useMemo(() => {
+        const list = [...diEmissions];
+        list.sort((a, b) => {
+            const da = new Date(a.billingPeriodStart || a.calculatedAt).getTime();
+            const db = new Date(b.billingPeriodStart || b.calculatedAt).getTime();
+            return db - da;
+        });
+        return list;
+    }, [diEmissions]);
+
+    const diRecentActivitiesRows = useMemo(
+        () => sortedDiEmissions.slice(0, 5).map((e) => ({
+            id: e.id,
+            source: e.activityType,
+            date: e.billingPeriodStart || e.calculatedAt,
+            type: e.scope === 'SCOPE_1' ? 'scope1' : e.scope === 'SCOPE_2' ? 'scope2' : 'scope3',
+            amount: kgToTonnes(e.co2e),
+            dataSource: e.dataSource || '—',
+        })),
+        [sortedDiEmissions]
+    );
+
+    const diReceiptRows = useMemo(
+        () => sortedDiEmissions
+            .filter((e) => Boolean(e.documentId || e.document?.id))
+            .slice(0, 10)
+            .map((e) => ({
+                id: e.id,
+                fileName: e.document?.fileName || 'Receipt',
+                source: e.activityType,
+                date: e.billingPeriodStart || e.calculatedAt,
+                type: e.scope === 'SCOPE_1' ? 'scope1' : e.scope === 'SCOPE_2' ? 'scope2' : 'scope3',
+                amount: kgToTonnes(e.co2e),
+                dataSource: e.dataSource || '—',
+            })),
+        [sortedDiEmissions]
+    );
+
+    const diFormatNumber = (num) => {
+        if (num == null || Number.isNaN(num)) return '0';
+        return Number(num).toLocaleString('en-US', { maximumFractionDigits: 2 });
+    };
+
+    const diFormatDate = (dateStr) => {
+        if (!dateStr) return '—';
+        const d = new Date(dateStr);
+        if (Number.isNaN(d.getTime())) return '—';
+        return d.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+        });
+    };
+
+    const handleDiDeleteEmission = async (emissionId) => {
+        if (!emissionId || !hasToken) return;
+        setDiDeleteError(null);
+        setDiDeletingId(emissionId);
+        try {
+            await deleteEmission(emissionId);
+            setDiSelectedEmissionIds((prev) => prev.filter((id) => id !== emissionId));
+            setActivityTick((t) => t + 1);
+        } catch (err) {
+            setDiDeleteError(err?.message || 'Failed to delete');
+        } finally {
+            setDiDeletingId(null);
+        }
+    };
+
+    const toggleDiEmissionSelected = (emissionId) => {
+        setDiSelectedEmissionIds((prev) =>
+            prev.includes(emissionId) ? prev.filter((id) => id !== emissionId) : [...prev, emissionId]
+        );
+    };
+
+    const handleDiBulkDelete = async () => {
+        if (!hasToken || !diSelectedEmissionIds.length) return;
+        setDiDeleteError(null);
+        setDiDeletingId('bulk');
+        try {
+            await deleteEmissionsBulk(diSelectedEmissionIds);
+            setDiSelectedEmissionIds([]);
+            setActivityTick((t) => t + 1);
+        } catch (err) {
+            setDiDeleteError(err?.message || 'Failed to delete selected records');
+        } finally {
+            setDiDeletingId(null);
+        }
+    };
 
     const dateFromExtraction = (fields) =>
         fields?.billingPeriodStart || fields?.documentDate || fields?.billingPeriodEnd || '';
@@ -1516,6 +1644,220 @@ function DataInput() {
                     </ul>
                 </div>
             </aside>
+            </div>
+
+            <div className="di-recent-sections">
+                {diDeleteError && (
+                    <div className="di-delete-error-banner" role="alert">
+                        <i className="fas fa-exclamation-circle" />
+                        <span>{diDeleteError}</span>
+                        <button type="button" className="di-delete-error-dismiss" onClick={() => setDiDeleteError(null)} aria-label="Dismiss">
+                            &times;
+                        </button>
+                    </div>
+                )}
+                {!hasToken && (
+                    <p className="di-recent-hint">Log in to view and delete saved emissions for {siteNameDisplay} ({reportingYear}).</p>
+                )}
+                {hasToken && diEmissionsLoading && (
+                    <p className="di-recent-hint"><i className="fas fa-spinner fa-spin" /> Loading recent submissions…</p>
+                )}
+                {hasToken && !diEmissionsLoading && diEmissionsError && (
+                    <p className="di-recent-error">{diEmissionsError}</p>
+                )}
+                {hasToken && !diEmissionsLoading && !diEmissionsError && (
+                    <>
+                        <div className="card facility-card di-recent-card">
+                            <div className="card-header">
+                                <h2>
+                                    <i className="fas fa-history" />
+                                    Recent Activities
+                                </h2>
+                            </div>
+                            <div className="facility-table-wrapper">
+                                <table className="facility-table">
+                                    <thead>
+                                        <tr>
+                                            {hasToken && (
+                                                <th style={{ width: '2.5rem' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        aria-label="Select all recent activity rows"
+                                                        checked={
+                                                            diRecentActivitiesRows.length > 0 &&
+                                                            diRecentActivitiesRows.every((activity) => activity.id && diSelectedEmissionIds.includes(activity.id))
+                                                        }
+                                                        onChange={(ev) => {
+                                                            if (ev.target.checked) {
+                                                                const ids = diRecentActivitiesRows.map((a) => a.id).filter(Boolean);
+                                                                setDiSelectedEmissionIds((prev) => Array.from(new Set([...prev, ...ids])));
+                                                            } else {
+                                                                setDiSelectedEmissionIds((prev) =>
+                                                                    prev.filter((id) => !diRecentActivitiesRows.some((a) => a.id === id))
+                                                                );
+                                                            }
+                                                        }}
+                                                    />
+                                                </th>
+                                            )}
+                                            <th>Source</th>
+                                            <th>Date</th>
+                                            <th>Type</th>
+                                            <th>Emissions</th>
+                                            <th>Data source</th>
+                                            <th>Status</th>
+                                            {hasToken && <th className="th-actions">Actions</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {diRecentActivitiesRows.length === 0 && (
+                                            <tr>
+                                                <td colSpan={hasToken ? 8 : 6} className="di-recent-empty-cell">
+                                                    No saved emissions for this site in {reportingYear} yet.
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {diRecentActivitiesRows.map((activity, index) => (
+                                            <tr key={activity.id || index}>
+                                                {hasToken && (
+                                                    <td>
+                                                        {activity.id && (
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={diSelectedEmissionIds.includes(activity.id)}
+                                                                onChange={() => toggleDiEmissionSelected(activity.id)}
+                                                                aria-label="Select this emission"
+                                                            />
+                                                        )}
+                                                    </td>
+                                                )}
+                                                <td>{activity.source}</td>
+                                                <td>{activity.date ? diFormatDate(activity.date) : '—'}</td>
+                                                <td>
+                                                    <span className={`type-badge ${activity.type}`}>
+                                                        {activity.type === 'scope1' ? 'Scope 1' : activity.type === 'scope2' ? 'Scope 2' : 'Scope 3'}
+                                                    </span>
+                                                </td>
+                                                <td>{diFormatNumber(activity.amount)} tCO₂e</td>
+                                                <td><span className="source-badge">{activity.dataSource || '—'}</span></td>
+                                                <td>
+                                                    <span className="status-badge verified">verified</span>
+                                                </td>
+                                                {hasToken && (
+                                                    <td className="td-actions">
+                                                        {activity.id ? (
+                                                            <button
+                                                                type="button"
+                                                                className="btn-icon btn-delete"
+                                                                onClick={() => handleDiDeleteEmission(activity.id)}
+                                                                disabled={diDeletingId === activity.id}
+                                                                title="Delete this record"
+                                                                aria-label="Delete"
+                                                            >
+                                                                {diDeletingId === activity.id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash-alt" />}
+                                                            </button>
+                                                        ) : null}
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {hasToken && (
+                            <div className="dashboard-bulk-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-danger"
+                                    disabled={!diSelectedEmissionIds.length || diDeletingId === 'bulk'}
+                                    onClick={handleDiBulkDelete}
+                                    title={diSelectedEmissionIds.length ? `Delete ${diSelectedEmissionIds.length} selected record(s)` : 'Select records to enable'}
+                                >
+                                    {diDeletingId === 'bulk' ? (
+                                        <>
+                                            <i className="fas fa-spinner fa-spin" /> Deleting…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="fas fa-trash-alt" /> Delete selected
+                                        </>
+                                    )}
+                                </button>
+                                {diSelectedEmissionIds.length > 0 && (
+                                    <span className="dashboard-bulk-count">
+                                        {diSelectedEmissionIds.length} selected
+                                    </span>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="card facility-card di-recent-card">
+                            <div className="card-header">
+                                <h2>
+                                    <i className="fas fa-receipt" />
+                                    Recently uploaded receipts
+                                </h2>
+                            </div>
+                            <p className="di-recent-card-sub">Emissions created from receipt or document upload; delete a row to remove that saved emission.</p>
+                            <div className="facility-table-wrapper">
+                                <table className="facility-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Receipt file</th>
+                                            <th>Source</th>
+                                            <th>Date</th>
+                                            <th>Type</th>
+                                            <th>Emissions</th>
+                                            <th>Data source</th>
+                                            {hasToken && <th className="th-actions">Actions</th>}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {diReceiptRows.length === 0 && (
+                                            <tr>
+                                                <td colSpan={hasToken ? 7 : 6} className="di-recent-empty-cell">
+                                                    No receipt-based emissions for this site in {reportingYear} yet.
+                                                </td>
+                                            </tr>
+                                        )}
+                                        {diReceiptRows.map((row, index) => (
+                                            <tr key={row.id || index}>
+                                                <td><span className="source-badge" title={row.fileName}>{row.fileName}</span></td>
+                                                <td>{row.source}</td>
+                                                <td>{row.date ? diFormatDate(row.date) : '—'}</td>
+                                                <td>
+                                                    <span className={`type-badge ${row.type}`}>
+                                                        {row.type === 'scope1' ? 'Scope 1' : row.type === 'scope2' ? 'Scope 2' : 'Scope 3'}
+                                                    </span>
+                                                </td>
+                                                <td>{diFormatNumber(row.amount)} tCO₂e</td>
+                                                <td><span className="source-badge">{row.dataSource || '—'}</span></td>
+                                                {hasToken && (
+                                                    <td className="td-actions">
+                                                        {row.id ? (
+                                                            <button
+                                                                type="button"
+                                                                className="btn-icon btn-delete"
+                                                                onClick={() => handleDiDeleteEmission(row.id)}
+                                                                disabled={diDeletingId === row.id}
+                                                                title="Delete this record"
+                                                                aria-label="Delete"
+                                                            >
+                                                                {diDeletingId === row.id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash-alt" />}
+                                                            </button>
+                                                        ) : null}
+                                                    </td>
+                                                )}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </>
+                )}
             </div>
             </>
             )}
