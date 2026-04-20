@@ -279,6 +279,23 @@
     cursor: pointer;
 }
 
+.header-language-select {
+    height: 34px;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--border-radius-sm);
+    background: #F8FAFC;
+    color: #1E293B;
+    padding: 0 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.header-language-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
 .date-display {
     font-size: 14px;
     color: var(--text-secondary);
@@ -724,4 +741,31 @@
     .profile-chevron {
         display: none;
     }
+}
+
+/* RTL support */
+[dir="rtl"] .sidebar {
+    left: auto;
+    right: 0;
+    border-right: none;
+    border-left: 1px solid var(--border-color);
+}
+
+[dir="rtl"] .main-content {
+    margin-left: 0;
+    margin-right: var(--sidebar-width);
+}
+
+[dir="rtl"] .search-box i {
+    left: auto;
+    right: 12px;
+}
+
+[dir="rtl"] .search-box input {
+    padding: 10px 38px 10px 12px;
+}
+
+[dir="rtl"] .dropdown-menu {
+    right: auto;
+    left: 0;
 }

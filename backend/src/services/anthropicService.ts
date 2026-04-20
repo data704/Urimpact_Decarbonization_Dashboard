@@ -59,6 +59,23 @@ export interface ReportCalculationInput {
   };
 }
 
+/** Supported output languages for AI report text */
+export type ReportLanguage = 'en' | 'ar';
+
+/** Normalize client-provided language to en | ar */
+export function normalizeReportLanguage(input: unknown): ReportLanguage {
+  const s = String(input ?? '').trim().toLowerCase();
+  if (s === 'ar' || s.startsWith('ar-')) return 'ar';
+  return 'en';
+}
+
+function reportOutputLanguageBlock(lang: ReportLanguage): string {
+  if (lang === 'ar') {
+    return `OUTPUT LANGUAGE: Modern Standard Arabic (العربية الفصحى). Write every user-facing string in Arabic only. Use Western digits (0-9) for numbers. You may keep standard unit symbols such as tCO₂e, CO₂e, kWh, or Latin technical tokens (e.g. R_total, LAR_req, SCOPE_1) when no natural Arabic equivalent is customary. Do not include English sentences in the final output.`;
+  }
+  return `OUTPUT LANGUAGE: English. Write all user-facing narrative text in clear professional English.`;
+}
+
 /** Structured report calculations returned by Claude for frontend Reports section */
 export interface ReportCalculationResult {
   summary?: string;
@@ -479,9 +496,13 @@ Rules:
  * Used by the frontend Reports section
  */
 export async function generateReportCalculations(
-  input: ReportCalculationInput
+  input: ReportCalculationInput,
+  language: ReportLanguage = 'en'
 ): Promise<ReportCalculationResult> {
+  const lang = language;
   const prompt = `You are a decarbonisation and carbon reporting expert. Given the following client configuration and emissions summary, produce a structured report analysis that will be used in a frontend Reports section.
+
+${reportOutputLanguageBlock(lang)}
 
 Client configuration:
 ${JSON.stringify(input.clientConfig, null, 2)}
@@ -528,15 +549,18 @@ const GLOBAL_NARRATIVE_INSTRUCTION = `URIMPACT DECARBONISATION REPORT — NARRAT
 - You are given computed variables from a deterministic calculation engine.
 - Do NOT calculate anything. Do NOT invent numbers, percentages, dates, or assumptions.
 - Refer ONLY to the values provided in each section's bindings.
-- If a value is missing, write "Not provided."
+- If a value is missing, write "Not provided." in the OUTPUT LANGUAGE (Arabic: «غير متوفر» or equivalent).
 - Tone: institutional, audit-safe, reduction-first, non-promotional.
 - Output must be plain text only. No markdown tables, no markdown headers.
 - Keep strictly within the requested length for each section.`;
 
 type SectionBindings = Record<string, unknown>;
 
-function buildSectionPrompt(slot_id: string, bindings: SectionBindings): string {
+function buildSectionPrompt(slot_id: string, bindings: SectionBindings, lang: ReportLanguage): string {
   const b = JSON.stringify(bindings);
+  const notProvidedAr = 'أخرج بالضبط: لم يُدرج سيناريو الوضع كما هو اعتياديًا (BAU) في هذا القسم.';
+  const bauDisabledLine =
+    lang === 'ar' ? notProvidedAr : 'Output exactly: "BAU scenario not included."';
   const prompts: Record<string, string> = {
     'exec.narrative': `Write 2–3 sentences summarising: (1) the baseline emissions and the absolute target-year reduction outcome, (2) the required annual reduction pace, (3) that the removal obligation addresses the structural residual only and does not substitute reductions. Data: ${b}`,
 
@@ -546,7 +570,7 @@ function buildSectionPrompt(slot_id: string, bindings: SectionBindings): string 
 
     'pathway.caption': `Write 80–110 words explaining: (1) the total reduction commitment and timeframe (base year to target year), (2) that the linear pathway is a planning simplification rather than a performance guarantee, (3) the required annual pace as a governance signal. Data: ${b}`,
 
-    'bau.caption': `${(bindings as {bau_enabled?: boolean}).bau_enabled ? `Write exactly 2 sentences: (1) explain the BAU comparator scenario and what it represents, (2) describe the difference in outcome at target year versus the intervention target. Do not use forecasting certainty language.` : `Output exactly: "BAU scenario not included."`} Data: ${b}`,
+    'bau.caption': `${(bindings as {bau_enabled?: boolean}).bau_enabled ? `Write exactly 2 sentences: (1) explain the BAU comparator scenario and what it represents, (2) describe the difference in outcome at target year versus the intervention target. Do not use forecasting certainty language.` : bauDisabledLine} Data: ${b}`,
 
     'residual.caption': `Write 90–130 words explaining: (1) what structural residual emissions are and why they persist after structural interventions (hard-to-abate), (2) that the residual ceiling is policy-defined and tied to the chosen ambition tier, (3) that the removal obligation addresses the residual only and does not substitute emission reductions. Data: ${b}`,
 
@@ -587,7 +611,8 @@ export interface SectionNarrativeOutput {
  * Returns an array of { slot_id, text } — never throws; returns empty strings on any error.
  */
 async function callClaudeForSectionBatch(
-  batch: SectionNarrativeInput[]
+  batch: SectionNarrativeInput[],
+  language: ReportLanguage
 ): Promise<SectionNarrativeOutput[]> {
   const empty = batch.map((s) => ({ slot_id: s.slot_id, text: '' }));
   if (batch.length === 0) return empty;
@@ -595,10 +620,12 @@ async function callClaudeForSectionBatch(
   const numbered = batch.map((s, i) => ({
     idx: i + 1,
     slot_id: s.slot_id,
-    instruction: buildSectionPrompt(s.slot_id, s.bindings),
+    instruction: buildSectionPrompt(s.slot_id, s.bindings, language),
   }));
 
   const prompt = `${GLOBAL_NARRATIVE_INSTRUCTION}
+
+${reportOutputLanguageBlock(language)}
 
 Generate narrative text for each section listed below.
 Return ONLY a valid JSON array. Each element: { "slot_id": "...", "text": "..." }
@@ -636,12 +663,15 @@ Return only the JSON array.`;
  * This function never throws — it returns empty strings on any failure.
  */
 export async function generateSectionNarratives(
-  sections: SectionNarrativeInput[]
+  sections: SectionNarrativeInput[],
+  language: ReportLanguage = 'en'
 ): Promise<SectionNarrativeOutput[]> {
   if (!config.anthropic.apiKey || sections.length === 0) {
     logger.warn('Section narratives: skipped (no API key or empty sections)');
     return sections.map((s) => ({ slot_id: s.slot_id, text: '' }));
   }
+
+  const lang = language;
 
   // Split into batches of 3 to keep each prompt small and avoid response truncation
   const BATCH_SIZE = 3;
@@ -651,7 +681,7 @@ export async function generateSectionNarratives(
   }
 
   // Process all batches in parallel (each batch is an independent Claude call)
-  const results = await Promise.all(batches.map((batch) => callClaudeForSectionBatch(batch)));
+  const results = await Promise.all(batches.map((batch) => callClaudeForSectionBatch(batch, lang)));
 
   // Flatten and return
   return results.flat();

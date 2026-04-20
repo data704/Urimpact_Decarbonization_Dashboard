@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import './UserManagement.css';
@@ -32,6 +33,7 @@ function roleLabel(role) {
 }
 
 function UserManagement() {
+    const { t } = useTranslation();
     const { user: currentUser } = useAuth();
     const [notification, setNotification] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
@@ -182,11 +184,11 @@ function UserManagement() {
 
             <div className="page-header">
                 <div>
-                    <h1>User Management</h1>
-                    <p>Manage team members and their permissions. New users sign in with limited access by role.</p>
+                    <h1>{t('userManagement.title')}</h1>
+                    <p>{t('userManagement.subtitle')}</p>
                     {organizationLimit != null && (
                         <p className="user-limit-hint">
-                            Organization limit: {organizationLimit.userCount} / {organizationLimit.maxUsers} users
+                            {t('userManagement.orgLimit', { current: organizationLimit.userCount, max: organizationLimit.maxUsers })}
                         </p>
                     )}
                 </div>
@@ -194,10 +196,10 @@ function UserManagement() {
                     className="btn btn-primary"
                     onClick={() => setCreateOpen(true)}
                     disabled={atUserLimit}
-                    title={atUserLimit ? `Your organization has reached the maximum of ${organizationLimit?.maxUsers ?? 3} users.` : ''}
+                    title={atUserLimit ? t('userManagement.atLimitTitle', { max: organizationLimit?.maxUsers ?? 3 }) : ''}
                 >
                     <i className="fas fa-user-plus"></i>
-                    Add User
+                    {t('userManagement.addUser')}
                 </button>
             </div>
 

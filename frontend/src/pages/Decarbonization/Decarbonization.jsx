@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -13,13 +14,6 @@ import { getAuthToken, getDashboard } from '../../api/client';
 import './Decarbonization.css';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip);
-
-const AMBITION_OPTIONS = [
-    { value: '', label: 'Select ambition level' },
-    { value: 'MODERATE_50', label: 'Moderate (50% reduction)' },
-    { value: 'HIGH_75',     label: 'High (75% reduction)' },
-    { value: 'NEARZERO_90', label: 'Near-Zero (90% reduction)' }
-];
 
 const AMBITION_TIERS = {
     MODERATE_50: { R_total: 0.50, StructuralResidual: 0.15, label: 'Moderate (50%)' },
@@ -44,6 +38,14 @@ const DECARB_CONFIG_KEY = 'urimpact_decarbonization_config';
 const generateTreeCount = () => Math.floor(Math.random() * (6000 - 3000 + 1)) + 3000;
 
 function Decarbonization() {
+    const { t, i18n } = useTranslation();
+    const dateLocale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+    const ambitionOptions = useMemo(() => [
+        { value: '', label: t('decarb.ambitionPlaceholder') },
+        { value: 'MODERATE_50', label: t('decarb.ambitionModerate') },
+        { value: 'HIGH_75', label: t('decarb.ambitionHigh') },
+        { value: 'NEARZERO_90', label: t('decarb.ambitionNearZero') },
+    ], [t, i18n.language]);
     const { getTotalEmissions, scope1Entries, scope2Entries } = useDataStore();
     const [apiDashboard, setApiDashboard] = useState(null);
     const [apiLoading, setApiLoading] = useState(false);
@@ -163,18 +165,18 @@ function Decarbonization() {
         const current = Number(totalEmissions) || 0;
         const projected = Number(netEmissions) || 0;
         return {
-            labels: ['Removal Obligation', 'Projected Net'],
+            labels: [t('decarb.removalObligation'), t('decarb.projectedNet')],
             datasets: [{
-                label: 'tCO₂e',
+                label: t('decarb.chartTonnes'),
                 data: [current, projected],
                 backgroundColor: ['#0F172A', '#14B8A6'],
                 borderRadius: 6,
                 barThickness: 60,
             }],
         };
-    }, [totalEmissions, netEmissions]);
+    }, [totalEmissions, netEmissions, t, i18n.language]);
 
-    const formatNumber = (num) => num.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    const formatNumber = (num) => num.toLocaleString(dateLocale, { maximumFractionDigits: 2 });
 
     const handleProjectChange = (e) => {
         const projectId = e.target.value;
@@ -268,12 +270,12 @@ function Decarbonization() {
             {/* Page Header */}
             <div className="page-header decarb-page-header">
                 <div className="page-header-text">
-                    <h1 className="decarb-main-title">Decarbonization scenario</h1>
-                    <p className="decarb-main-subtitle">See how planting trees offsets your residual emissions (post-pathway). Baseline uses report residual from your ambition level.</p>
+                    <h1 className="decarb-main-title">{t('decarb.title')}</h1>
+                    <p className="decarb-main-subtitle">{t('decarb.mainSubtitle')}</p>
                 </div>
                 <div className="decarb-header-actions">
                     <div className="decarb-year-filter">
-                        <label htmlFor="decarb-baseline-year">Baseline Year</label>
+                        <label htmlFor="decarb-baseline-year">{t('decarb.baselineYear')}</label>
                         <select
                             id="decarb-baseline-year"
                             value={baselineYear}
@@ -290,7 +292,7 @@ function Decarbonization() {
                         onClick={() => setConfigModalOpen(true)}
                     >
                         <i className="fas fa-sliders-h"></i>
-                        Inputs & Constraints
+                        {t('decarb.inputsButton')}
                     </button>
                 </div>
             </div>
@@ -306,12 +308,12 @@ function Decarbonization() {
                 >
                     <div className="config-modal" onClick={(e) => e.stopPropagation()}>
                         <div className="config-modal-header">
-                            <h2 id="config-modal-title">Inputs & Constraints</h2>
+                            <h2 id="config-modal-title">{t('decarb.configModalTitle')}</h2>
                             <button
                                 type="button"
                                 className="config-modal-close"
                                 onClick={() => setConfigModalOpen(false)}
-                                aria-label="Close"
+                                aria-label={t('decarb.close')}
                             >
                                 <i className="fas fa-times"></i>
                             </button>
@@ -336,7 +338,7 @@ function Decarbonization() {
                             </div>
                             <div className="config-card-content">
                                 <div className="form-group">
-                                    <label htmlFor="organizationName">Organization / Company Name</label>
+                                    <label htmlFor="organizationName">{t('decarb.organizationName')}</label>
                                     <input
                                         type="text"
                                         id="organizationName"
@@ -360,14 +362,14 @@ function Decarbonization() {
                             </div>
                             <div className="config-card-content">
                                 <div className="form-group">
-                                    <label htmlFor="ambitionLevel">Ambition Level *</label>
+                                    <label htmlFor="ambitionLevel">{t('decarb.ambitionLevel')}</label>
                                     <select
                                         id="ambitionLevel"
                                         value={configForm.ambitionLevel}
                                         onChange={(e) => setConfigForm({ ...configForm, ambitionLevel: e.target.value })}
                                         required
                                     >
-                                        {AMBITION_OPTIONS.map(opt => (
+                                        {ambitionOptions.map(opt => (
                                             <option key={opt.value || 'empty'} value={opt.value}>{opt.label}</option>
                                         ))}
                                     </select>
@@ -388,7 +390,7 @@ function Decarbonization() {
                             </div>
                             <div className="config-card-content">
                                 <div className="form-group">
-                                    <label htmlFor="targetYear">Target Year *</label>
+                                    <label htmlFor="targetYear">{t('decarb.targetYear')}</label>
                                     <input
                                         type="number"
                                         id="targetYear"
@@ -406,24 +408,24 @@ function Decarbonization() {
 
                         <div className="config-button-group">
                             <button type="button" className="btn btn-secondary" onClick={handleResetConfig}>
-                                Reset
+                                {t('decarb.reset')}
                             </button>
                             <button type="submit" className="btn btn-primary">
-                                Save Configuration
+                                {t('decarb.saveConfiguration')}
                             </button>
                         </div>
                     </form>
 
                     <aside className="config-sidebar">
                         <div className="config-summary-card">
-                            <h3>Summary</h3>
+                            <h3>{t('decarb.summaryTitle')}</h3>
                             <dl className="config-summary-list">
-                                <dt>Organization</dt>
-                                <dd>{configForm.organizationName || '—'}</dd>
-                                <dt>Ambition</dt>
-                                <dd>{configForm.ambitionLevel ? AMBITION_OPTIONS.find(o => o.value === configForm.ambitionLevel)?.label || configForm.ambitionLevel : '—'}</dd>
-                                <dt>Target Year</dt>
-                                <dd>{configForm.targetYear || '—'}</dd>
+                                <dt>{t('decarb.organizationSummary')}</dt>
+                                <dd>{configForm.organizationName || t('decarb.emDash')}</dd>
+                                <dt>{t('decarb.ambitionSummary')}</dt>
+                                <dd>{configForm.ambitionLevel ? ambitionOptions.find(o => o.value === configForm.ambitionLevel)?.label || configForm.ambitionLevel : t('decarb.emDash')}</dd>
+                                <dt>{t('decarb.targetYearSummary')}</dt>
+                                <dd>{configForm.targetYear || t('decarb.emDash')}</dd>
                             </dl>
                         </div>
                     </aside>
@@ -435,26 +437,26 @@ function Decarbonization() {
             )}
 
             {apiLoading && (
-                <p className="decarb-loading">Loading emissions data…</p>
+                <p className="decarb-loading">{t('decarb.loadingData')}</p>
             )}
             {!apiLoading && (
-                <p className="decarb-loading">Using baseline year: {baselineYear}</p>
+                <p className="decarb-loading">{t('decarb.usingBaselineYear', { year: baselineYear })}</p>
             )}
 
             <div className="decarb-grid">
                 {/* Left: Net Emissions Projection card */}
                 <div className="decarb-card decarb-card-main">
-                    <div className="decarb-card-title">Net Emissions Projection</div>
+                    <div className="decarb-card-title">{t('decarb.netEmissionsProjection')}</div>
 
                     {!configReady ? (
                         /* ── Placeholder: config not yet saved ── */
                         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'2.5rem 1.5rem', gap:'1rem', textAlign:'center', color:'#94A3B8', flex:1 }}>
                             <i className="fas fa-sliders-h" style={{ fontSize:'2.25rem', color:'#CBD5E1' }}></i>
                             <p style={{ fontSize:'0.95rem', fontWeight:500, color:'#475569', margin:0 }}>
-                                Set your Inputs &amp; Constraints to see the calculation
+                                {t('decarb.notConfiguredTitle')}
                             </p>
                             <p style={{ fontSize:'0.82rem', margin:0 }}>
-                                Define your ambition level and target year, then save the configuration to calculate residual emissions and offset potential.
+                                {t('decarb.notConfiguredBody')}
                             </p>
                             <button
                                 type="button"
@@ -462,7 +464,7 @@ function Decarbonization() {
                                 style={{ marginTop:'0.5rem' }}
                                 onClick={() => setConfigModalOpen(true)}
                             >
-                                <i className="fas fa-sliders-h"></i> Open Inputs &amp; Constraints
+                                <i className="fas fa-sliders-h"></i> {t('decarb.openInputsButton')}
                             </button>
                         </div>
                     ) : (
@@ -470,21 +472,21 @@ function Decarbonization() {
                         <>
                             <div className="metrics-row">
                                 <div className="metric-box">
-                                    <div className="metric-label">Removal Obligation</div>
+                                    <div className="metric-label">{t('decarb.removalObligation')}</div>
                                     <div className="metric-number">{formatNumber(totalEmissions)} <span className="metric-unit">tCO₂e/yr</span></div>
                                 </div>
                                 <div className="metric-box">
-                                    <div className="metric-label">Offset Potential</div>
+                                    <div className="metric-label">{t('decarb.offsetPotential')}</div>
                                     <div className="metric-number metric-number-highlight">-{formatNumber(totalOffset)} <span className="metric-unit">tCO₂e</span></div>
                                 </div>
                                 <div className="metric-box">
-                                    <div className="metric-label">Projected Net</div>
+                                    <div className="metric-label">{t('decarb.projectedNet')}</div>
                                     <div className="metric-number">{formatNumber(netEmissions)} <span className="metric-unit">tCO₂e</span></div>
                                 </div>
                             </div>
                             {treesRequiredAnnually > 0 && (
                                 <p className="body-text" style={{ fontSize: '0.875rem', color: '#64748B', marginBottom: '0.75rem' }}>
-                                    Report (S7) trees required annually: <strong>{formatNumber(treesRequiredAnnually)} trees</strong> at {SEQUESTRATION_RATE} tCO₂e/tree/yr — same formula as this offset.
+                                    {t('decarb.reportTreesHint', { trees: formatNumber(treesRequiredAnnually), rate: SEQUESTRATION_RATE })}
                                 </p>
                             )}
                             <div className="chart-wrapper" style={{ height: 280 }}>
@@ -511,8 +513,8 @@ function Decarbonization() {
                             </div>
                             <div className="slider-group">
                                 <div className="slider-label">
-                                    <span>Trees to Plant (URIMPACT Initiative)</span>
-                                    <span className="slider-value">{formatNumber(treesToPlant)} Trees</span>
+                                    <span>{t('decarb.treesToPlantLabel')}</span>
+                                    <span className="slider-value">{t('decarb.treesCount', { formatted: formatNumber(treesToPlant) })}</span>
                                 </div>
                                 <input
                                     type="range"
@@ -536,31 +538,31 @@ function Decarbonization() {
                 {/* Right: Impact card + Project Details */}
                 <div className="decarb-sidebar">
                     <div className="impact-card">
-                        <div className="impact-title">Your Contribution</div>
+                        <div className="impact-title">{t('decarb.yourContribution')}</div>
                         {configReady ? (
                             <>
                                 <div className="impact-big-number">{formatNumber(treesToPlant)}</div>
-                                <div className="impact-desc">Trees planted in verified reforestation projects.</div>
+                                <div className="impact-desc">{t('decarb.treesPlantedDesc')}</div>
                                 <button type="button" className="cta-button" onClick={handleConfirmPlant}>
-                                    Confirm &amp; Plant Now
+                                    {t('decarb.confirmPlant')}
                                 </button>
                             </>
                         ) : (
                             <div className="impact-desc" style={{ padding:'1rem 0', color:'#94A3B8', fontSize:'0.875rem' }}>
-                                Save your configuration to enable tree planting.
+                                {t('decarb.saveConfigForPlanting')}
                             </div>
                         )}
                     </div>
                     <div className="decarb-card decarb-card-details">
-                        <div className="decarb-card-title">Project Details</div>
+                        <div className="decarb-card-title">{t('decarb.projectDetails')}</div>
                         <div className="project-select-wrap">
-                            <label htmlFor="project-select">Select a project</label>
+                            <label htmlFor="project-select">{t('decarb.selectProject')}</label>
                             <select
                                 id="project-select"
                                 value={selectedProject}
                                 onChange={handleProjectChange}
                             >
-                                <option value="">— Choose a project —</option>
+                                <option value="">{t('decarb.chooseProject')}</option>
                                 {Object.entries(PROJECTS).map(([id, project]) => (
                                     <option key={id} value={id}>{project.name}</option>
                                 ))}
@@ -568,15 +570,15 @@ function Decarbonization() {
                         </div>
                         <div className="project-details-box">
                             {!selectedProject ? (
-                                <p className="project-info-placeholder">Select a project above to view details.</p>
+                                <p className="project-info-placeholder">{t('decarb.selectProjectAbove')}</p>
                             ) : (
                                 <>
-                                    <p className="project-info-row"><strong>Project:</strong> <span>{PROJECTS[selectedProject]?.name}</span></p>
-                                    <p className="project-info-row"><strong>Available trees:</strong> <span>{formatNumber(currentProjectTrees)}</span></p>
-                                    <p className="project-info-row"><strong>Species mix:</strong> <span>{SPECIES_MIX.join(', ')}</span></p>
-                                    <p className="project-info-row"><strong>Verification:</strong> High-resolution satellite + drone audits</p>
+                                    <p className="project-info-row"><strong>{t('decarb.projectField')}</strong> <span>{PROJECTS[selectedProject]?.name}</span></p>
+                                    <p className="project-info-row"><strong>{t('decarb.availableTrees')}</strong> <span>{formatNumber(currentProjectTrees)}</span></p>
+                                    <p className="project-info-row"><strong>{t('decarb.speciesMix')}</strong> <span>{SPECIES_MIX.join(', ')}</span></p>
+                                    <p className="project-info-row"><strong>{t('decarb.verification')}</strong> {t('decarb.verificationDetail')}</p>
                                     <div className="verified-badge-block">
-                                        <i className="fas fa-check-circle"></i> <strong>Verified:</strong> Each tree is verified by high resolution satellite or drone data.
+                                        <i className="fas fa-check-circle"></i> {t('decarb.verifiedBlock')}
                                     </div>
                                 </>
                             )}

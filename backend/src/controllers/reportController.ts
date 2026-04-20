@@ -13,6 +13,7 @@ import { getLatestClientConfigOrNull } from '../services/clientConfigService.js'
 import {
   generateReportCalculations,
   generateSectionNarratives,
+  normalizeReportLanguage,
   ReportCalculationInput,
   SectionNarrativeInput,
 } from '../services/anthropicService.js';
@@ -269,7 +270,8 @@ export async function getReportInsights(req: AuthRequest, res: Response): Promis
       emissionsSummary,
     };
 
-    const result = await generateReportCalculations(input);
+    const language = normalizeReportLanguage(req.query.language);
+    const result = await generateReportCalculations(input, language);
     sendSuccess(res, result);
   } catch (error) {
     logger.error('Get report insights error:', error);
@@ -412,15 +414,20 @@ export async function generateReportNarratives(req: AuthRequest, res: Response):
       return;
     }
 
-    const { sections } = req.body as { sections: SectionNarrativeInput[] };
+    const { sections, language: languageRaw } = req.body as {
+      sections: SectionNarrativeInput[];
+      language?: string;
+    };
 
     if (!Array.isArray(sections) || sections.length === 0) {
       sendError(res, 'sections array is required', 400);
       return;
     }
 
+    const language = normalizeReportLanguage(languageRaw);
+
     // generateSectionNarratives never throws — it returns empty strings on any failure
-    const narratives = await generateSectionNarratives(sections);
+    const narratives = await generateSectionNarratives(sections, language);
 
     // Only log the audit action if at least some narratives were generated
     const hasContent = narratives.some((n) => n.text.length > 0);

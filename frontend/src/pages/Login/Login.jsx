@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 
 function Login() {
+    const { t } = useTranslation();
     const { login, signup, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState('signin');
@@ -49,7 +51,7 @@ function Login() {
             await login(signInData.email, signInData.password);
             navigate('/');
         } catch (err) {
-            setError(err?.message || 'Invalid email or password');
+            setError(err?.message || t('login.invalidEmailOrPassword'));
         } finally {
             setLoading(false);
         }
@@ -60,12 +62,12 @@ function Login() {
         setError('');
         
         if (signUpData.password !== signUpData.confirmPassword) {
-            setError('Passwords do not match');
+            setError(t('login.passwordsDoNotMatch'));
             return;
         }
         
         if (!signUpData.agreeTerms) {
-            setError('Please agree to the terms and conditions');
+            setError(t('login.agreeTermsRequired'));
             return;
         }
         
@@ -75,7 +77,7 @@ function Login() {
             await signup(signUpData);
             navigate('/');
         } catch (err) {
-            setError(err?.message || 'Failed to create account');
+            setError(err?.message || t('login.createAccountFailed'));
         } finally {
             setLoading(false);
         }
@@ -91,27 +93,24 @@ function Login() {
             {/* Left Side - Branding */}
             <div className="login-branding">
                 <div className="branding-content">
-                    <h1>Carbon Emission Dashboard</h1>
-                    <p>
-                        Track, analyze, and reduce your organization's carbon footprint 
-                        with our comprehensive emission management platform.
-                    </p>
+                    <h1>{t('login.title')}</h1>
+                    <p>{t('login.subtitle')}</p>
                     <div className="features">
                         <div className="feature">
                             <i className="fas fa-chart-line"></i>
-                            <span>Real-time emission tracking</span>
+                            <span>{t('login.featureRealtime')}</span>
                         </div>
                         <div className="feature">
                             <i className="fas fa-file-alt"></i>
-                            <span>Automated reporting</span>
+                            <span>{t('login.featureReporting')}</span>
                         </div>
                         <div className="feature">
                             <i className="fas fa-leaf"></i>
-                            <span>Decarbonization pathways</span>
+                            <span>{t('login.featurePathways')}</span>
                         </div>
                         <div className="feature">
                             <i className="fas fa-shield-alt"></i>
-                            <span>Compliance management</span>
+                            <span>{t('login.featureCompliance')}</span>
                         </div>
                     </div>
                 </div>
@@ -126,13 +125,13 @@ function Login() {
                             className={`tab-btn ${activeTab === 'signin' ? 'active' : ''}`}
                             onClick={() => { setActiveTab('signin'); setError(''); }}
                         >
-                            Sign In
+                            {t('login.signInTab')}
                         </button>
                         <button 
                             className={`tab-btn ${activeTab === 'signup' ? 'active' : ''}`}
                             onClick={() => { setActiveTab('signup'); setError(''); }}
                         >
-                            Sign Up
+                            {t('login.signUpTab')}
                         </button>
                     </div>
 
@@ -148,11 +147,11 @@ function Login() {
                         className={`auth-form ${activeTab === 'signin' ? 'active' : ''}`}
                         onSubmit={handleSignIn}
                     >
-                        <h2>Welcome Back</h2>
-                        <p className="form-subtitle">Sign in to continue to your dashboard</p>
+                        <h2>{t('login.welcomeBack')}</h2>
+                        <p className="form-subtitle">{t('login.signInSubtitle')}</p>
 
                         <div className="form-group">
-                            <label>Email Address</label>
+                            <label>{t('login.emailAddress')}</label>
                             <div className="input-wrapper">
                                 <span className="input-icon" aria-hidden="true">
                                     <i className="fas fa-envelope"></i>
@@ -161,7 +160,7 @@ function Login() {
                                     type="email"
                                     name="email"
                                     autoComplete="off"
-                                    placeholder="name@company.com"
+                                    placeholder={t('login.emailPlaceholder')}
                                     value={signInData.email}
                                     onChange={(e) => setSignInData({ ...signInData, email: e.target.value })}
                                     required
@@ -170,7 +169,7 @@ function Login() {
                         </div>
 
                         <div className="form-group">
-                            <label>Password</label>
+                            <label>{t('login.password')}</label>
                             <div className="input-wrapper">
                                 <span className="input-icon" aria-hidden="true">
                                     <i className="fas fa-lock"></i>
@@ -179,7 +178,7 @@ function Login() {
                                     type={showPassword ? 'text' : 'password'}
                                     name="password"
                                     autoComplete="off"
-                                    placeholder="Enter your password"
+                                    placeholder={t('login.passwordPlaceholder')}
                                     value={signInData.password}
                                     onChange={(e) => setSignInData({ ...signInData, password: e.target.value })}
                                     required
@@ -202,28 +201,28 @@ function Login() {
                                     onChange={(e) => setSignInData({ ...signInData, remember: e.target.checked })}
                                 />
                                 <span className="checkmark"></span>
-                                Remember me
+                                {t('login.rememberMe')}
                             </label>
-                            <a href="#" className="forgot-link">Forgot password?</a>
+                            <a href="#" className="forgot-link">{t('login.forgotPassword')}</a>
                         </div>
 
                         <button type="submit" className={`btn-submit ${loading ? 'loading' : ''}`} disabled={loading}>
-                            <span>Sign In</span>
+                            <span>{t('login.signInButton')}</span>
                             <i className="fas fa-arrow-right"></i>
                         </button>
 
                         <div className="divider">
-                            <span>or continue with</span>
+                            <span>{t('login.orContinueWith')}</span>
                         </div>
 
                         <div className="social-login">
                             <button type="button" className="btn-social google">
                                 <i className="fab fa-google"></i>
-                                Google
+                                {t('login.google')}
                             </button>
                             <button type="button" className="btn-social microsoft">
                                 <i className="fab fa-microsoft"></i>
-                                Microsoft
+                                {t('login.microsoft')}
                             </button>
                         </div>
                     </form>
@@ -233,19 +232,19 @@ function Login() {
                         className={`auth-form ${activeTab === 'signup' ? 'active' : ''}`}
                         onSubmit={handleSignUp}
                     >
-                        <h2>Create Account</h2>
-                        <p className="form-subtitle">Start your journey to net zero</p>
+                        <h2>{t('login.createAccount')}</h2>
+                        <p className="form-subtitle">{t('login.signUpSubtitle')}</p>
 
                         <div className="form-row">
                             <div className="form-group">
-                                <label>First Name</label>
+                                <label>{t('login.firstName')}</label>
                                 <div className="input-wrapper">
                                     <span className="input-icon" aria-hidden="true">
                                         <i className="fas fa-user"></i>
                                     </span>
                                     <input
                                         type="text"
-                                        placeholder="John"
+                                        placeholder={t('login.firstNamePlaceholder')}
                                         value={signUpData.firstName}
                                         onChange={(e) => setSignUpData({ ...signUpData, firstName: e.target.value })}
                                         required
@@ -253,14 +252,14 @@ function Login() {
                                 </div>
                             </div>
                             <div className="form-group">
-                                <label>Last Name</label>
+                                <label>{t('login.lastName')}</label>
                                 <div className="input-wrapper">
                                     <span className="input-icon" aria-hidden="true">
                                         <i className="fas fa-user"></i>
                                     </span>
                                     <input
                                         type="text"
-                                        placeholder="Doe"
+                                        placeholder={t('login.lastNamePlaceholder')}
                                         value={signUpData.lastName}
                                         onChange={(e) => setSignUpData({ ...signUpData, lastName: e.target.value })}
                                         required
@@ -270,14 +269,14 @@ function Login() {
                         </div>
 
                         <div className="form-group">
-                            <label>Work Email</label>
+                            <label>{t('login.workEmail')}</label>
                             <div className="input-wrapper">
                                 <span className="input-icon" aria-hidden="true">
                                     <i className="fas fa-envelope"></i>
                                 </span>
                                 <input
                                     type="email"
-                                    placeholder="name@company.com"
+                                    placeholder={t('login.emailPlaceholder')}
                                     value={signUpData.email}
                                     onChange={(e) => setSignUpData({ ...signUpData, email: e.target.value })}
                                     required
@@ -286,14 +285,14 @@ function Login() {
                         </div>
 
                         <div className="form-group">
-                            <label>Company Name</label>
+                            <label>{t('login.companyName')}</label>
                             <div className="input-wrapper">
                                 <span className="input-icon" aria-hidden="true">
                                     <i className="fas fa-building"></i>
                                 </span>
                                 <input
                                     type="text"
-                                    placeholder="Your Company"
+                                    placeholder={t('login.companyPlaceholder')}
                                     value={signUpData.company}
                                     onChange={(e) => setSignUpData({ ...signUpData, company: e.target.value })}
                                     required
@@ -302,14 +301,14 @@ function Login() {
                         </div>
 
                         <div className="form-group">
-                            <label>Password</label>
+                            <label>{t('login.password')}</label>
                             <div className="input-wrapper">
                                 <span className="input-icon" aria-hidden="true">
                                     <i className="fas fa-lock"></i>
                                 </span>
                                 <input
                                     type={showPassword ? 'text' : 'password'}
-                                    placeholder="Create a password"
+                                    placeholder={t('login.createPasswordPlaceholder')}
                                     value={signUpData.password}
                                     onChange={(e) => handlePasswordChange(e.target.value)}
                                     required
@@ -325,21 +324,27 @@ function Login() {
                             {signUpData.password && (
                                 <div className="password-strength">
                                     <div className={`strength-bar ${passwordStrength}`}></div>
-                                    <span className="strength-text">{passwordStrength}</span>
+                                    <span className="strength-text">
+                                        {passwordStrength === 'weak'
+                                            ? t('login.strengthWeak')
+                                            : passwordStrength === 'strong'
+                                                ? t('login.strengthStrong')
+                                                : t('login.strengthMedium')}
+                                    </span>
                                 </div>
                             )}
-                            <p className="help-text">Min 8 characters, with uppercase, lowercase and a number</p>
+                            <p className="help-text">{t('login.passwordHelp')}</p>
                         </div>
 
                         <div className="form-group">
-                            <label>Confirm Password</label>
+                            <label>{t('login.confirmPassword')}</label>
                             <div className="input-wrapper">
                                 <span className="input-icon" aria-hidden="true">
                                     <i className="fas fa-lock"></i>
                                 </span>
                                 <input
                                     type={showPassword ? 'text' : 'password'}
-                                    placeholder="Confirm your password"
+                                    placeholder={t('login.confirmPasswordPlaceholder')}
                                     value={signUpData.confirmPassword}
                                     onChange={(e) => setSignUpData({ ...signUpData, confirmPassword: e.target.value })}
                                     required
@@ -354,26 +359,26 @@ function Login() {
                                 onChange={(e) => setSignUpData({ ...signUpData, agreeTerms: e.target.checked })}
                             />
                             <span className="checkmark"></span>
-                            I agree to the <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>
+                            {t('login.termsText')} <a href="#">{t('login.termsOfService')}</a> {t('login.and')} <a href="#">{t('login.privacyPolicy')}</a>
                         </label>
 
                         <button type="submit" className={`btn-submit ${loading ? 'loading' : ''}`} disabled={loading}>
-                            <span>Create Account</span>
+                            <span>{t('login.createAccountButton')}</span>
                             <i className="fas fa-arrow-right"></i>
                         </button>
 
                         <div className="divider">
-                            <span>or continue with</span>
+                            <span>{t('login.orContinueWith')}</span>
                         </div>
 
                         <div className="social-login">
                             <button type="button" className="btn-social google">
                                 <i className="fab fa-google"></i>
-                                Google
+                                {t('login.google')}
                             </button>
                             <button type="button" className="btn-social microsoft">
                                 <i className="fab fa-microsoft"></i>
-                                Microsoft
+                                {t('login.microsoft')}
                             </button>
                         </div>
                     </form>

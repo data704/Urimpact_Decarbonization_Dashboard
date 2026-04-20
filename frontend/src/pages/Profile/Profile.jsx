@@ -1,8 +1,10 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import './Profile.css';
 
 function Profile() {
+    const { t } = useTranslation();
     const { user, updateProfile } = useAuth();
     const [notification, setNotification] = useState(null);
     const fileInputRef = useRef(null);
@@ -38,7 +40,7 @@ function Profile() {
             const reader = new FileReader();
             reader.onloadend = () => {
                 updateProfile({ avatar: reader.result });
-                showNotification('Profile picture updated!');
+                showNotification(t('profile.avatarUpdated'));
             };
             reader.readAsDataURL(file);
         }
@@ -51,20 +53,20 @@ function Profile() {
             lastName: formData.lastName,
             company: formData.company
         });
-        showNotification('Profile updated successfully!');
+        showNotification(t('profile.profileUpdated'));
     };
 
     const handlePasswordChange = (e) => {
         e.preventDefault();
         if (passwords.new !== passwords.confirm) {
-            showNotification('New passwords do not match', 'error');
+            showNotification(t('profile.passwordsMismatch'), 'error');
             return;
         }
         if (passwords.new.length < 6) {
-            showNotification('Password must be at least 6 characters', 'error');
+            showNotification(t('profile.passwordTooShort'), 'error');
             return;
         }
-        showNotification('Password changed successfully!');
+        showNotification(t('profile.passwordChanged'));
         setPasswords({ current: '', new: '', confirm: '' });
     };
 
@@ -80,8 +82,8 @@ function Profile() {
 
             {/* Page Header */}
             <div className="page-header">
-                <h1>My Profile</h1>
-                <p>Manage your personal information and preferences</p>
+                <h1>{t('profile.title')}</h1>
+                <p>{t('profile.subtitle')}</p>
             </div>
 
             <div className="profile-grid">

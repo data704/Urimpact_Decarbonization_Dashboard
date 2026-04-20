@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { getRecentActivity } from '../../api/client';
 import './Layout.css';
 
 function Header({ onMenuToggle }) {
     const { user, logout } = useAuth();
+    const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const [showNotifications, setShowNotifications] = useState(false);
     const [showProfile, setShowProfile] = useState(false);
@@ -14,7 +16,8 @@ function Header({ onMenuToggle }) {
 
     const [notifications, setNotifications] = useState([]);
 
-    const currentDate = new Date().toLocaleDateString('en-US', {
+    const dateLocale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+    const currentDate = new Date().toLocaleDateString(dateLocale, {
         weekday: 'short',
         day: 'numeric',
         month: 'short',
@@ -35,8 +38,8 @@ function Header({ onMenuToggle }) {
                 const mapped = items.map((log) => {
                     const who = log.user
                         ? `${log.user.firstName || ''} ${log.user.lastName || ''}`.trim() || log.user.email
-                        : 'System';
-                    const when = log.timestamp ? new Date(log.timestamp).toLocaleString() : '';
+                        : t('header.system');
+                    const when = log.timestamp ? new Date(log.timestamp).toLocaleString(dateLocale) : '';
                     const action = (log.action || '').replace(/_/g, ' ').toLowerCase();
                     return {
                         id: log.id,
@@ -50,7 +53,7 @@ function Header({ onMenuToggle }) {
             .catch(() => {
                 setNotifications([]);
             });
-    }, [isAdminUser]);
+    }, [isAdminUser, t, dateLocale]);
 
     // Close dropdowns when clicking outside
     useEffect(() => {
@@ -82,13 +85,25 @@ function Header({ onMenuToggle }) {
                 </button>
                 <div className="search-box">
                     <i className="fas fa-search"></i>
-                    <input type="text" placeholder="Search emissions, reports..." />
+                    <input type="text" placeholder={t('common.searchPlaceholder')} />
                 </div>
             </div>
 
             <div className="header-right">
                 <div className="header-item">
                     <span className="date-display">{currentDate}</span>
+                </div>
+
+                <div className="header-item">
+                    <select
+                        className="header-language-select"
+                        value={i18n.language === 'ar' ? 'ar' : 'en'}
+                        onChange={(e) => i18n.changeLanguage(e.target.value)}
+                        aria-label={t('common.language')}
+                    >
+                        <option value="en">{t('common.english')}</option>
+                        <option value="ar">{t('common.arabic')}</option>
+                    </select>
                 </div>
 
                 {/* User + Notifications group */}
@@ -105,7 +120,7 @@ function Header({ onMenuToggle }) {
                                     <i className="fas fa-user"></i>
                                 )}
                             </div>
-                            <span className="user-name-header">{user?.firstName || 'User'}</span>
+                            <span className="user-name-header">{user?.firstName || t('header.user')}</span>
                         </div>
 
                         {isAdminUser && (
@@ -114,7 +129,7 @@ function Header({ onMenuToggle }) {
                                     type="button"
                                     className="notification-trigger"
                                     onClick={(e) => { e.stopPropagation(); setShowNotifications(!showNotifications); }}
-                                    aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+                                    aria-label={`${t('header.notifications')}${unreadCount > 0 ? `, ${unreadCount}` : ''}`}
                                 >
                                     <i className="fas fa-bell"></i>
                                     {unreadCount > 0 && <span className="notification-badge">{unreadCount}</span>}
@@ -122,14 +137,14 @@ function Header({ onMenuToggle }) {
 
                                 <div className={`dropdown-menu notification-dropdown ${showNotifications ? 'active' : ''}`}>
                                     <div className="dropdown-header">
-                                        <h4>Notifications</h4>
-                                        <button type="button" className="mark-all-read">Mark all read</button>
+                                        <h4>{t('header.notifications')}</h4>
+                                        <button type="button" className="mark-all-read">{t('header.markAllRead')}</button>
                                     </div>
                                     <div className="dropdown-content">
                                         {notifications.length === 0 && (
                                             <div className="notification-item">
                                                 <div className="notification-content">
-                                                    <p>No recent activity</p>
+                                                    <p>{t('header.noRecentActivity')}</p>
                                                 </div>
                                             </div>
                                         )}
@@ -145,7 +160,7 @@ function Header({ onMenuToggle }) {
                                         ))}
                                     </div>
                                     <div className="dropdown-footer">
-                                        <Link to="/notifications">View all notifications</Link>
+                                        <Link to="/notifications">{t('header.viewAllNotifications')}</Link>
                                     </div>
                                 </div>
                             </div>
@@ -155,7 +170,7 @@ function Header({ onMenuToggle }) {
                             type="button"
                             className="profile-chevron"
                             onClick={() => setShowProfile(!showProfile)}
-                            aria-label="Open profile menu"
+                            aria-label={t('header.openProfileMenu')}
                         >
                             <i className="fas fa-chevron-down"></i>
                         </button>
@@ -171,23 +186,23 @@ function Header({ onMenuToggle }) {
                                 )}
                             </div>
                             <div className="profile-info">
-                                <h4>{user ? `${user.firstName} ${user.lastName}` : 'Guest'}</h4>
+                                <h4>{user ? `${user.firstName} ${user.lastName}` : t('sidebar.guest')}</h4>
                                 <p>{user?.email || ''}</p>
                             </div>
                         </div>
                         <div className="dropdown-content">
                             <Link to="/profile" className="dropdown-item" onClick={() => setShowProfile(false)}>
                                 <i className="fas fa-user"></i>
-                                <span>My Profile</span>
+                                <span>{t('header.myProfile')}</span>
                             </Link>
                             <Link to="/settings" className="dropdown-item" onClick={() => setShowProfile(false)}>
                                 <i className="fas fa-cog"></i>
-                                <span>Settings</span>
+                                <span>{t('header.settings')}</span>
                             </Link>
                             <div className="dropdown-divider"></div>
                             <button className="dropdown-item logout" onClick={handleLogout}>
                                 <i className="fas fa-sign-out-alt"></i>
-                                <span>Sign Out</span>
+                                <span>{t('header.signOut')}</span>
                             </button>
                         </div>
                     </div>

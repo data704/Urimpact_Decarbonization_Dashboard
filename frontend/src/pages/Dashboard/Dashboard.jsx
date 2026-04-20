@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -19,8 +20,17 @@ import { getAuthToken, getDashboard, getEmissions, deleteEmission, deleteEmissio
 import './Dashboard.css';
 
 const kgToTonnes = (kg) => (kg == null ? 0 : kg / 1000);
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+function monthLabelsShort(locale) {
+    return Array.from({ length: 12 }, (_, i) =>
+        new Date(2000, i, 1).toLocaleDateString(locale, { month: 'short' })
+    );
+}
+function monthLabelsLong(locale) {
+    return Array.from({ length: 12 }, (_, i) =>
+        new Date(2000, i, 1).toLocaleDateString(locale, { month: 'long' })
+    );
+}
 
 // Register Chart.js components
 ChartJS.register(
@@ -37,6 +47,7 @@ ChartJS.register(
 );
 
 function Dashboard() {
+    const { t, i18n } = useTranslation();
     const location = useLocation();
     const { 
         scope1Entries, 
@@ -60,6 +71,9 @@ function Dashboard() {
     const submitMessage = location.state?.submitMessage;
 
     const currentYear = new Date().getFullYear();
+    const dateLocale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+    const monthsShort = useMemo(() => monthLabelsShort(dateLocale), [dateLocale]);
+    const monthsLong = useMemo(() => monthLabelsLong(dateLocale), [dateLocale]);
     const [filterYear, setFilterYear] = useState(currentYear);
     const [filterPeriod, setFilterPeriod] = useState('all'); // 'all' | 'Q1' | 'Q2' | 'Q3' | 'Q4' | 0-11 | number[] for calendar multi-select
 
@@ -119,7 +133,7 @@ function Dashboard() {
             })
             .catch((err) => {
                 if (!cancelled) {
-                    setApiError(err?.message || 'Failed to load dashboard');
+                    setApiError(err?.message || t('dashboard.failedToLoad'));
                     setApiDashboard(null);
                     setApiEmissions([]);
                 }
@@ -241,18 +255,18 @@ function Dashboard() {
                 setApiEmissions(emissions || []);
             })
             .catch((err) => {
-                setApiError(err?.message || 'Failed to load dashboard');
+                setApiError(err?.message || t('dashboard.failedToLoad'));
             })
             .finally(() => setApiLoading(false));
     };
 
     const periodLabel = filterPeriod === 'all'
-        ? 'All Time'
+        ? t('dashboard.allTime')
         : Array.isArray(filterPeriod) && filterPeriod.length > 0
-            ? (filterPeriod.length === 12 ? 'All Time' : `${MONTHS[filterPeriod[0]]} – ${MONTHS[filterPeriod[filterPeriod.length - 1]]}`)
+            ? (filterPeriod.length === 12 ? t('dashboard.allTime') : `${monthsShort[filterPeriod[0]]} ${t('dashboard.dash')} ${monthsShort[filterPeriod[filterPeriod.length - 1]]}`)
             : (filterPeriod === 'Q1' || filterPeriod === 'Q2' || filterPeriod === 'Q3' || filterPeriod === 'Q4')
-                ? filterPeriod
-                : MONTHS[typeof filterPeriod === 'number' ? filterPeriod : parseInt(String(filterPeriod), 10) || 0];
+                ? t(`dashboard.quarter${filterPeriod}`)
+                : monthsShort[typeof filterPeriod === 'number' ? filterPeriod : parseInt(String(filterPeriod), 10) || 0];
     const years = Array.from({ length: 11 }, (_, i) => currentYear - 5 + i);
     const trendMonthsWithData = useMemo(() => new Set((apiDashboard?.emissions?.trend || []).filter(t => (t.scope1 || 0) + (t.scope2 || 0) > 0).map(t => t.month)), [apiDashboard]);
 
@@ -264,7 +278,7 @@ function Dashboard() {
             await deleteEmission(emissionId);
             refreshDashboard();
         } catch (err) {
-            setDeleteError(err?.message || 'Failed to delete');
+            setDeleteError(err?.message || t('dashboard.failedToDelete'));
         } finally {
             setDeletingId(null);
         }
@@ -285,7 +299,7 @@ function Dashboard() {
             setSelectedEmissionIds([]);
             refreshDashboard();
         } catch (err) {
-            setDeleteError(err?.message || 'Failed to delete selected records');
+            setDeleteError(err?.message || t('dashboard.failedToDeleteBulk'));
         } finally {
             setDeletingId(null);
         }
@@ -301,25 +315,38 @@ function Dashboard() {
     const monthlyData = useMemo(() => {
         if (apiDashboard?.emissions?.trend?.length) {
             const trend = apiDashboard.emissions.trend;
-            const labels = trend.map((t) => MONTHS[parseInt(t.month.slice(5, 7), 10) - 1]);
+            const labels = trend.map((t) => monthsShort[parseInt(t.month.slice(5, 7), 10) - 1]);
             const scope1Data = trend.map((t) => kgToTonnes(t.scope1 || 0));
             const scope2Data = trend.map((t) => kgToTonnes(t.scope2 || 0));
             return { labels, scope1: scope1Data, scope2: scope2Data };
         }
-        return getMonthlyData();
-    }, [apiDashboard, getMonthlyData]);
+        const fromStore = getMonthlyData();
+        return {
+            labels: monthsShort,
+            scope1: fromStore.scope1,
+            scope2: fromStore.scope2,
+        };
+    }, [apiDashboard, getMonthlyData, monthsShort]);
 
     const scope1Breakdown = useMemo(() => {
         if (scope1List.length) {
             const byCat = {};
             scope1List.forEach((e) => {
-                const label = e.category?.replace(/_/g, ' ') ?? 'Other';
+                const label = e.category?.replace(/_/g, ' ') ?? t('dashboard.other');
                 byCat[label] = (byCat[label] || 0) + kgToTonnes(e.co2e);
             });
-            return Object.keys(byCat).length ? byCat : { 'No data': 0 };
+            return Object.keys(byCat).length ? byCat : { [t('dashboard.noData')]: 0 };
         }
-        return getScope1Breakdown();
-    }, [scope1List, getScope1Breakdown]);
+        const fromCtx = getScope1Breakdown();
+        const mapped = {};
+        Object.entries(fromCtx).forEach(([k, v]) => {
+            let nk = k;
+            if (k === 'Mobile Combustion') nk = t('dashboard.mobileCombustion');
+            else if (k === 'Stationary Combustion') nk = t('dashboard.stationaryCombustion');
+            mapped[nk] = v;
+        });
+        return mapped;
+    }, [scope1List, getScope1Breakdown, t, i18n.language]);
 
     // Chart options
     const lineChartOptions = {
@@ -373,7 +400,7 @@ function Dashboard() {
         labels: monthlyData.labels,
         datasets: [
             {
-                label: 'Scope 1',
+                label: t('dashboard.chartDatasetScope1'),
                 data: monthlyData.scope1,
                 borderColor: '#14B8A6',
                 backgroundColor: 'rgba(20, 184, 166, 0.1)',
@@ -381,7 +408,7 @@ function Dashboard() {
                 tension: 0.4
             },
             {
-                label: 'Scope 2',
+                label: t('dashboard.chartDatasetScope2'),
                 data: monthlyData.scope2,
                 borderColor: '#3B82F6',
                 backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -395,7 +422,7 @@ function Dashboard() {
     const scope1Values = Object.values(scope1Breakdown);
     const scope1Colors = ['#14B8A6', '#0D9488', '#0F766E', '#115E59', '#134E4A'].slice(0, Math.max(scope1Labels.length, 1));
     const scope1DoughnutData = {
-        labels: scope1Labels.length ? scope1Labels : ['No data'],
+        labels: scope1Labels.length ? scope1Labels : [t('dashboard.noData')],
         datasets: [{
             data: scope1Values.length ? scope1Values : [0],
             backgroundColor: scope1Colors,
@@ -404,7 +431,7 @@ function Dashboard() {
     };
 
     const scope2DoughnutData = {
-        labels: ['Purchased Electricity'],
+        labels: [t('dashboard.purchasedElectricity')],
         datasets: [{
             data: [scope2Total],
             backgroundColor: ['#3B82F6'],
@@ -414,11 +441,11 @@ function Dashboard() {
 
     const formatNumber = (num) => {
         if (num == null || Number.isNaN(num)) return '0';
-        return Number(num).toLocaleString('en-US', { maximumFractionDigits: 2 });
+        return Number(num).toLocaleString(dateLocale, { maximumFractionDigits: 2 });
     };
 
     const formatDate = (dateStr) => {
-        return new Date(dateStr).toLocaleDateString('en-US', {
+        return new Date(dateStr).toLocaleDateString(dateLocale, {
             month: 'short',
             day: 'numeric',
             year: 'numeric'
@@ -444,11 +471,11 @@ function Dashboard() {
             {/* Page Header */}
             <div className="page-header page-header-with-filter">
                 <div>
-                    <h1>Emissions Dashboard</h1>
-                    <p>Track and monitor your organization's carbon footprint</p>
+                    <h1>{t('dashboard.title')}</h1>
+                    <p>{t('dashboard.subtitle')}</p>
                 </div>
                 {hasToken && (
-                    <span className="dashboard-filter-label">{periodLabel} – {filterYear}</span>
+                    <span className="dashboard-filter-label">{periodLabel} {t('dashboard.dash')} {filterYear}</span>
                 )}
             </div>
 
@@ -461,7 +488,7 @@ function Dashboard() {
                                 className="date-filter-year"
                                 value={filterYear}
                                 onChange={(e) => setFilterYear(Number(e.target.value))}
-                                aria-label="Select year"
+                                aria-label={t('dashboard.selectYear')}
                             >
                                 {years.map((y) => (
                                     <option key={y} value={y}>{y}</option>
@@ -471,17 +498,17 @@ function Dashboard() {
                         </div>
                         <button type="button" className="btn btn-calendar-view" aria-pressed={calendarModalOpen} onClick={openCalendarModal}>
                             <i className="fas fa-calendar-alt"></i>
-                            Calendar View
+                            {t('dashboard.calendarView')}
                         </button>
                     </div>
                     <div className="date-filter-row date-filter-months">
-                        {MONTHS.map((month, idx) => {
+                        {monthsShort.map((month, idx) => {
                             const monthKey = `${filterYear}-${String(idx + 1).padStart(2, '0')}`;
                             const hasData = trendMonthsWithData.has(monthKey);
                             const isSelected = filterPeriod === idx || filterPeriod === String(idx) || (Array.isArray(filterPeriod) && filterPeriod.includes(idx));
                             return (
                                 <button
-                                    key={month}
+                                    key={idx}
                                     type="button"
                                     className={`date-filter-month ${isSelected ? 'active' : ''} ${hasData ? 'has-data' : ''}`}
                                     onClick={() => setFilterPeriod(idx)}
@@ -499,7 +526,7 @@ function Dashboard() {
                             className={`date-filter-period-btn ${filterPeriod === 'all' ? 'active' : ''}`}
                             onClick={() => setFilterPeriod('all')}
                         >
-                            All Time
+                            {t('dashboard.allTime')}
                         </button>
                         {['Q1', 'Q2', 'Q3', 'Q4'].map((q) => (
                             <button
@@ -508,7 +535,7 @@ function Dashboard() {
                                 className={`date-filter-period-btn ${filterPeriod === q ? 'active' : ''}`}
                                 onClick={() => setFilterPeriod(q)}
                             >
-                                {q}
+                                {t(`dashboard.quarter${q}`)}
                             </button>
                         ))}
                     </div>
@@ -519,13 +546,13 @@ function Dashboard() {
                 <div className="calendar-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="calendar-modal-title">
                     <div className="calendar-modal">
                         <div className="calendar-modal-header">
-                            <h2 id="calendar-modal-title">Select Month – {filterYear}</h2>
-                            <button type="button" className="calendar-modal-close" onClick={() => setCalendarModalOpen(false)} aria-label="Close">
+                            <h2 id="calendar-modal-title">{t('dashboard.calendarSelectMonth', { year: filterYear })}</h2>
+                            <button type="button" className="calendar-modal-close" onClick={() => setCalendarModalOpen(false)} aria-label={t('dashboard.closeModal')}>
                                 <i className="fas fa-times"></i>
                             </button>
                         </div>
                         <div className="calendar-modal-grid">
-                            {MONTHS_FULL.map((name, idx) => {
+                            {monthsLong.map((name, idx) => {
                                 const count = submissionsByMonth[idx] || 0;
                                 const hasData = count > 0;
                                 const isSelected = calendarSelectedMonths.includes(idx);
@@ -538,16 +565,20 @@ function Dashboard() {
                                     >
                                         <span className="calendar-modal-month-name">{name}</span>
                                         <span className="calendar-modal-month-count">
-                                            {count > 0 ? `${count} submission${count !== 1 ? 's' : ''}` : 'No data'}
+                                            {count > 0
+                                                ? (count === 1
+                                                    ? t('dashboard.calendarSubmissionSingle', { count })
+                                                    : t('dashboard.calendarSubmissionPlural', { count }))
+                                                : t('dashboard.calendarNoData')}
                                         </span>
                                     </button>
                                 );
                             })}
                         </div>
                         <div className="calendar-modal-footer">
-                            <p>Chart will display filtered data based on selected period.</p>
+                            <p>{t('dashboard.calendarHint')}</p>
                             <button type="button" className="btn btn-primary calendar-modal-apply" onClick={applyCalendarSelection}>
-                                Apply
+                                {t('dashboard.calendarApply')}
                             </button>
                         </div>
                     </div>
@@ -555,7 +586,7 @@ function Dashboard() {
             )}
 
             {apiLoading && hasToken && (
-                <div className="dashboard-loading">Loading dashboard…</div>
+                <div className="dashboard-loading">{t('dashboard.loading')}</div>
             )}
             {apiError && hasToken && (
                 <div className="dashboard-error">{apiError}</div>
@@ -563,7 +594,7 @@ function Dashboard() {
             {deleteError && (
                 <div className="dashboard-error dashboard-delete-error">
                     {deleteError}
-                    <button type="button" className="dashboard-error-dismiss" onClick={() => setDeleteError(null)} aria-label="Dismiss">×</button>
+                    <button type="button" className="dashboard-error-dismiss" onClick={() => setDeleteError(null)} aria-label={t('dashboard.dismissError')}>×</button>
                 </div>
             )}
 
@@ -571,8 +602,8 @@ function Dashboard() {
                 <div className="dashboard-submit-banner" role="alert">
                     <i className="fas fa-check-circle"></i>
                     <div>
-                        <strong>Submission saved</strong>
-                        <p>{submitMessage || 'Your emission(s) have been calculated and saved. Data below includes your latest submission.'}</p>
+                        <strong>{t('dashboard.submissionSaved')}</strong>
+                        <p>{submitMessage || t('dashboard.submissionSavedBody')}</p>
                     </div>
                 </div>
             )}
@@ -581,7 +612,7 @@ function Dashboard() {
             <div className="summary-cards">
                 <div className="card summary-card total">
                     <div className="card-content">
-                        <h3>Total Emissions</h3>
+                        <h3>{t('dashboard.totalEmissions')}</h3>
                         <div className="value">
                             {formatNumber(totalEmissions)}
                             <span className="unit">tCO₂e</span>
@@ -589,7 +620,7 @@ function Dashboard() {
                         {apiDashboard?.emissions?.trend?.length > 1 && (
                             <div className="trend down">
                                 <i className="fas fa-chart-line"></i>
-                                <span>Last 12 months</span>
+                                <span>{t('dashboard.last12Months')}</span>
                             </div>
                         )}
                     </div>
@@ -600,7 +631,7 @@ function Dashboard() {
 
                 <div className="card summary-card scope1">
                     <div className="card-content">
-                        <h3>Scope 1 Emissions</h3>
+                        <h3>{t('dashboard.scope1Emissions')}</h3>
                         <div className="value">
                             {formatNumber(scope1Total)}
                             <span className="unit">tCO₂e</span>
@@ -613,7 +644,7 @@ function Dashboard() {
 
                 <div className="card summary-card scope2">
                     <div className="card-content">
-                        <h3>Scope 2 Emissions</h3>
+                        <h3>{t('dashboard.scope2Emissions')}</h3>
                         <div className="value">
                             {formatNumber(scope2Total)}
                             <span className="unit">tCO₂e</span>
@@ -633,16 +664,16 @@ function Dashboard() {
                     <div className="card-header">
                         <h2>
                             <i className="fas fa-chart-line"></i>
-                            Monthly Emission Trend
+                            {t('dashboard.monthlyTrend')}
                         </h2>
                         <div className="chart-legend-inline">
                             <div className="legend-item">
                                 <span className="legend-color scope1-color"></span>
-                                <span>Scope 1</span>
+                                <span>{t('dashboard.chartDatasetScope1')}</span>
                             </div>
                             <div className="legend-item">
                                 <span className="legend-color scope2-color"></span>
-                                <span>Scope 2</span>
+                                <span>{t('dashboard.chartDatasetScope2')}</span>
                             </div>
                         </div>
                     </div>
@@ -656,7 +687,7 @@ function Dashboard() {
                     <div className="card-header">
                         <h2>
                             <i className="fas fa-fire"></i>
-                            Scope 1 Breakdown
+                            {t('dashboard.scope1Breakdown')}
                         </h2>
                     </div>
                     <div className="doughnut-container">
@@ -666,11 +697,11 @@ function Dashboard() {
                         <div className="chart-legend">
                             <div className="legend-item">
                                 <span className="legend-color" style={{ background: '#14B8A6' }}></span>
-                                <span>Mobile Combustion</span>
+                                <span>{t('dashboard.mobileCombustion')}</span>
                             </div>
                             <div className="legend-item">
                                 <span className="legend-color" style={{ background: '#0D9488' }}></span>
-                                <span>Stationary Combustion</span>
+                                <span>{t('dashboard.stationaryCombustion')}</span>
                             </div>
                         </div>
                     </div>
@@ -681,7 +712,7 @@ function Dashboard() {
                     <div className="card-header">
                         <h2>
                             <i className="fas fa-bolt"></i>
-                            Scope 2 Breakdown
+                            {t('dashboard.scope2Breakdown')}
                         </h2>
                     </div>
                     <div className="doughnut-container">
@@ -691,7 +722,7 @@ function Dashboard() {
                         <div className="chart-legend">
                             <div className="legend-item">
                                 <span className="legend-color" style={{ background: '#3B82F6' }}></span>
-                                <span>Purchased Electricity</span>
+                                <span>{t('dashboard.purchasedElectricity')}</span>
                             </div>
                         </div>
                     </div>
@@ -705,11 +736,11 @@ function Dashboard() {
                     <div className="card-header">
                         <h2>
                             <i className="fas fa-fire"></i>
-                            Scope 1 Details
+                            {t('dashboard.scope1Details')}
                         </h2>
                         <span className="info-badge">
                             <i className="fas fa-info-circle"></i>
-                            Direct emissions
+                            {t('dashboard.directEmissions')}
                         </span>
                     </div>
                     <div className="detail-table">
@@ -719,7 +750,7 @@ function Dashboard() {
                                     {hasToken && <th style={{ width: '2.5rem' }}>
                                         <input
                                             type="checkbox"
-                                            aria-label="Select all Scope 1 rows"
+                                            aria-label={t('dashboard.selectAllScope1')}
                                             checked={
                                                 scope1TableRows.length > 0 &&
                                                 scope1TableRows.every((entry) => entry.id && selectedEmissionIds.includes(entry.id))
@@ -736,12 +767,12 @@ function Dashboard() {
                                             }}
                                         />
                                     </th>}
-                                    <th>Source</th>
-                                    <th>Amount</th>
-                                    <th>Emissions</th>
-                                    <th>Data source</th>
-                                    <th>Status</th>
-                                    {hasToken && <th className="th-actions">Actions</th>}
+                                    <th>{t('dashboard.source')}</th>
+                                    <th>{t('dashboard.amount')}</th>
+                                    <th>{t('dashboard.emissions')}</th>
+                                    <th>{t('dashboard.dataSource')}</th>
+                                    <th>{t('dashboard.status')}</th>
+                                    {hasToken && <th className="th-actions">{t('dashboard.actions')}</th>}
                                 </tr>
                             </thead>
                             <tbody>
@@ -762,7 +793,7 @@ function Dashboard() {
                                                             type="checkbox"
                                                             checked={selectedEmissionIds.includes(entry.id)}
                                                             onChange={() => toggleEmissionSelected(entry.id)}
-                                                            aria-label="Select this emission"
+                                                            aria-label={t('dashboard.selectThisEmission')}
                                                         />
                                                     )}
                                                 </td>
@@ -780,7 +811,7 @@ function Dashboard() {
                                             </td>
                                             <td><span className="source-badge">{dataSource}</span></td>
                                             <td>
-                                                <span className="status-badge verified">verified</span>
+                                                <span className="status-badge verified">{t('dashboard.verified')}</span>
                                             </td>
                                             {hasToken && (
                                                 <td className="td-actions">
@@ -790,8 +821,8 @@ function Dashboard() {
                                                             className="btn-icon btn-delete"
                                                             onClick={() => handleDeleteEmission(entry.id)}
                                                             disabled={deletingId === entry.id}
-                                                            title="Delete this record"
-                                                            aria-label="Delete"
+                                                            title={t('dashboard.deleteThisRecord')}
+                                                            aria-label={t('dashboard.delete')}
                                                         >
                                                             {deletingId === entry.id ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-alt"></i>}
                                                         </button>
@@ -804,7 +835,7 @@ function Dashboard() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={hasToken ? 2 : 1}><strong>Total Scope 1</strong></td>
+                                    <td colSpan={hasToken ? 2 : 1}><strong>{t('dashboard.totalScope1')}</strong></td>
                                     <td colSpan={hasToken ? 4 : 3}><strong>{formatNumber(scope1Total)} tCO₂e</strong></td>
                                 </tr>
                             </tfoot>
@@ -817,11 +848,11 @@ function Dashboard() {
                     <div className="card-header">
                         <h2>
                             <i className="fas fa-bolt"></i>
-                            Scope 2 Details
+                            {t('dashboard.scope2Details')}
                         </h2>
                         <span className="info-badge">
                             <i className="fas fa-info-circle"></i>
-                            Indirect emissions
+                            {t('dashboard.indirectEmissions')}
                         </span>
                     </div>
                     <div className="detail-table">
@@ -831,7 +862,7 @@ function Dashboard() {
                                     {hasToken && <th style={{ width: '2.5rem' }}>
                                         <input
                                             type="checkbox"
-                                            aria-label="Select all Scope 2 rows"
+                                            aria-label={t('dashboard.selectAllScope2')}
                                             checked={
                                                 scope2TableRows.length > 0 &&
                                                 scope2TableRows.every((entry) => entry.id && selectedEmissionIds.includes(entry.id))
@@ -848,18 +879,18 @@ function Dashboard() {
                                             }}
                                         />
                                     </th>}
-                                    <th>Source</th>
-                                    <th>Amount</th>
-                                    <th>Emissions</th>
-                                    <th>Data source</th>
-                                    <th>Status</th>
-                                    {hasToken && <th className="th-actions">Actions</th>}
+                                    <th>{t('dashboard.source')}</th>
+                                    <th>{t('dashboard.amount')}</th>
+                                    <th>{t('dashboard.emissions')}</th>
+                                    <th>{t('dashboard.dataSource')}</th>
+                                    <th>{t('dashboard.status')}</th>
+                                    {hasToken && <th className="th-actions">{t('dashboard.actions')}</th>}
                                 </tr>
                             </thead>
                             <tbody>
                                 {scope2TableRows.map((entry, index) => {
                                     const isApi = entry.activityType != null;
-                                    const source = isApi ? entry.activityType : (entry.supplier || 'Electricity');
+                                    const source = isApi ? entry.activityType : (entry.supplier || t('dashboard.electricityFallback'));
                                     const amount = isApi ? entry.activityAmount : entry.electricity;
                                     const unit = isApi ? entry.activityUnit : entry.unit;
                                     const emissions = isApi ? kgToTonnes(entry.co2e) : (entry.emissions || 0);
@@ -874,7 +905,7 @@ function Dashboard() {
                                                             type="checkbox"
                                                             checked={selectedEmissionIds.includes(entry.id)}
                                                             onChange={() => toggleEmissionSelected(entry.id)}
-                                                            aria-label="Select this emission"
+                                                            aria-label={t('dashboard.selectThisEmission')}
                                                         />
                                                     )}
                                                 </td>
@@ -892,7 +923,7 @@ function Dashboard() {
                                             </td>
                                             <td><span className="source-badge">{dataSource}</span></td>
                                             <td>
-                                                <span className="status-badge verified">verified</span>
+                                                <span className="status-badge verified">{t('dashboard.verified')}</span>
                                             </td>
                                             {hasToken && (
                                                 <td className="td-actions">
@@ -902,8 +933,8 @@ function Dashboard() {
                                                             className="btn-icon btn-delete"
                                                             onClick={() => handleDeleteEmission(entry.id)}
                                                             disabled={deletingId === entry.id}
-                                                            title="Delete this record"
-                                                            aria-label="Delete"
+                                                            title={t('dashboard.deleteThisRecord')}
+                                                            aria-label={t('dashboard.delete')}
                                                         >
                                                             {deletingId === entry.id ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-alt"></i>}
                                                         </button>
@@ -916,7 +947,7 @@ function Dashboard() {
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={hasToken ? 2 : 1}><strong>Total Scope 2</strong></td>
+                                    <td colSpan={hasToken ? 2 : 1}><strong>{t('dashboard.totalScope2')}</strong></td>
                                     <td colSpan={hasToken ? 4 : 3}><strong>{formatNumber(scope2Total)} tCO₂e</strong></td>
                                 </tr>
                             </tfoot>
@@ -930,7 +961,7 @@ function Dashboard() {
                 <div className="card-header">
                     <h2>
                         <i className="fas fa-history"></i>
-                        Recent Activities
+                        {t('dashboard.recentActivities')}
                     </h2>
                 </div>
                 <div className="facility-table-wrapper">
@@ -940,7 +971,7 @@ function Dashboard() {
                                 {hasToken && <th style={{ width: '2.5rem' }}>
                                     <input
                                         type="checkbox"
-                                        aria-label="Select all recent activity rows"
+                                        aria-label={t('dashboard.selectAllRecent')}
                                         checked={
                                             recentActivitiesRows.length > 0 &&
                                             recentActivitiesRows.every((activity) => activity.id && selectedEmissionIds.includes(activity.id))
@@ -957,13 +988,13 @@ function Dashboard() {
                                         }}
                                     />
                                 </th>}
-                                <th>Source</th>
-                                <th>Date</th>
-                                <th>Type</th>
-                                <th>Emissions</th>
-                                <th>Data source</th>
-                                <th>Status</th>
-                                {hasToken && <th className="th-actions">Actions</th>}
+                                <th>{t('dashboard.source')}</th>
+                                <th>{t('dashboard.date')}</th>
+                                <th>{t('dashboard.type')}</th>
+                                <th>{t('dashboard.emissions')}</th>
+                                <th>{t('dashboard.dataSource')}</th>
+                                <th>{t('dashboard.status')}</th>
+                                {hasToken && <th className="th-actions">{t('dashboard.actions')}</th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -976,7 +1007,7 @@ function Dashboard() {
                                                     type="checkbox"
                                                     checked={selectedEmissionIds.includes(activity.id)}
                                                     onChange={() => toggleEmissionSelected(activity.id)}
-                                                    aria-label="Select this emission"
+                                                    aria-label={t('dashboard.selectThisEmission')}
                                                 />
                                             )}
                                         </td>
@@ -985,13 +1016,13 @@ function Dashboard() {
                                     <td>{activity.date ? formatDate(activity.date) : '—'}</td>
                                     <td>
                                         <span className={`type-badge ${activity.type}`}>
-                                            {activity.type === 'scope1' ? 'Scope 1' : activity.type === 'scope2' ? 'Scope 2' : 'Scope 3'}
+                                            {activity.type === 'scope1' ? t('dashboard.scope1') : activity.type === 'scope2' ? t('dashboard.scope2') : t('dashboard.scope3')}
                                         </span>
                                     </td>
                                     <td>{formatNumber(activity.amount)} tCO₂e</td>
                                     <td><span className="source-badge">{activity.dataSource || '—'}</span></td>
                                     <td>
-                                        <span className="status-badge verified">verified</span>
+                                        <span className="status-badge verified">{t('dashboard.verified')}</span>
                                     </td>
                                     {hasToken && (
                                         <td className="td-actions">
@@ -1001,8 +1032,8 @@ function Dashboard() {
                                                     className="btn-icon btn-delete"
                                                     onClick={() => handleDeleteEmission(activity.id)}
                                                     disabled={deletingId === activity.id}
-                                                    title="Delete this record"
-                                                    aria-label="Delete"
+                                                    title={t('dashboard.deleteThisRecord')}
+                                                    aria-label={t('dashboard.delete')}
                                                 >
                                                     {deletingId === activity.id ? <i className="fas fa-spinner fa-spin"></i> : <i className="fas fa-trash-alt"></i>}
                                                 </button>
@@ -1023,21 +1054,21 @@ function Dashboard() {
                         className="btn btn-danger"
                         disabled={!selectedEmissionIds.length || deletingId === 'bulk'}
                         onClick={handleBulkDelete}
-                        title={selectedEmissionIds.length ? `Delete ${selectedEmissionIds.length} selected record(s)` : 'Select records to enable'}
+                        title={selectedEmissionIds.length ? t('dashboard.deleteSelectedTooltip', { count: selectedEmissionIds.length }) : t('dashboard.selectRecordsToEnable')}
                     >
                         {deletingId === 'bulk' ? (
                             <>
-                                <i className="fas fa-spinner fa-spin"></i> Deleting…
+                                <i className="fas fa-spinner fa-spin"></i> {t('dashboard.deleting')}
                             </>
                         ) : (
                             <>
-                                <i className="fas fa-trash-alt"></i> Delete selected
+                                <i className="fas fa-trash-alt"></i> {t('dashboard.deleteSelected')}
                             </>
                         )}
                     </button>
                     {selectedEmissionIds.length > 0 && (
                         <span className="dashboard-bulk-count">
-                            {selectedEmissionIds.length} selected
+                            {t('dashboard.selected', { count: selectedEmissionIds.length })}
                         </span>
                     )}
                 </div>
@@ -1045,8 +1076,8 @@ function Dashboard() {
 
             {/* Footer */}
             <div className="dashboard-footer">
-                <p>Data last updated: {new Date().toLocaleString()}</p>
-                <p>URIMPACT Carbon Emission Dashboard v1.0</p>
+                <p>{t('dashboard.dataLastUpdated')} {new Date().toLocaleString(dateLocale)}</p>
+                <p>{t('dashboard.versionFooter')}</p>
             </div>
         </div>
     );

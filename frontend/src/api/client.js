@@ -366,14 +366,15 @@ export async function getEmissions(params = {}) {
 /**
  * Generate per-section AI narrative text for the V2 Decarbonisation Report.
  * Requires auth.
- * Body: { sections: Array<{ section_id, slot_id, bindings }> }
+ * Body: { sections: Array<{ section_id, slot_id, bindings }>, language?: 'en' | 'ar' }
  * Returns: { narratives: Array<{ slot_id, text }> }
  */
-export async function getReportNarratives(sections) {
+export async function getReportNarratives(sections, options = {}) {
+  const language = options.language === 'ar' ? 'ar' : 'en';
   const res = await fetch(`${API_BASE}/reports/narrative`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sections }),
+    body: JSON.stringify({ sections, language }),
   });
 
   if (!res.ok) {

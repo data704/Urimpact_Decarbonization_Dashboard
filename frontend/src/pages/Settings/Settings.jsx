@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useTranslation } from 'react-i18next';
 import './Settings.css';
 
 function Settings() {
     const { user } = useAuth();
+    const { t, i18n } = useTranslation();
     const [notification, setNotification] = useState(null);
     const [settings, setSettings] = useState({
         organization: {
@@ -38,7 +40,7 @@ function Settings() {
     };
 
     const handleSave = () => {
-        showNotification('Settings saved successfully!');
+        showNotification(t('settings.saved'));
     };
 
     const updateSetting = (category, field, value) => {
@@ -63,8 +65,8 @@ function Settings() {
 
             {/* Page Header */}
             <div className="page-header">
-                <h1>Settings</h1>
-                <p>Configure your organization and notification preferences</p>
+                <h1>{t('settings.title')}</h1>
+                <p>{t('settings.subtitle')}</p>
             </div>
 
             {/* Organization Settings */}
@@ -74,14 +76,14 @@ function Settings() {
                         <i className="fas fa-building"></i>
                     </div>
                     <div>
-                        <h2>Organization Settings</h2>
-                        <p>Configure your organization details</p>
+                        <h2>{t('settings.orgTitle')}</h2>
+                        <p>{t('settings.orgSubtitle')}</p>
                     </div>
                 </div>
 
                 <div className="settings-grid">
                     <div className="form-group">
-                        <label>Organization Name</label>
+                        <label>{t('settings.organizationName')}</label>
                         <input
                             type="text"
                             value={settings.organization.name}
@@ -89,41 +91,41 @@ function Settings() {
                         />
                     </div>
                     <div className="form-group">
-                        <label>Industry Sector</label>
+                        <label>{t('settings.industrySector')}</label>
                         <select
                             value={settings.organization.industry}
                             onChange={(e) => updateSetting('organization', 'industry', e.target.value)}
                         >
-                            <option value="Technology">Technology</option>
-                            <option value="Manufacturing">Manufacturing</option>
-                            <option value="Healthcare">Healthcare</option>
-                            <option value="Finance">Finance</option>
-                            <option value="Retail">Retail</option>
-                            <option value="Energy">Energy</option>
+                            <option value="Technology">{t('settings.industry.Technology')}</option>
+                            <option value="Manufacturing">{t('settings.industry.Manufacturing')}</option>
+                            <option value="Healthcare">{t('settings.industry.Healthcare')}</option>
+                            <option value="Finance">{t('settings.industry.Finance')}</option>
+                            <option value="Retail">{t('settings.industry.Retail')}</option>
+                            <option value="Energy">{t('settings.industry.Energy')}</option>
                         </select>
                     </div>
                     <div className="form-group">
-                        <label>Fiscal Year Start</label>
+                        <label>{t('settings.fiscalYearStart')}</label>
                         <select
                             value={settings.organization.fiscalYear}
                             onChange={(e) => updateSetting('organization', 'fiscalYear', e.target.value)}
                         >
-                            <option value="January">January</option>
-                            <option value="April">April</option>
-                            <option value="July">July</option>
-                            <option value="October">October</option>
+                            <option value="January">{t('settings.fiscalMonth.January')}</option>
+                            <option value="April">{t('settings.fiscalMonth.April')}</option>
+                            <option value="July">{t('settings.fiscalMonth.July')}</option>
+                            <option value="October">{t('settings.fiscalMonth.October')}</option>
                         </select>
                     </div>
                     <div className="form-group">
-                        <label>Default Currency</label>
+                        <label>{t('settings.defaultCurrency')}</label>
                         <select
                             value={settings.organization.currency}
                             onChange={(e) => updateSetting('organization', 'currency', e.target.value)}
                         >
-                            <option value="USD">USD ($)</option>
-                            <option value="EUR">EUR (€)</option>
-                            <option value="GBP">GBP (£)</option>
-                            <option value="CAD">CAD ($)</option>
+                            <option value="USD">{t('settings.currency.USD')}</option>
+                            <option value="EUR">{t('settings.currency.EUR')}</option>
+                            <option value="GBP">{t('settings.currency.GBP')}</option>
+                            <option value="CAD">{t('settings.currency.CAD')}</option>
                         </select>
                     </div>
                 </div>
@@ -136,16 +138,31 @@ function Settings() {
                         <i className="fas fa-bell"></i>
                     </div>
                     <div>
-                        <h2>Notification Preferences</h2>
-                        <p>Manage your notification settings</p>
+                        <h2>{t('settings.notificationTitle')}</h2>
+                        <p>{t('settings.notificationSubtitle')}</p>
                     </div>
+                </div>
+
+                <div className="toggle-item">
+                    <div className="toggle-info">
+                        <h4>{t('settings.languageTitle')}</h4>
+                        <p>{t('settings.languageSubtitle')}</p>
+                    </div>
+                    <select
+                        value={i18n.language === 'ar' ? 'ar' : 'en'}
+                        onChange={(e) => i18n.changeLanguage(e.target.value)}
+                        style={{ minWidth: 160 }}
+                    >
+                        <option value="en">{t('common.english')}</option>
+                        <option value="ar">{t('common.arabic')}</option>
+                    </select>
                 </div>
 
                 <div className="notification-settings">
                     <div className="toggle-item">
                         <div className="toggle-info">
-                            <h4>Email Alerts</h4>
-                            <p>Receive important updates via email</p>
+                            <h4>{t('settings.emailAlerts')}</h4>
+                            <p>{t('settings.emailAlertsDesc')}</p>
                         </div>
                         <label className="toggle-switch">
                             <input
@@ -158,8 +175,8 @@ function Settings() {
                     </div>
                     <div className="toggle-item">
                         <div className="toggle-info">
-                            <h4>Weekly Digest</h4>
-                            <p>Get a weekly summary of your emissions</p>
+                            <h4>{t('settings.weeklyDigest')}</h4>
+                            <p>{t('settings.weeklyDigestDesc')}</p>
                         </div>
                         <label className="toggle-switch">
                             <input
@@ -172,8 +189,8 @@ function Settings() {
                     </div>
                     <div className="toggle-item">
                         <div className="toggle-info">
-                            <h4>Target Alerts</h4>
-                            <p>Notify when approaching emission targets</p>
+                            <h4>{t('settings.targetAlerts')}</h4>
+                            <p>{t('settings.targetAlertsDesc')}</p>
                         </div>
                         <label className="toggle-switch">
                             <input
@@ -186,8 +203,8 @@ function Settings() {
                     </div>
                     <div className="toggle-item">
                         <div className="toggle-info">
-                            <h4>Report Reminders</h4>
-                            <p>Reminders for report submissions</p>
+                            <h4>{t('settings.reportReminders')}</h4>
+                            <p>{t('settings.reportRemindersDesc')}</p>
                         </div>
                         <label className="toggle-switch">
                             <input
@@ -205,7 +222,7 @@ function Settings() {
             <div className="settings-actions">
                 <button className="btn btn-primary" onClick={handleSave}>
                     <i className="fas fa-save"></i>
-                    Save Changes
+                    {t('settings.saveChanges')}
                 </button>
             </div>
         </div>

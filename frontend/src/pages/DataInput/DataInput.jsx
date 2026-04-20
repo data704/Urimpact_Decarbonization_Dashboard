@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import { useDataStore } from '../../context/DataStoreContext';
 import { uploadReceiptAndExtract, uploadReceiptsMultiple, processDocument, submitReceiptExtraction, submitReceiptBatch, submitManualEmission, getAuthToken, getEmissions, deleteEmission, deleteEmissionsBulk } from '../../api/client.js';
@@ -11,8 +12,6 @@ import '../Dashboard/Dashboard.css';
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const MAX_FILES_COUNT = 10;
 const MAX_FILE_SIZE_MB = 10;
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const SITES_KEY_PREFIX = 'urimpact_data_input_sites_';
 const ACTIVITY_KEY_PREFIX = 'urimpact_site_activity_';
@@ -28,6 +27,55 @@ const COUNTRY_OPTIONS = [
 const FACILITY_TYPES = ['Office', 'Warehouse', 'Manufacturing Plant', 'Distribution Centre', 'Data Centre', 'Retail Outlet'];
 const BOUNDARY_OPTIONS = ['Operational Control', 'Financial Control', 'Equity Share'];
 const CURRENCY_OPTIONS = ['AED — UAE Dirham', 'SAR — Saudi Riyal', 'USD — US Dollar', 'EUR — Euro', 'GBP — British Pound'];
+
+/** English stored values → i18n key suffix under dataInput.options */
+const DI_COUNTRY_I18N = {
+    'United Arab Emirates': 'uae',
+    'Saudi Arabia': 'saudi',
+    Qatar: 'qatar',
+    Kuwait: 'kuwait',
+    Bahrain: 'bahrain',
+    Oman: 'oman',
+};
+const DI_FACILITY_I18N = {
+    Office: 'office',
+    Warehouse: 'warehouse',
+    'Manufacturing Plant': 'manufacturingPlant',
+    'Distribution Centre': 'distributionCentre',
+    'Data Centre': 'dataCentre',
+    'Retail Outlet': 'retailOutlet',
+};
+const DI_BOUNDARY_I18N = {
+    'Operational Control': 'operationalControl',
+    'Financial Control': 'financialControl',
+    'Equity Share': 'equityShare',
+};
+const DI_CURRENCY_LINE_I18N = {
+    'AED — UAE Dirham': 'aed',
+    'SAR — Saudi Riyal': 'sar',
+    'USD — US Dollar': 'usd',
+    'EUR — Euro': 'eur',
+    'GBP — British Pound': 'gbp',
+};
+const DI_FUEL_TYPE_I18N = {
+    Diesel: 'diesel',
+    'Gasoline/Petrol': 'gasolinePetrol',
+    'Natural Gas': 'naturalGas',
+    LPG: 'lpg',
+    Biodiesel: 'biodiesel',
+};
+const DI_FUEL_UNIT_I18N = {
+    Liters: 'liters',
+    Gallons: 'gallons',
+    kg: 'kg',
+    'm³': 'm3',
+};
+const DI_GRID_REGION_I18N = {
+    'Saudi Arabia - National': 'saNational',
+    'Saudi Arabia - Eastern': 'saEastern',
+    'Saudi Arabia - Western': 'saWestern',
+    'Saudi Arabia - Central': 'saCentral',
+};
 
 function sitesStorageKey(orgKey) {
     return `${SITES_KEY_PREFIX}${orgKey}`;
@@ -92,18 +140,6 @@ function countryChip(country) {
     return m[country] || (country && String(country).slice(0, 4)) || '—';
 }
 
-function formatLastUpload(iso) {
-    if (!iso) return '—';
-    const t = new Date(iso).getTime();
-    if (Number.isNaN(t)) return '—';
-    const diff = Date.now() - t;
-    if (diff < 60000) return 'Just now';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} min ago`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)} hours ago`;
-    if (diff < 604800000) return `${Math.floor(diff / 86400000)} days ago`;
-    return new Date(iso).toLocaleDateString();
-}
-
 function bumpSiteActivity(orgKey, siteId, periodKey, { docCount = 0, manualRows = 0 }) {
     if (!siteId || !periodKey) return;
     const key = `${ACTIVITY_KEY_PREFIX}${orgKey}`;
@@ -151,6 +187,7 @@ const isFuelActivity = (activityType) =>
     FUEL_ACTIVITY_TYPES.some(f => String(activityType || '').toLowerCase().trim().includes(f));
 
 function DataInput() {
+    const { t, i18n } = useTranslation();
     const navigate = useNavigate();
     const { user } = useAuth();
     const orgKey = user?.organizationId != null ? String(user.organizationId) : user?.id != null ? String(user.id) : 'guest';
@@ -227,6 +264,31 @@ function DataInput() {
     const fuelUnits = ['Liters', 'Gallons', 'kg', 'm³'];
     const gridRegions = ['Saudi Arabia - National', 'Saudi Arabia - Eastern', 'Saudi Arabia - Western', 'Saudi Arabia - Central'];
     const currencies = ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'SAR'];
+
+    const dateLocale = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+    const monthNamesLong = useMemo(
+        () => Array.from({ length: 12 }, (_, i) =>
+            new Date(2000, i, 1).toLocaleDateString(dateLocale, { month: 'long' })
+        ),
+        [dateLocale]
+    );
+
+    const formatLastUpload = useCallback((iso) => {
+        if (!iso) return t('dataInput.emDash');
+        const ts = new Date(iso).getTime();
+        if (Number.isNaN(ts)) return t('dataInput.emDash');
+        const diff = Date.now() - ts;
+        if (diff < 60000) return t('dataInput.timeJustNow');
+        if (diff < 3600000) return t('dataInput.timeMinAgo', { count: Math.floor(diff / 60000) });
+        if (diff < 86400000) return t('dataInput.timeHoursAgo', { count: Math.floor(diff / 3600000) });
+        if (diff < 604800000) return t('dataInput.timeDaysAgo', { count: Math.floor(diff / 86400000) });
+        return new Date(iso).toLocaleDateString(dateLocale);
+    }, [t, dateLocale]);
+
+    const optLabel = useCallback((category, map, value) => {
+        const k = map[value];
+        return k ? t(`dataInput.options.${category}.${k}`) : value;
+    }, [t]);
 
     const showNotification = (message, type = 'success') => {
         setNotification({ message, type });
@@ -360,20 +422,20 @@ function DataInput() {
         e.preventDefault();
 
         if (selectedSiteId === 'all' || !currentSite) {
-            showNotification('Select a site to attribute manual entries.', 'error');
+            showNotification(t('dataInput.toast.selectSiteManual'), 'error');
             return;
         }
 
         const scope1Valid = scope1Entries.filter(entry => entry.date && entry.amount);
         const scope2Valid = scope2Entries.filter(entry => entry.date && entry.electricity);
         if (scope1Valid.length === 0 && scope2Valid.length === 0) {
-            showNotification('Please add at least one entry with date and amount (or electricity).', 'error');
+            showNotification(t('dataInput.toast.addEntryWithData'), 'error');
             return;
         }
 
         const token = getAuthToken();
         if (!token) {
-            showNotification('Log in to save manual entries (e.g. demo@urimpact.com / Demo123!).', 'error');
+            showNotification(t('dataInput.toast.loginManualDemo'), 'error');
             return;
         }
 
@@ -442,10 +504,10 @@ function DataInput() {
             currency: 'USD'
         }]);
 
-            showNotification(`${count} emission(s) saved (${totalCo2e.toFixed(1)} kg CO₂e).`, 'success');
-            navigate('/', { state: { fromSubmit: true, submitMessage: `${count} manual emission(s) saved`, count } });
+            showNotification(t('dataInput.toast.emissionsSaved', { count, total: totalCo2e.toFixed(1) }), 'success');
+            navigate('/', { state: { fromSubmit: true, submitMessage: t('dataInput.navigateManualSaved', { count }), count } });
         } catch (err) {
-            showNotification(err?.message || 'Failed to save emissions', 'error');
+            showNotification(err?.message || t('dataInput.toast.saveEmissionsFailed'), 'error');
         } finally {
             setSubmittingManual(false);
         }
@@ -531,9 +593,9 @@ function DataInput() {
             date: e.billingPeriodStart || e.calculatedAt,
             type: e.scope === 'SCOPE_1' ? 'scope1' : e.scope === 'SCOPE_2' ? 'scope2' : 'scope3',
             amount: kgToTonnes(e.co2e),
-            dataSource: e.dataSource || '—',
+            dataSource: e.dataSource || t('dataInput.emDash'),
         })),
-        [sortedDiEmissions]
+        [sortedDiEmissions, t]
     );
 
     const diReceiptRows = useMemo(
@@ -542,26 +604,26 @@ function DataInput() {
             .slice(0, 10)
             .map((e) => ({
                 id: e.id,
-                fileName: e.document?.fileName || 'Receipt',
+                fileName: e.document?.fileName || t('dataInput.defaultReceiptName'),
                 source: e.activityType,
                 date: e.billingPeriodStart || e.calculatedAt,
                 type: e.scope === 'SCOPE_1' ? 'scope1' : e.scope === 'SCOPE_2' ? 'scope2' : 'scope3',
                 amount: kgToTonnes(e.co2e),
-                dataSource: e.dataSource || '—',
+                dataSource: e.dataSource || t('dataInput.emDash'),
             })),
-        [sortedDiEmissions]
+        [sortedDiEmissions, t]
     );
 
     const diFormatNumber = (num) => {
         if (num == null || Number.isNaN(num)) return '0';
-        return Number(num).toLocaleString('en-US', { maximumFractionDigits: 2 });
+        return Number(num).toLocaleString(dateLocale, { maximumFractionDigits: 2 });
     };
 
     const diFormatDate = (dateStr) => {
-        if (!dateStr) return '—';
+        if (!dateStr) return t('dataInput.emDash');
         const d = new Date(dateStr);
-        if (Number.isNaN(d.getTime())) return '—';
-        return d.toLocaleDateString('en-US', {
+        if (Number.isNaN(d.getTime())) return t('dataInput.emDash');
+        return d.toLocaleDateString(dateLocale, {
             month: 'short',
             day: 'numeric',
             year: 'numeric',
@@ -577,7 +639,7 @@ function DataInput() {
             setDiSelectedEmissionIds((prev) => prev.filter((id) => id !== emissionId));
             setActivityTick((t) => t + 1);
         } catch (err) {
-            setDiDeleteError(err?.message || 'Failed to delete');
+            setDiDeleteError(err?.message || t('dashboard.failedToDelete'));
         } finally {
             setDiDeletingId(null);
         }
@@ -598,7 +660,7 @@ function DataInput() {
             setDiSelectedEmissionIds([]);
             setActivityTick((t) => t + 1);
         } catch (err) {
-            setDiDeleteError(err?.message || 'Failed to delete selected records');
+            setDiDeleteError(err?.message || t('dashboard.failedToDeleteBulk'));
         } finally {
             setDiDeletingId(null);
         }
@@ -648,7 +710,7 @@ function DataInput() {
         if (!fileList?.length) return;
 
         if (selectedSiteId === 'all' || !currentSite) {
-            showNotification('Select a specific site before uploading documents.', 'error');
+            showNotification(t('dataInput.toast.selectSiteUpload'), 'error');
             e.target.value = '';
             return;
         }
@@ -656,7 +718,7 @@ function DataInput() {
 
         const token = getAuthToken();
         if (!token) {
-            showNotification('Log in with the backend (e.g. demo@urimpact.com / Demo123!) to extract receipt data with AI.', 'error');
+            showNotification(t('dataInput.toast.loginUploadDemo'), 'error');
             e.target.value = '';
             return;
         }
@@ -664,7 +726,7 @@ function DataInput() {
         const files = Array.from(fileList);
 
         if (files.length > MAX_FILES_COUNT) {
-            showNotification(`Maximum ${MAX_FILES_COUNT} files per upload. Please select fewer files.`, 'error');
+            showNotification(t('dataInput.toast.maxFiles', { max: MAX_FILES_COUNT }), 'error');
             e.target.value = '';
             return;
         }
@@ -672,7 +734,7 @@ function DataInput() {
         const oversized = files.filter(f => f.size > MAX_FILE_SIZE_BYTES);
         if (oversized.length) {
             const names = oversized.map(f => `"${f.name}" (${(f.size / 1024 / 1024).toFixed(1)} MB)`).join(', ');
-            showNotification(`File size limit is ${MAX_FILE_SIZE_MB} MB per file. Too large: ${names}`, 'error');
+            showNotification(t('dataInput.toast.fileTooLarge', { maxMb: MAX_FILE_SIZE_MB, names }), 'error');
             e.target.value = '';
             return;
         }
@@ -681,7 +743,7 @@ function DataInput() {
 
         try {
             if (files.length === 1) {
-                showNotification(`Uploading "${files[0].name}" – URIMPACT AI is reading the receipt...`, 'info');
+                showNotification(t('dataInput.toast.uploadingSingle', { file: files[0].name }), 'info');
                 const result = await uploadReceiptAndExtract(files[0]);
                 const fileName = result?.fileName || files[0].name;
                 const docId = result?.documentId;
@@ -690,28 +752,28 @@ function DataInput() {
                     const newItems = result.extractedFields.map((fields) => buildPendingItem(docId, fileName, fields, expectedDate, siteMeta));
                     setPendingVerifications(prev => [...prev, ...newItems]);
                     if (newItems.some((i) => i.dateMismatch)) {
-                        showNotification(`The date on the receipt doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the date in the table below before submitting.`, 'warning');
+                        showNotification(t('dataInput.toast.dateMismatchSingle', { month: monthNamesLong[expectedDocMonth - 1], year: expectedDocYear }), 'warning');
                     } else {
-                        showNotification(`${newItems.length} entries extracted. Verify and use "Submit all" to save.`, 'success');
+                        showNotification(t('dataInput.toast.entriesExtractedSubmitAll', { count: newItems.length }), 'success');
                     }
                 } else {
                     const fields = result?.extractedFields || {};
                     const item = buildPendingItem(docId, fileName, fields, expectedDate, siteMeta);
                     setPendingVerifications(prev => [...prev, item]);
                     if (item.dateMismatch) {
-                        showNotification(`The date on the receipt doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the date in the table below before submitting.`, 'warning');
+                        showNotification(t('dataInput.toast.dateMismatchSingle', { month: monthNamesLong[expectedDocMonth - 1], year: expectedDocYear }), 'warning');
                     } else {
-                        showNotification('Verify the numbers below and press Submit to calculate emissions.', 'success');
+                        showNotification(t('dataInput.toast.verifyNumbersSubmit'), 'success');
                     }
                 }
             } else {
-                showNotification(`Uploading ${files.length} receipts...`, 'info');
+                showNotification(t('dataInput.toast.uploadingMany', { count: files.length }), 'info');
                 const documents = await uploadReceiptsMultiple(files);
                 let totalEntries = 0;
                 let hasDateMismatch = false;
                 const expectedDate = getExpectedDateString();
                 for (let i = 0; i < documents.length; i++) {
-                    showNotification(`Extracting ${i + 1}/${documents.length}: ${documents[i].fileName}`, 'info');
+                    showNotification(t('dataInput.toast.extracting', { current: i + 1, total: documents.length, fileName: documents[i].fileName }), 'info');
                     const result = await processDocument(documents[i].id, documents[i].fileName);
                     const fileName = result?.fileName || documents[i].fileName;
                     const docId = result?.documentId;
@@ -729,14 +791,19 @@ function DataInput() {
                     }
                 }
                 if (hasDateMismatch) {
-                    showNotification(`The date on one or more receipts doesn't match your selected expected month (${MONTHS[expectedDocMonth - 1]} ${expectedDocYear}). Please correct the dates in the table below before submitting.`, 'warning');
+                    showNotification(t('dataInput.toast.dateMismatchBatch', { month: monthNamesLong[expectedDocMonth - 1], year: expectedDocYear }), 'warning');
                 } else {
-                    showNotification(totalEntries > documents.length ? `${totalEntries} entries extracted. Verify and Submit.` : `${documents.length} receipts extracted. Verify each and Submit.`, 'success');
+                    showNotification(
+                        totalEntries > documents.length
+                            ? t('dataInput.toast.entriesExtractedMany', { totalEntries })
+                            : t('dataInput.toast.receiptsExtractedMany', { count: documents.length }),
+                        'success'
+                    );
                 }
             }
         } catch (err) {
-            const msg = err?.message || 'Upload or extraction failed';
-            showNotification(msg.includes('401') ? 'Session expired. Please log in again.' : msg, 'error');
+            const msg = err?.message || t('dataInput.toast.uploadFailed');
+            showNotification(msg.includes('401') ? t('dataInput.toast.sessionExpired') : msg, 'error');
         } finally {
             setUploadingReceipt(false);
             e.target.value = '';
@@ -761,7 +828,7 @@ function DataInput() {
         if (!item?.documentId) return;
         const amount = Number(item.activityAmount);
         if (!item.activityType || Number.isNaN(amount) || !item.activityUnit) {
-            showNotification('Please fill in Activity type, Amount, and Unit.', 'error');
+            showNotification(t('dataInput.toast.fillActivityFields'), 'error');
             return;
         }
 
@@ -791,16 +858,16 @@ function DataInput() {
                 date: item.billingPeriodStart || item.date || undefined,
             });
 
-            showNotification(`Saved: ${result?.emission?.co2e?.toFixed(2) ?? '—'} kg CO2e. Taking you to Dashboard…`, 'success');
+            showNotification(t('dataInput.toast.savedCo2eNavigate', { amount: result?.emission?.co2e?.toFixed(2) ?? t('dataInput.emDash') }), 'success');
             const pk = `${expectedDocYear}-${String(expectedDocMonth).padStart(2, '0')}`;
             if (item.siteId) {
                 bumpSiteActivity(orgKey, item.siteId, pk, { docCount: 1 });
                 setActivityTick((x) => x + 1);
             }
             setPendingVerifications(prev => prev.filter((_, i) => i !== index));
-            navigate('/', { state: { fromSubmit: true, submitMessage: `${result?.emission?.co2e?.toFixed(2) ?? '—'} kg CO₂e saved`, count: 1 } });
+            navigate('/', { state: { fromSubmit: true, submitMessage: t('dataInput.navigateSingleEmission', { amount: result?.emission?.co2e?.toFixed(2) ?? t('dataInput.emDash') }), count: 1 } });
         } catch (err) {
-            showNotification(err?.message || 'Submit failed', 'error');
+            showNotification(err?.message || t('dataInput.toast.submitFailed'), 'error');
         } finally {
             setSubmittingId(null);
         }
@@ -826,7 +893,7 @@ function DataInput() {
         }));
         const invalid = entries.find(e => !e.activityType || Number.isNaN(e.activityAmount) || !e.activityUnit);
         if (invalid) {
-            showNotification('Please fill in Activity type, Amount, and Unit for all entries.', 'error');
+            showNotification(t('dataInput.toast.fillAllEntriesBatch'), 'error');
             return;
         }
         setSubmittingBatchId(documentId);
@@ -835,8 +902,8 @@ function DataInput() {
             const count = result?.emissions?.length ?? entries.length;
             const skipped = result?.skipped?.length ?? 0;
             const msg = skipped > 0
-                ? `${count} emission(s) saved, ${skipped} row(s) skipped (invalid data). Taking you to Dashboard…`
-                : `${count} emission(s) saved. Taking you to Dashboard…`;
+                ? t('dataInput.toast.batchSavedSkipped', { count, skipped })
+                : t('dataInput.toast.batchSaved', { count });
             showNotification(msg, 'success');
 
             // Keep demo/local data in sync for dashboard filtering if the token expires later.
@@ -861,9 +928,9 @@ function DataInput() {
             }
             const removeIndices = new Set(indices.map(({ i }) => i));
             setPendingVerifications(prev => prev.filter((_, i) => !removeIndices.has(i)));
-            navigate('/', { state: { fromSubmit: true, submitMessage: `${count} emission(s) saved`, count } });
+            navigate('/', { state: { fromSubmit: true, submitMessage: t('dataInput.navigateEmissionsSaved', { count }), count } });
         } catch (err) {
-            showNotification(err?.message || 'Batch submit failed', 'error');
+            showNotification(err?.message || t('dataInput.toast.batchSubmitFailed'), 'error');
         } finally {
             setSubmittingBatchId(null);
         }
@@ -896,7 +963,7 @@ function DataInput() {
             ({ item: p }) => !p.activityType || Number.isNaN(Number(p.activityAmount)) || !p.activityUnit
         );
         if (invalid) {
-            showNotification('Please fill in Activity type, Amount, and Unit for all entries before submitting all.', 'error');
+            showNotification(t('dataInput.toast.fillAllBeforeSubmitAll'), 'error');
             return;
         }
 
@@ -982,12 +1049,12 @@ function DataInput() {
                 }
             });
             setActivityTick((x) => x + 1);
-            showNotification(`${totalCount} emission(s) saved. Taking you to Dashboard…`, 'success');
+            showNotification(t('dataInput.toast.submitAllSaved', { totalCount }), 'success');
             const removeSet = new Set(groups.flatMap((g) => g.indices));
             setPendingVerifications((prev) => prev.filter((_, idx) => !removeSet.has(idx)));
-            navigate('/', { state: { fromSubmit: true, submitMessage: `${totalCount} emission(s) saved`, count: totalCount } });
+            navigate('/', { state: { fromSubmit: true, submitMessage: t('dataInput.navigateEmissionsSaved', { count: totalCount }), count: totalCount } });
         } catch (err) {
-            showNotification(err?.message || 'Submit all failed', 'error');
+            showNotification(err?.message || t('dataInput.toast.submitAllFailed'), 'error');
         } finally {
             setSubmittingAll(false);
         }
@@ -995,7 +1062,7 @@ function DataInput() {
 
     const handleSaveNewSite = () => {
         if (!newSite.name.trim() || !newSite.code.trim() || !newSite.city.trim() || !newSite.facilityType) {
-            showNotification('Please fill Site name, code, city, and facility type.', 'error');
+            showNotification(t('dataInput.toast.fillSiteFields'), 'error');
             return;
         }
         const id = `site-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -1013,28 +1080,28 @@ function DataInput() {
             currency: 'AED — UAE Dirham',
             utilityProvider: '',
         });
-        showNotification(`Site "${row.name}" added for your organization.`, 'success');
+        showNotification(t('dataInput.toast.siteAdded', { name: row.name }), 'success');
     };
 
     const handleDeleteSelectedSite = () => {
         if (!canManageSites) {
-            showNotification('Only administrators can delete sites.', 'error');
+            showNotification(t('dataInput.toast.adminDeleteOnly'), 'error');
             return;
         }
         if (!selectedSiteId || selectedSiteId === 'all' || !currentSite) {
-            showNotification('Select a site to delete.', 'warning');
+            showNotification(t('dataInput.toast.selectSiteDelete'), 'warning');
             return;
         }
         if (sites.length <= 1) {
-            showNotification('At least one site must remain.', 'warning');
+            showNotification(t('dataInput.toast.oneSiteMinimum'), 'warning');
             return;
         }
         const hasPendingForSite = pendingVerifications.some((p) => p.siteId === selectedSiteId);
         if (hasPendingForSite) {
-            showNotification('Submit or clear pending verification rows for this site before deleting it.', 'warning');
+            showNotification(t('dataInput.toast.pendingBeforeDelete'), 'warning');
             return;
         }
-        const ok = window.confirm(`Delete site "${currentSite.name}"? This removes it from site lists and local site activity history.`);
+        const ok = window.confirm(t('dataInput.confirmDeleteSite', { name: currentSite.name }));
         if (!ok) return;
 
         const nextSites = sites.filter((s) => s.id !== selectedSiteId);
@@ -1042,7 +1109,7 @@ function DataInput() {
         removeSiteActivity(orgKey, selectedSiteId);
         setActivityTick((t) => t + 1);
         setSelectedSiteId(nextSites[0]?.id ?? 'all');
-        showNotification(`Site "${currentSite.name}" deleted.`, 'success');
+        showNotification(t('dataInput.toast.siteDeleted', { name: currentSite.name }), 'success');
     };
 
     useEffect(() => {
@@ -1053,7 +1120,7 @@ function DataInput() {
         return () => window.removeEventListener('keydown', onKey);
     }, []);
 
-    const siteNameDisplay = currentSite?.name ?? 'Site';
+    const siteNameDisplay = currentSite?.name ?? t('dataInput.defaultSiteName');
 
     return (
         <div className="data-input-content">
@@ -1066,14 +1133,14 @@ function DataInput() {
             )}
 
             <div className="page-header di-page-header">
-                <h1>Data Input</h1>
-                <p>Upload and manage emissions data by site</p>
+                <h1>{t('dataInput.title')}</h1>
+                <p>{t('dataInput.subtitle')}</p>
             </div>
 
             <div className="di-site-context-card">
                 <div className="di-site-context-top">
                     <div className="di-site-selector-group">
-                        <span className="di-field-label">Selected Site</span>
+                        <span className="di-field-label">{t('dataInput.selectedSite')}</span>
                         <div className="di-site-select-wrap">
                             <i className="fas fa-map-marker-alt di-site-select-icon" aria-hidden />
                             <select
@@ -1081,7 +1148,7 @@ function DataInput() {
                                 value={selectedSiteId}
                                 onChange={(e) => setSelectedSiteId(e.target.value)}
                             >
-                                <option value="all">All Sites</option>
+                                <option value="all">{t('dataInput.allSites')}</option>
                                 {sites.map((s) => (
                                     <option key={s.id} value={s.id}>{s.name}</option>
                                 ))}
@@ -1091,12 +1158,12 @@ function DataInput() {
                     {currentSite && (
                         <div className="di-site-meta-chips">
                             <span className="di-chip"><i className="fas fa-globe" /> {countryChip(currentSite.country)}</span>
-                            <span className="di-chip"><i className="fas fa-industry" /> {currentSite.facilityType}</span>
-                            <span className="di-chip"><i className="fas fa-border-all" /> {currentSite.boundary || '—'}</span>
+                            <span className="di-chip"><i className="fas fa-industry" /> {optLabel('facility', DI_FACILITY_I18N, currentSite.facilityType)}</span>
+                            <span className="di-chip"><i className="fas fa-border-all" /> {currentSite.boundary ? optLabel('boundary', DI_BOUNDARY_I18N, currentSite.boundary) : t('dataInput.emDash')}</span>
                         </div>
                     )}
                     <div className="di-year-selector-group">
-                        <span className="di-field-label">Reporting Year</span>
+                        <span className="di-field-label">{t('dataInput.reportingYear')}</span>
                         <select className="di-year-dropdown" value={reportingYear} onChange={(e) => setReportingYear(Number(e.target.value))}>
                             {Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - 5 + i).map((y) => (
                                 <option key={y} value={y}>{y}</option>
@@ -1105,7 +1172,7 @@ function DataInput() {
                     </div>
                     <div className="di-site-actions">
                         <button type="button" className="di-add-site-btn" onClick={() => setAddSiteOpen(true)}>
-                            <i className="fas fa-plus" /> Add Site
+                            <i className="fas fa-plus" /> {t('dataInput.addSite')}
                         </button>
                         {canManageSites && (
                             <button
@@ -1113,22 +1180,22 @@ function DataInput() {
                                 className="di-delete-site-btn"
                                 onClick={handleDeleteSelectedSite}
                                 disabled={selectedSiteId === 'all' || !currentSite || sites.length <= 1}
-                                title={selectedSiteId === 'all' ? 'Select a site to delete' : 'Delete selected site'}
+                                title={selectedSiteId === 'all' ? t('dataInput.deleteSiteTitleSelect') : t('dataInput.deleteSiteTitle')}
                             >
-                                <i className="fas fa-trash-alt" /> Delete Site
+                                <i className="fas fa-trash-alt" /> {t('dataInput.deleteSite')}
                             </button>
                         )}
                     </div>
                 </div>
                 <div className="di-site-pills-bar">
-                    <button type="button" className={`di-site-pill${selectedSiteId === 'all' ? ' active' : ''}`} onClick={() => setSelectedSiteId('all')}>All Sites</button>
+                    <button type="button" className={`di-site-pill${selectedSiteId === 'all' ? ' active' : ''}`} onClick={() => setSelectedSiteId('all')}>{t('dataInput.allSites')}</button>
                     {sites.map((s) => (
                         <button key={s.id} type="button" className={`di-site-pill${selectedSiteId === s.id ? ' active' : ''}`} onClick={() => setSelectedSiteId(s.id)}>
                             <span className="di-pill-dot" /> {s.name}
                         </button>
                     ))}
                     <button type="button" className="di-pill-add-btn" onClick={() => setAddSiteOpen(true)}>
-                        <i className="fas fa-plus" /> Add Site
+                        <i className="fas fa-plus" /> {t('dataInput.addSite')}
                     </button>
                 </div>
             </div>
@@ -1136,8 +1203,8 @@ function DataInput() {
             <div className={`di-all-sites-banner${selectedSiteId === 'all' ? ' di-visible' : ''}`}>
                 <i className="fas fa-exclamation-triangle" />
                 <div className="di-all-sites-banner-text">
-                    <strong>No site selected</strong>
-                    <span>Choose a site from the dropdown or tabs to upload documents or enter data manually. Use Add Site to register each facility.</span>
+                    <strong>{t('dataInput.noSiteBannerTitle')}</strong>
+                    <span>{t('dataInput.noSiteBannerBody')}</span>
                 </div>
             </div>
 
@@ -1147,17 +1214,17 @@ function DataInput() {
                 <button type="button" className={`di-method-card${inputMethod === 'upload' ? ' active' : ''}`} onClick={() => setInputMethod('upload')}>
                     <div className="di-method-icon"><i className="fas fa-cloud-upload-alt" /></div>
                     <div className="di-method-text">
-                        <h3>Upload Receipts</h3>
-                        <p>Upload invoices or bills for automatic AI extraction</p>
-                        <span className="di-site-context-label">Upload documents for {siteNameDisplay}</span>
+                        <h3>{t('dataInput.uploadMethodTitle')}</h3>
+                        <p>{t('dataInput.uploadMethodDesc')}</p>
+                        <span className="di-site-context-label">{t('dataInput.uploadMethodContext', { site: siteNameDisplay })}</span>
                     </div>
                 </button>
                 <button type="button" className={`di-method-card${inputMethod === 'manual' ? ' active' : ''}`} onClick={() => setInputMethod('manual')}>
                     <div className="di-method-icon"><i className="fas fa-table" /></div>
                     <div className="di-method-text">
-                        <h3>Manual Entry</h3>
-                        <p>Enter emission data directly into forms</p>
-                        <span className="di-site-context-label">Enter emissions data manually for {siteNameDisplay}</span>
+                        <h3>{t('dataInput.manualMethodTitle')}</h3>
+                        <p>{t('dataInput.manualMethodDesc')}</p>
+                        <span className="di-site-context-label">{t('dataInput.manualMethodContext', { site: siteNameDisplay })}</span>
                     </div>
                 </button>
             </div>
@@ -1166,18 +1233,18 @@ function DataInput() {
             <div className="di-upload-main">
             {inputMethod === 'manual' ? (
                 <form className="di-manual-panel card data-section" onSubmit={handleSubmit} style={{ marginBottom: 0 }}>
-                    <h4 className="di-manual-title">Manual Data Entry — {siteNameDisplay}</h4>
-                    <p className="di-manual-intro">Scope 1 &amp; 2 entries below are saved for this site. Same layout as before: add rows, then Submit Data.</p>
+                    <h4 className="di-manual-title">{t('dataInput.manualPanelTitle', { site: siteNameDisplay })}</h4>
+                    <p className="di-manual-intro">{t('dataInput.manualPanelIntro')}</p>
                     {/* Scope 1 Section */}
                     <div className="card data-section">
                         <div className="section-header">
                             <div className="section-title">
-                                <span className="scope-badge scope1">Scope 1</span>
-                                <h2>Direct Emissions</h2>
+                                <span className="scope-badge scope1">{t('dataInput.scope1Badge')}</span>
+                                <h2>{t('dataInput.directEmissions')}</h2>
                             </div>
                             <button type="button" className="btn btn-add" onClick={addScope1Row}>
                                 <i className="fas fa-plus"></i>
-                                Add Entry
+                                {t('dataInput.addEntry')}
                             </button>
                         </div>
 
@@ -1185,7 +1252,7 @@ function DataInput() {
                             {scope1Entries.map((entry, index) => (
                                 <div key={entry.id} className="entry-card">
                                     <div className="entry-header">
-                                        <span className="entry-number">Entry {index + 1}</span>
+                                        <span className="entry-number">{t('dataInput.entryNumber', { n: index + 1 })}</span>
                                         {scope1Entries.length > 1 && (
                                             <button 
                                                 type="button" 
@@ -1198,7 +1265,7 @@ function DataInput() {
                                     </div>
                                     <div className="entry-grid">
                                         <div className="form-group">
-                                            <label>Date</label>
+                                            <label>{t('dataInput.date')}</label>
                                             <input
                                                 type="date"
                                                 value={entry.date}
@@ -1206,66 +1273,66 @@ function DataInput() {
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Combustion Type</label>
+                                            <label>{t('dataInput.combustionType')}</label>
                                             <select
                                                 value={entry.combustionType}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'combustionType', e.target.value)}
                                             >
-                                                <option value="mobile">Mobile Combustion</option>
-                                                <option value="stationary">Stationary Combustion</option>
+                                                <option value="mobile">{t('dataInput.combustionMobile')}</option>
+                                                <option value="stationary">{t('dataInput.combustionStationary')}</option>
                                             </select>
                                         </div>
                                         <div className="form-group">
-                                            <label>Fuel Type</label>
+                                            <label>{t('dataInput.fuelType')}</label>
                                             <select
                                                 value={entry.fuelType}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'fuelType', e.target.value)}
                                             >
                                                 {fuelTypes.map(fuel => (
-                                                    <option key={fuel} value={fuel}>{fuel}</option>
+                                                    <option key={fuel} value={fuel}>{optLabel('fuelType', DI_FUEL_TYPE_I18N, fuel)}</option>
                                                 ))}
                                             </select>
                                         </div>
                                         <div className="form-group">
-                                            <label>Amount</label>
+                                            <label>{t('dataInput.amount')}</label>
                                             <input
                                                 type="number"
-                                                placeholder="0.00"
+                                                placeholder={t('dataInput.placeholderZero')}
                                                 value={entry.amount}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'amount', e.target.value)}
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Unit</label>
+                                            <label>{t('dataInput.unit')}</label>
                                             <select
                                                 value={entry.unit}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'unit', e.target.value)}
                                             >
                                                 {fuelUnits.map(unit => (
-                                                    <option key={unit} value={unit}>{unit}</option>
+                                                    <option key={unit} value={unit}>{optLabel('fuelUnit', DI_FUEL_UNIT_I18N, unit)}</option>
                                                 ))}
                                             </select>
                                         </div>
                                         <div className="form-group">
-                                            <label>Vehicle ID (optional)</label>
+                                            <label>{t('dataInput.vehicleIdOptional')}</label>
                                             <input
                                                 type="text"
-                                                placeholder="VH-001"
+                                                placeholder={t('dataInput.placeholderVehicle')}
                                                 value={entry.vehicleId}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'vehicleId', e.target.value)}
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Cost Amount</label>
+                                            <label>{t('dataInput.costAmount')}</label>
                                             <input
                                                 type="number"
-                                                placeholder="0.00"
+                                                placeholder={t('dataInput.placeholderZero')}
                                                 value={entry.costAmount}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'costAmount', e.target.value)}
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Currency</label>
+                                            <label>{t('dataInput.currency')}</label>
                                             <select
                                                 value={entry.currency}
                                                 onChange={(e) => updateScope1Entry(entry.id, 'currency', e.target.value)}
@@ -1285,12 +1352,12 @@ function DataInput() {
                     <div className="card data-section">
                         <div className="section-header">
                             <div className="section-title">
-                                <span className="scope-badge scope2">Scope 2</span>
-                                <h2>Indirect Emissions</h2>
+                                <span className="scope-badge scope2">{t('dataInput.scope2Badge')}</span>
+                                <h2>{t('dataInput.indirectEmissions')}</h2>
                             </div>
                             <button type="button" className="btn btn-add" onClick={addScope2Row}>
                                 <i className="fas fa-plus"></i>
-                                Add Entry
+                                {t('dataInput.addEntry')}
                             </button>
                         </div>
 
@@ -1298,7 +1365,7 @@ function DataInput() {
                             {scope2Entries.map((entry, index) => (
                                 <div key={entry.id} className="entry-card">
                                     <div className="entry-header">
-                                        <span className="entry-number">Entry {index + 1}</span>
+                                        <span className="entry-number">{t('dataInput.entryNumber', { n: index + 1 })}</span>
                                         {scope2Entries.length > 1 && (
                                             <button 
                                                 type="button" 
@@ -1311,7 +1378,7 @@ function DataInput() {
                                     </div>
                                     <div className="entry-grid">
                                         <div className="form-group">
-                                            <label>Date</label>
+                                            <label>{t('dataInput.date')}</label>
                                             <input
                                                 type="date"
                                                 value={entry.date}
@@ -1319,16 +1386,16 @@ function DataInput() {
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Electricity Consumption</label>
+                                            <label>{t('dataInput.electricityConsumption')}</label>
                                             <input
                                                 type="number"
-                                                placeholder="0.00"
+                                                placeholder={t('dataInput.placeholderZero')}
                                                 value={entry.electricity}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'electricity', e.target.value)}
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Unit</label>
+                                            <label>{t('dataInput.unit')}</label>
                                             <select
                                                 value={entry.unit}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'unit', e.target.value)}
@@ -1338,36 +1405,36 @@ function DataInput() {
                                             </select>
                                         </div>
                                         <div className="form-group">
-                                            <label>Grid Region</label>
+                                            <label>{t('dataInput.gridRegion')}</label>
                                             <select
                                                 value={entry.gridRegion}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'gridRegion', e.target.value)}
                                             >
                                                 {gridRegions.map(region => (
-                                                    <option key={region} value={region}>{region}</option>
+                                                    <option key={region} value={region}>{optLabel('gridRegion', DI_GRID_REGION_I18N, region)}</option>
                                                 ))}
                                             </select>
                                         </div>
                                         <div className="form-group">
-                                            <label>Supplier</label>
+                                            <label>{t('dataInput.supplier')}</label>
                                             <input
                                                 type="text"
-                                                placeholder="Power Company Name"
+                                                placeholder={t('dataInput.placeholderSupplier')}
                                                 value={entry.supplier}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'supplier', e.target.value)}
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Cost Amount</label>
+                                            <label>{t('dataInput.costAmount')}</label>
                                             <input
                                                 type="number"
-                                                placeholder="0.00"
+                                                placeholder={t('dataInput.placeholderZero')}
                                                 value={entry.costAmount}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'costAmount', e.target.value)}
                                             />
                                         </div>
                                         <div className="form-group">
-                                            <label>Currency</label>
+                                            <label>{t('dataInput.currency')}</label>
                                             <select
                                                 value={entry.currency}
                                                 onChange={(e) => updateScope2Entry(entry.id, 'currency', e.target.value)}
@@ -1386,9 +1453,9 @@ function DataInput() {
                     {/* Submit Button */}
                     <div className="submit-section">
                         <button type="submit" className="btn btn-primary btn-submit" disabled={submittingManual}>
-                            {submittingManual ? <><i className="fas fa-spinner fa-spin"></i> Saving…</> : <><i className="fas fa-check"></i> Submit Data</>}
+                            {submittingManual ? <><i className="fas fa-spinner fa-spin"></i> {t('dataInput.saving')}</> : <><i className="fas fa-check"></i> {t('dataInput.submitData')}</>}
                         </button>
-                        <p className="help-text" style={{ marginTop: '0.5rem' }}>Data is used to calculate emissions and is saved to your dashboard.</p>
+                        <p className="help-text" style={{ marginTop: '0.5rem' }}>{t('dataInput.submitHelp')}</p>
                     </div>
                 </form>
             ) : (
@@ -1396,23 +1463,23 @@ function DataInput() {
                     <div className="expected-doc-date">
                         <div className="expected-doc-date-header">
                             <i className="fas fa-calendar-alt"></i>
-                            <span>Expected Document Date</span>
+                            <span>{t('dataInput.expectedDocDate')}</span>
                         </div>
-                        <p className="expected-doc-date-hint">Select the expected month and year of your receipt or utility bill. We&apos;ll verify this against the extracted date.</p>
+                        <p className="expected-doc-date-hint">{t('dataInput.expectedDocHint')}</p>
                         <div className="expected-doc-date-fields">
                             <div className="form-group">
-                                <label>Month *</label>
+                                <label>{t('dataInput.month')}</label>
                                 <select
                                     value={expectedDocMonth}
                                     onChange={(e) => setExpectedDocMonth(Number(e.target.value))}
                                 >
-                                    {MONTHS.map((m, i) => (
-                                        <option key={m} value={i + 1}>{m}</option>
+                                    {monthNamesLong.map((m, i) => (
+                                        <option key={i} value={i + 1}>{m}</option>
                                     ))}
                                 </select>
                             </div>
                             <div className="form-group">
-                                <label>Year *</label>
+                                <label>{t('dataInput.year')}</label>
                                 <select
                                     value={expectedDocYear}
                                     onChange={(e) => setExpectedDocYear(Number(e.target.value))}
@@ -1424,16 +1491,16 @@ function DataInput() {
                             </div>
                         </div>
                         <div className="di-uploading-for-badge">
-                            <i className="fas fa-map-marker-alt" /> Uploading for: <strong>{siteNameDisplay}</strong>
+                            <i className="fas fa-map-marker-alt" /> {t('dataInput.uploadingFor')} <strong>{siteNameDisplay}</strong>
                         </div>
                     </div>
                     <div className={`upload-area di-dropzone ${uploadingReceipt ? 'upload-area--loading' : ''}`}>
                         <div className="upload-icon">
                             <i className={`fas ${uploadingReceipt ? 'fa-spinner fa-spin' : 'fa-cloud-upload-alt'}`}></i>
                         </div>
-                        <h3>{uploadingReceipt ? 'Reading receipt(s) with AI...' : 'Drag & Drop Receipts Here'}</h3>
-                        <p>{uploadingReceipt ? 'URIMPACT AI is extracting numbers, then emissions are calculated and saved.' : 'or click to browse – you can select multiple files (PDF, Excel, JPEG, PNG). Max ' + MAX_FILE_SIZE_MB + ' MB per file, up to ' + MAX_FILES_COUNT + ' files.'}</p>
-                        <div className="di-dropzone-site-badge"><i className="fas fa-map-marker-alt" /> Files go to: <strong>{siteNameDisplay}</strong></div>
+                        <h3>{uploadingReceipt ? t('dataInput.readingReceipt') : t('dataInput.dragDropTitle')}</h3>
+                        <p>{uploadingReceipt ? t('dataInput.readingReceiptBody') : t('dataInput.dragDropHelp', { maxMb: MAX_FILE_SIZE_MB, maxFiles: MAX_FILES_COUNT })}</p>
+                        <div className="di-dropzone-site-badge"><i className="fas fa-map-marker-alt" /> {t('dataInput.filesGoTo')} <strong>{siteNameDisplay}</strong></div>
                         <input 
                             type="file" 
                             accept=".pdf,.xlsx,.xls,.jpg,.jpeg,.png,.gif,.webp"
@@ -1459,8 +1526,8 @@ function DataInput() {
                         <div className="upload-verify-list">
                             <div className="upload-verify-list-header">
                                 <div>
-                                    <h4><i className="fas fa-check-double"></i> Verify — {siteNameDisplay} ({n} entr{n !== 1 ? 'ies' : 'y'})</h4>
-                                    <p className="upload-verify-hint">Edit if needed. &quot;Submit all&quot; saves only receipts for this site.</p>
+                                    <h4><i className="fas fa-check-double"></i> {t('dataInput.verifyHeading', { site: siteNameDisplay, count: n, entriesWord: n !== 1 ? t('dataInput.entriesWordMany') : t('dataInput.entriesWordOne') })}</h4>
+                                    <p className="upload-verify-hint">{t('dataInput.verifyHint')}</p>
                                 </div>
                                 <button
                                     type="button"
@@ -1468,21 +1535,21 @@ function DataInput() {
                                     onClick={handleSubmitAll}
                                     disabled={submittingAll || n === 0}
                                 >
-                                    {submittingAll ? <><i className="fas fa-spinner fa-spin"></i> Submitting all…</> : <><i className="fas fa-paper-plane"></i> Submit all</>}
+                                    {submittingAll ? <><i className="fas fa-spinner fa-spin"></i> {t('dataInput.submittingAll')}</> : <><i className="fas fa-paper-plane"></i> {t('dataInput.submitAll')}</>}
                                 </button>
                             </div>
                             {groups.map((group) => (
                                 <div key={group.documentId} className={group.indices.length > 1 ? 'upload-verify-batch' : ''}>
                                     {group.indices.length > 1 && (
                                         <div className="upload-verify-batch-header">
-                                            <span className="upload-verify-batch-title">{group.fileName} ({group.indices.length} entries)</span>
+                                            <span className="upload-verify-batch-title">{group.fileName} ({t('dataInput.entriesInFile', { count: group.indices.length })})</span>
                                             <button
                                                 type="button"
                                                 className="btn btn-primary"
                                                 onClick={() => handleSubmitBatch(group.documentId)}
                                                 disabled={submittingBatchId === group.documentId}
                                             >
-                                                {submittingBatchId === group.documentId ? <><i className="fas fa-spinner fa-spin"></i> Sending...</> : <><i className="fas fa-paper-plane"></i> Submit all {group.indices.length} entries</>}
+                                                {submittingBatchId === group.documentId ? <><i className="fas fa-spinner fa-spin"></i> {t('dataInput.sending')}</> : <><i className="fas fa-paper-plane"></i> {t('dataInput.submitBatchEntries', { count: group.indices.length })}</>}
                                             </button>
                                         </div>
                                     )}
@@ -1490,21 +1557,21 @@ function DataInput() {
                                         const item = pendingVerifications[index];
                                         return (
                                         <div key={`${item.documentId}-${index}`} className="upload-verify-card">
-                                            <div className="upload-verify-card-title">{group.indices.length > 1 ? `${group.fileName} — row ${group.indices.indexOf(index) + 1}` : item.fileName}</div>
+                                            <div className="upload-verify-card-title">{group.indices.length > 1 ? t('dataInput.verifyRowTitle', { file: group.fileName, row: group.indices.indexOf(index) + 1 }) : item.fileName}</div>
                                             <div className="upload-verify-fields">
                                                 {isFuelActivity(item.activityType) && (
                                                     <div className="form-group">
-                                                        <label>Product / Fuel name</label>
+                                                        <label>{t('dataInput.productFuelName')}</label>
                                                         <input
                                                             type="text"
                                                             value={item.product}
                                                             onChange={(e) => updatePendingField(index, 'product', e.target.value)}
-                                                            placeholder="e.g. Benzine 91, Super 98, Diesel"
+                                                            placeholder={t('dataInput.placeholderProductFuel')}
                                                         />
                                                     </div>
                                                 )}
                                                 <div className={`form-group${item.dateMismatch ? ' form-group-date-mismatch' : ''}`}>
-                                                    <label>Date</label>
+                                                    <label>{t('dataInput.date')}</label>
                                                     <input
                                                         type="date"
                                                         value={item.date}
@@ -1513,23 +1580,23 @@ function DataInput() {
                                                     />
                                                     {item.dateMismatch ? (
                                                         <span className="help-text date-mismatch-warning">
-                                                            <i className="fas fa-exclamation-triangle"></i> Doesn&apos;t match expected month ({MONTHS[expectedDocMonth - 1]} {expectedDocYear}). Correct the date above if needed.
+                                                            <i className="fas fa-exclamation-triangle"></i> {t('dataInput.dateMismatchWarning', { month: monthNamesLong[expectedDocMonth - 1], year: expectedDocYear })}
                                                         </span>
                                                     ) : (
-                                                        <span className="help-text">Add date if not extracted from receipt</span>
+                                                        <span className="help-text">{t('dataInput.dateHelpExtracted')}</span>
                                                     )}
                                                 </div>
                                                 <div className="form-group">
-                                                    <label>Activity type *</label>
+                                                    <label>{t('dataInput.activityType')}</label>
                                                     <input
                                                         type="text"
                                                         value={item.activityType}
                                                         onChange={(e) => updatePendingField(index, 'activityType', e.target.value)}
-                                                        placeholder="e.g. electricity, diesel"
+                                                        placeholder={t('dataInput.placeholderActivityType')}
                                                     />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label>Amount *</label>
+                                                    <label>{t('dataInput.amountRequired')}</label>
                                                     <input
                                                         type="number"
                                                         value={item.activityAmount}
@@ -1539,36 +1606,36 @@ function DataInput() {
                                                     />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label>Unit *</label>
+                                                    <label>{t('dataInput.unitRequired')}</label>
                                                     <input
                                                         type="text"
                                                         value={item.activityUnit}
                                                         onChange={(e) => updatePendingField(index, 'activityUnit', e.target.value)}
-                                                        placeholder="e.g. kWh, L"
+                                                        placeholder={t('dataInput.placeholderUnit')}
                                                     />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label>Region (optional)</label>
+                                                    <label>{t('dataInput.regionOptional')}</label>
                                                     <input
                                                         type="text"
                                                         value={item.region}
                                                         onChange={(e) => updatePendingField(index, 'region', e.target.value)}
-                                                        placeholder="e.g. AE, AE-DU (extracted when on receipt)"
+                                                        placeholder={t('dataInput.placeholderRegion')}
                                                     />
                                                 </div>
                                                 <div className="form-group">
-                                                    <label>Supplier (optional)</label>
+                                                    <label>{t('dataInput.supplierOptional')}</label>
                                                     <input
                                                         type="text"
                                                         value={item.supplier ?? ''}
                                                         onChange={(e) => updatePendingField(index, 'supplier', e.target.value)}
-                                                        placeholder="e.g. utility company, gas station (extracted when on receipt)"
+                                                        placeholder={t('dataInput.placeholderSupplierLong')}
                                                     />
                                                 </div>
                                             </div>
                                             <div className="upload-verify-actions">
                                                 <button type="button" className="btn btn-secondary" onClick={() => clearPendingVerification(index)}>
-                                                    Cancel
+                                                    {t('dataInput.cancel')}
                                                 </button>
                                                 {group.indices.length === 1 && (
                                                     <button
@@ -1577,7 +1644,7 @@ function DataInput() {
                                                         onClick={() => handleSubmitVerification(index)}
                                                         disabled={submittingId === item.documentId}
                                                     >
-                                                        {submittingId === item.documentId ? <><i className="fas fa-spinner fa-spin"></i> Sending...</> : <><i className="fas fa-paper-plane"></i> Submit</>}
+                                                        {submittingId === item.documentId ? <><i className="fas fa-spinner fa-spin"></i> {t('dataInput.sending')}</> : <><i className="fas fa-paper-plane"></i> {t('dataInput.submit')}</>}
                                                     </button>
                                                 )}
                                             </div>
@@ -1590,9 +1657,9 @@ function DataInput() {
                         );
                     })()}
                     <div className="upload-info">
-                        <p><i className="fas fa-info-circle"></i> URIMPACT AI extracts numbers from the receipt; you verify, then Submit calculates emissions and saves</p>
-                        <p><i className="fas fa-weight-hanging"></i> Upload limit: max {MAX_FILE_SIZE_MB} MB per file, up to {MAX_FILES_COUNT} files per batch</p>
-                        <p><i className="fas fa-shield-alt"></i> Log in with the backend to use AI extraction (e.g. demo@urimpact.com)</p>
+                        <p><i className="fas fa-info-circle"></i> {t('dataInput.uploadInfoAi')}</p>
+                        <p><i className="fas fa-weight-hanging"></i> {t('dataInput.uploadInfoLimit', { maxMb: MAX_FILE_SIZE_MB, maxFiles: MAX_FILES_COUNT })}</p>
+                        <p><i className="fas fa-shield-alt"></i> {t('dataInput.uploadInfoLogin')}</p>
                     </div>
                 </div>
             )}
@@ -1600,47 +1667,47 @@ function DataInput() {
             <aside className="di-summary-panel">
                 <div className="di-summary-card">
                     <div className="di-summary-card-header">
-                        <h4>Site Summary</h4>
+                        <h4>{t('dataInput.siteSummary')}</h4>
                         <i className="fas fa-map-marker-alt di-summary-icon" />
                     </div>
                     <div className="di-summary-site-name">
                         <i className="fas fa-map-marker-alt" /> {siteNameDisplay}
                     </div>
                     <div className="di-summary-stat-row">
-                        <span className="di-summary-stat-label">Receipts saved (this period)</span>
+                        <span className="di-summary-stat-label">{t('dataInput.receiptsSavedPeriod')}</span>
                         <span className="di-summary-stat-value">{summaryStats.docs}</span>
                     </div>
                     <div className="di-summary-stat-row">
-                        <span className="di-summary-stat-label">Manual rows saved (period)</span>
+                        <span className="di-summary-stat-label">{t('dataInput.manualRowsSavedPeriod')}</span>
                         <span className="di-summary-stat-value">{summaryStats.manualRows}</span>
                     </div>
                     <div className="di-summary-stat-row">
-                        <span className="di-summary-stat-label">Last activity</span>
+                        <span className="di-summary-stat-label">{t('dataInput.lastActivity')}</span>
                         <span className="di-summary-stat-value">{formatLastUpload(summaryStats.lastUpload)}</span>
                     </div>
                     <div className="di-summary-stat-row">
-                        <span className="di-summary-stat-label">Reporting period</span>
-                        <span className="di-summary-stat-value">{MONTHS[expectedDocMonth - 1]} {expectedDocYear}</span>
+                        <span className="di-summary-stat-label">{t('dataInput.reportingPeriod')}</span>
+                        <span className="di-summary-stat-value">{monthNamesLong[expectedDocMonth - 1]} {expectedDocYear}</span>
                     </div>
                     <div className="di-summary-stat-row">
-                        <span className="di-summary-stat-label">Facility type</span>
-                        <span className="di-summary-stat-value">{currentSite?.facilityType ?? '—'}</span>
+                        <span className="di-summary-stat-label">{t('dataInput.facilityType')}</span>
+                        <span className="di-summary-stat-value">{currentSite?.facilityType ? optLabel('facility', DI_FACILITY_I18N, currentSite.facilityType) : t('dataInput.emDash')}</span>
                     </div>
                     <div className="di-summary-stat-row">
-                        <span className="di-summary-stat-label">Site code</span>
-                        <span className="di-summary-stat-value">{currentSite?.code ?? '—'}</span>
+                        <span className="di-summary-stat-label">{t('dataInput.siteCode')}</span>
+                        <span className="di-summary-stat-value">{currentSite?.code ?? t('dataInput.emDash')}</span>
                     </div>
                 </div>
                 <div className="di-summary-card di-quick-tips">
                     <div className="di-summary-card-header">
-                        <h4>Quick Tips</h4>
+                        <h4>{t('dataInput.quickTips')}</h4>
                         <i className="fas fa-lightbulb di-summary-icon" />
                     </div>
                     <ul className="di-tips-list">
-                        <li><i className="fas fa-check" /> Verify the site before uploading</li>
-                        <li><i className="fas fa-check" /> Upload original bills when possible</li>
-                        <li><i className="fas fa-check" /> Review AI-extracted data before submit</li>
-                        <li><i className="fas fa-check" /> Add every facility as its own site</li>
+                        <li><i className="fas fa-check" /> {t('dataInput.tipVerifySite')}</li>
+                        <li><i className="fas fa-check" /> {t('dataInput.tipOriginalBills')}</li>
+                        <li><i className="fas fa-check" /> {t('dataInput.tipReviewAi')}</li>
+                        <li><i className="fas fa-check" /> {t('dataInput.tipEachFacility')}</li>
                     </ul>
                 </div>
             </aside>
@@ -1651,16 +1718,16 @@ function DataInput() {
                     <div className="di-delete-error-banner" role="alert">
                         <i className="fas fa-exclamation-circle" />
                         <span>{diDeleteError}</span>
-                        <button type="button" className="di-delete-error-dismiss" onClick={() => setDiDeleteError(null)} aria-label="Dismiss">
+                        <button type="button" className="di-delete-error-dismiss" onClick={() => setDiDeleteError(null)} aria-label={t('dataInput.dismiss')}>
                             &times;
                         </button>
                     </div>
                 )}
                 {!hasToken && (
-                    <p className="di-recent-hint">Log in to view and delete saved emissions for {siteNameDisplay} ({reportingYear}).</p>
+                    <p className="di-recent-hint">{t('dataInput.loginHintRecent', { site: siteNameDisplay, year: reportingYear })}</p>
                 )}
                 {hasToken && diEmissionsLoading && (
-                    <p className="di-recent-hint"><i className="fas fa-spinner fa-spin" /> Loading recent submissions…</p>
+                    <p className="di-recent-hint"><i className="fas fa-spinner fa-spin" /> {t('dataInput.loadingRecent')}</p>
                 )}
                 {hasToken && !diEmissionsLoading && diEmissionsError && (
                     <p className="di-recent-error">{diEmissionsError}</p>
@@ -1671,7 +1738,7 @@ function DataInput() {
                             <div className="card-header">
                                 <h2>
                                     <i className="fas fa-history" />
-                                    Recent Activities
+                                    {t('dataInput.recentActivities')}
                                 </h2>
                             </div>
                             <div className="facility-table-wrapper">
@@ -1682,7 +1749,7 @@ function DataInput() {
                                                 <th style={{ width: '2.5rem' }}>
                                                     <input
                                                         type="checkbox"
-                                                        aria-label="Select all recent activity rows"
+                                                        aria-label={t('dashboard.selectAllRecent')}
                                                         checked={
                                                             diRecentActivitiesRows.length > 0 &&
                                                             diRecentActivitiesRows.every((activity) => activity.id && diSelectedEmissionIds.includes(activity.id))
@@ -1700,20 +1767,20 @@ function DataInput() {
                                                     />
                                                 </th>
                                             )}
-                                            <th>Source</th>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th>Emissions</th>
-                                            <th>Data source</th>
-                                            <th>Status</th>
-                                            {hasToken && <th className="th-actions">Actions</th>}
+                                            <th>{t('dashboard.source')}</th>
+                                            <th>{t('dashboard.date')}</th>
+                                            <th>{t('dashboard.type')}</th>
+                                            <th>{t('dashboard.emissions')}</th>
+                                            <th>{t('dashboard.dataSource')}</th>
+                                            <th>{t('dashboard.status')}</th>
+                                            {hasToken && <th className="th-actions">{t('dashboard.actions')}</th>}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {diRecentActivitiesRows.length === 0 && (
                                             <tr>
                                                 <td colSpan={hasToken ? 8 : 6} className="di-recent-empty-cell">
-                                                    No saved emissions for this site in {reportingYear} yet.
+                                                    {t('dataInput.emptyEmissions', { year: reportingYear })}
                                                 </td>
                                             </tr>
                                         )}
@@ -1726,22 +1793,22 @@ function DataInput() {
                                                                 type="checkbox"
                                                                 checked={diSelectedEmissionIds.includes(activity.id)}
                                                                 onChange={() => toggleDiEmissionSelected(activity.id)}
-                                                                aria-label="Select this emission"
+                                                                aria-label={t('dashboard.selectThisEmission')}
                                                             />
                                                         )}
                                                     </td>
                                                 )}
                                                 <td>{activity.source}</td>
-                                                <td>{activity.date ? diFormatDate(activity.date) : '—'}</td>
+                                                <td>{activity.date ? diFormatDate(activity.date) : t('dataInput.emDash')}</td>
                                                 <td>
                                                     <span className={`type-badge ${activity.type}`}>
-                                                        {activity.type === 'scope1' ? 'Scope 1' : activity.type === 'scope2' ? 'Scope 2' : 'Scope 3'}
+                                                        {activity.type === 'scope1' ? t('dashboard.scope1') : activity.type === 'scope2' ? t('dashboard.scope2') : t('dashboard.scope3')}
                                                     </span>
                                                 </td>
                                                 <td>{diFormatNumber(activity.amount)} tCO₂e</td>
-                                                <td><span className="source-badge">{activity.dataSource || '—'}</span></td>
+                                                <td><span className="source-badge">{activity.dataSource || t('dataInput.emDash')}</span></td>
                                                 <td>
-                                                    <span className="status-badge verified">verified</span>
+                                                    <span className="status-badge verified">{t('dashboard.verified')}</span>
                                                 </td>
                                                 {hasToken && (
                                                     <td className="td-actions">
@@ -1751,8 +1818,8 @@ function DataInput() {
                                                                 className="btn-icon btn-delete"
                                                                 onClick={() => handleDiDeleteEmission(activity.id)}
                                                                 disabled={diDeletingId === activity.id}
-                                                                title="Delete this record"
-                                                                aria-label="Delete"
+                                                                title={t('dashboard.deleteThisRecord')}
+                                                                aria-label={t('dashboard.delete')}
                                                             >
                                                                 {diDeletingId === activity.id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash-alt" />}
                                                             </button>
@@ -1773,21 +1840,21 @@ function DataInput() {
                                     className="btn btn-danger"
                                     disabled={!diSelectedEmissionIds.length || diDeletingId === 'bulk'}
                                     onClick={handleDiBulkDelete}
-                                    title={diSelectedEmissionIds.length ? `Delete ${diSelectedEmissionIds.length} selected record(s)` : 'Select records to enable'}
+                                    title={diSelectedEmissionIds.length ? t('dashboard.deleteSelectedTooltip', { count: diSelectedEmissionIds.length }) : t('dashboard.selectRecordsToEnable')}
                                 >
                                     {diDeletingId === 'bulk' ? (
                                         <>
-                                            <i className="fas fa-spinner fa-spin" /> Deleting…
+                                            <i className="fas fa-spinner fa-spin" /> {t('dashboard.deleting')}
                                         </>
                                     ) : (
                                         <>
-                                            <i className="fas fa-trash-alt" /> Delete selected
+                                            <i className="fas fa-trash-alt" /> {t('dashboard.deleteSelected')}
                                         </>
                                     )}
                                 </button>
                                 {diSelectedEmissionIds.length > 0 && (
                                     <span className="dashboard-bulk-count">
-                                        {diSelectedEmissionIds.length} selected
+                                        {t('dashboard.selected', { count: diSelectedEmissionIds.length })}
                                     </span>
                                 )}
                             </div>
@@ -1797,28 +1864,28 @@ function DataInput() {
                             <div className="card-header">
                                 <h2>
                                     <i className="fas fa-receipt" />
-                                    Recently uploaded receipts
+                                    {t('dataInput.recentReceiptsTitle')}
                                 </h2>
                             </div>
-                            <p className="di-recent-card-sub">Emissions created from receipt or document upload; delete a row to remove that saved emission.</p>
+                            <p className="di-recent-card-sub">{t('dataInput.recentReceiptsSub')}</p>
                             <div className="facility-table-wrapper">
                                 <table className="facility-table">
                                     <thead>
                                         <tr>
-                                            <th>Receipt file</th>
-                                            <th>Source</th>
-                                            <th>Date</th>
-                                            <th>Type</th>
-                                            <th>Emissions</th>
-                                            <th>Data source</th>
-                                            {hasToken && <th className="th-actions">Actions</th>}
+                                            <th>{t('dataInput.receiptFile')}</th>
+                                            <th>{t('dashboard.source')}</th>
+                                            <th>{t('dashboard.date')}</th>
+                                            <th>{t('dashboard.type')}</th>
+                                            <th>{t('dashboard.emissions')}</th>
+                                            <th>{t('dashboard.dataSource')}</th>
+                                            {hasToken && <th className="th-actions">{t('dashboard.actions')}</th>}
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {diReceiptRows.length === 0 && (
                                             <tr>
                                                 <td colSpan={hasToken ? 7 : 6} className="di-recent-empty-cell">
-                                                    No receipt-based emissions for this site in {reportingYear} yet.
+                                                    {t('dataInput.emptyReceipts', { year: reportingYear })}
                                                 </td>
                                             </tr>
                                         )}
@@ -1826,14 +1893,14 @@ function DataInput() {
                                             <tr key={row.id || index}>
                                                 <td><span className="source-badge" title={row.fileName}>{row.fileName}</span></td>
                                                 <td>{row.source}</td>
-                                                <td>{row.date ? diFormatDate(row.date) : '—'}</td>
+                                                <td>{row.date ? diFormatDate(row.date) : t('dataInput.emDash')}</td>
                                                 <td>
                                                     <span className={`type-badge ${row.type}`}>
-                                                        {row.type === 'scope1' ? 'Scope 1' : row.type === 'scope2' ? 'Scope 2' : 'Scope 3'}
+                                                        {row.type === 'scope1' ? t('dashboard.scope1') : row.type === 'scope2' ? t('dashboard.scope2') : t('dashboard.scope3')}
                                                     </span>
                                                 </td>
                                                 <td>{diFormatNumber(row.amount)} tCO₂e</td>
-                                                <td><span className="source-badge">{row.dataSource || '—'}</span></td>
+                                                <td><span className="source-badge">{row.dataSource || t('dataInput.emDash')}</span></td>
                                                 {hasToken && (
                                                     <td className="td-actions">
                                                         {row.id ? (
@@ -1842,8 +1909,8 @@ function DataInput() {
                                                                 className="btn-icon btn-delete"
                                                                 onClick={() => handleDiDeleteEmission(row.id)}
                                                                 disabled={diDeletingId === row.id}
-                                                                title="Delete this record"
-                                                                aria-label="Delete"
+                                                                title={t('dashboard.deleteThisRecord')}
+                                                                aria-label={t('dashboard.delete')}
                                                             >
                                                                 {diDeletingId === row.id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash-alt" />}
                                                             </button>
@@ -1869,70 +1936,70 @@ function DataInput() {
                             <div className="di-modal-header-left">
                                 <div className="di-modal-header-icon"><i className="fas fa-map-marker-alt" /></div>
                                 <div>
-                                    <h2 id="di-modal-title">Add New Site</h2>
-                                    <p>Register a facility for this organization</p>
+                                    <h2 id="di-modal-title">{t('dataInput.modalAddSiteTitle')}</h2>
+                                    <p>{t('dataInput.modalAddSiteSubtitle')}</p>
                                 </div>
                             </div>
-                            <button type="button" className="di-modal-close" onClick={() => setAddSiteOpen(false)} aria-label="Close">
+                            <button type="button" className="di-modal-close" onClick={() => setAddSiteOpen(false)} aria-label={t('decarb.close')}>
                                 <i className="fas fa-times" />
                             </button>
                         </div>
                         <div className="di-modal-body">
                             <div className="di-modal-form-grid">
                                 <div className="form-group">
-                                    <label>Site Name <span className="di-req">*</span></label>
-                                    <input className="di-modal-input" value={newSite.name} onChange={(e) => setNewSite((s) => ({ ...s, name: e.target.value }))} placeholder="e.g. Sharjah Distribution Centre" />
+                                    <label>{t('dataInput.modalSiteName')}</label>
+                                    <input className="di-modal-input" value={newSite.name} onChange={(e) => setNewSite((s) => ({ ...s, name: e.target.value }))} placeholder={t('dataInput.placeholderSiteName')} />
                                 </div>
                                 <div className="form-group">
-                                    <label>Site Code <span className="di-req">*</span></label>
-                                    <input className="di-modal-input" value={newSite.code} onChange={(e) => setNewSite((s) => ({ ...s, code: e.target.value }))} placeholder="e.g. SHJ-DC-01" />
+                                    <label>{t('dataInput.modalSiteCode')}</label>
+                                    <input className="di-modal-input" value={newSite.code} onChange={(e) => setNewSite((s) => ({ ...s, code: e.target.value }))} placeholder={t('dataInput.placeholderSiteCode')} />
                                 </div>
                                 <div className="form-group">
-                                    <label>Country <span className="di-req">*</span></label>
+                                    <label>{t('dataInput.modalCountry')}</label>
                                     <select className="di-modal-input" value={newSite.country} onChange={(e) => setNewSite((s) => ({ ...s, country: e.target.value }))}>
                                         {COUNTRY_OPTIONS.map((c) => (
-                                            <option key={c} value={c}>{c}</option>
+                                            <option key={c} value={c}>{optLabel('country', DI_COUNTRY_I18N, c)}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label>City <span className="di-req">*</span></label>
-                                    <input className="di-modal-input" value={newSite.city} onChange={(e) => setNewSite((s) => ({ ...s, city: e.target.value }))} placeholder="e.g. Sharjah" />
+                                    <label>{t('dataInput.modalCity')}</label>
+                                    <input className="di-modal-input" value={newSite.city} onChange={(e) => setNewSite((s) => ({ ...s, city: e.target.value }))} placeholder={t('dataInput.placeholderCity')} />
                                 </div>
                                 <div className="form-group">
-                                    <label>Facility Type <span className="di-req">*</span></label>
+                                    <label>{t('dataInput.modalFacilityType')}</label>
                                     <select className="di-modal-input" value={newSite.facilityType} onChange={(e) => setNewSite((s) => ({ ...s, facilityType: e.target.value }))}>
-                                        <option value="">Select type…</option>
+                                        <option value="">{t('dataInput.modalSelectType')}</option>
                                         {FACILITY_TYPES.map((f) => (
-                                            <option key={f} value={f}>{f}</option>
+                                            <option key={f} value={f}>{optLabel('facility', DI_FACILITY_I18N, f)}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label>Reporting boundary</label>
+                                    <label>{t('dataInput.modalBoundary')}</label>
                                     <select className="di-modal-input" value={newSite.boundary} onChange={(e) => setNewSite((s) => ({ ...s, boundary: e.target.value }))}>
                                         {BOUNDARY_OPTIONS.map((b) => (
-                                            <option key={b} value={b}>{b}</option>
+                                            <option key={b} value={b}>{optLabel('boundary', DI_BOUNDARY_I18N, b)}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label>Default currency</label>
+                                    <label>{t('dataInput.modalDefaultCurrency')}</label>
                                     <select className="di-modal-input" value={newSite.currency} onChange={(e) => setNewSite((s) => ({ ...s, currency: e.target.value }))}>
                                         {CURRENCY_OPTIONS.map((c) => (
-                                            <option key={c} value={c}>{c}</option>
+                                            <option key={c} value={c}>{optLabel('currencyLine', DI_CURRENCY_LINE_I18N, c)}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div className="form-group">
-                                    <label>Utility provider <span className="di-opt">(optional)</span></label>
-                                    <input className="di-modal-input" value={newSite.utilityProvider} onChange={(e) => setNewSite((s) => ({ ...s, utilityProvider: e.target.value }))} placeholder="e.g. DEWA, SEC" />
+                                    <label>{t('dataInput.modalUtilityProvider')}</label>
+                                    <input className="di-modal-input" value={newSite.utilityProvider} onChange={(e) => setNewSite((s) => ({ ...s, utilityProvider: e.target.value }))} placeholder={t('dataInput.placeholderUtility')} />
                                 </div>
                             </div>
                         </div>
                         <div className="di-modal-footer">
-                            <button type="button" className="btn btn-secondary" onClick={() => setAddSiteOpen(false)}>Cancel</button>
-                            <button type="button" className="btn btn-primary" onClick={handleSaveNewSite}><i className="fas fa-check" /> Save Site</button>
+                            <button type="button" className="btn btn-secondary" onClick={() => setAddSiteOpen(false)}>{t('dataInput.cancel')}</button>
+                            <button type="button" className="btn btn-primary" onClick={handleSaveNewSite}><i className="fas fa-check" /> {t('dataInput.saveSite')}</button>
                         </div>
                     </div>
                 </div>
