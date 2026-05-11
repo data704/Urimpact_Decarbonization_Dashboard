@@ -18,7 +18,7 @@ import { EmissionScope, EmissionCategory } from '@prisma/client';
 import {
   canUpload,
   canEditDeleteData,
-  canExportDatasets,2                                                                                                                                                                                                     
+  canExportDatasets,                                                                                                                                                                                                     
   isOrgAdmin,
   canAccessDashboard,
 } from '../utils/rolePermissions.js';
