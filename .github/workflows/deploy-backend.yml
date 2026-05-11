@@ -115,16 +115,17 @@ jobs:
             print_disk
             ensure_disk_space
 
-            echo "📥 Pull image"
-            docker pull "$IMAGE"
-
             echo "🛑 Stop old container"
             docker stop carbonemission-backend || true
             docker rm carbonemission-backend || true
 
-            # Remove dangling/old layers before next run to avoid disk exhaustion.
+            # Remove old images BEFORE pulling new one to free disk space.
+            # Must happen after stopping container but before pull.
             docker image prune -af || true
             docker builder prune -af || true
+
+            echo "📥 Pull new image"
+            docker pull "$IMAGE"
 
             echo "🔑 Fetch secrets from AWS Secrets Manager"
             export DATABASE_URL=$(aws secretsmanager get-secret-value \
