@@ -9,6 +9,7 @@ import { ConflictError, UnauthorizedError, NotFoundError } from '../middleware/e
 import { UserRole } from '@prisma/client';
 import { assertCorporateEmailAllowed } from '../utils/corporateEmail.js';
 import { verifyTotpToken } from './totpService.js';
+import { sendLoginOtpEmail } from './mailService.js';
 import { logger } from '../utils/logger.js';
 
 const SALT_ROUNDS = 12;
@@ -232,7 +233,18 @@ export async function initiateLogin(
     },
   });
 
-  logger.info(`Login email OTP for ${email}: ${otp} (expires ${expiresAt.toISOString()})`);
+  const emailed = await sendLoginOtpEmail(email, otp, config.auth.loginOtpExpiresMinutes);
+  if (emailed) {
+    logger.info(`Login OTP issued for ${email} (expires ${expiresAt.toISOString()})`);
+  } else if (config.auth.exposeLoginOtp) {
+    logger.info(
+      `Login OTP issued for ${email} (expires ${expiresAt.toISOString()}) — returned in API as debugOtp (no SMTP or testing mode).`
+    );
+  } else {
+    logger.info(
+      `Login OTP for ${email}: ${otp} (expires ${expiresAt.toISOString()}) — configure SMTP or enable debugOtp path.`
+    );
+  }
 
   return {
     loginChallengeId: challenge.id,

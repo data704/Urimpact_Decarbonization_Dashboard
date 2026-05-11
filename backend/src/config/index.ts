@@ -4,6 +4,23 @@ import path from 'path';
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
+/** True when SMTP + sender are set so login OTP can be emailed. */
+const smtpFullyConfigured =
+  Boolean((process.env.SMTP_HOST || '').trim()) &&
+  Boolean((process.env.MAIL_FROM || process.env.SMTP_USER || '').trim());
+
+/**
+ * Include OTP in POST /auth/login response (`debugOtp`) for the next verify step.
+ * - EXPOSE_LOGIN_OTP=false → never expose (use only with working SMTP in production).
+ * - EXPOSE_LOGIN_OTP=true → always expose.
+ * - Otherwise → expose when SMTP is not configured (deployed testing without a mail provider).
+ */
+function resolveExposeLoginOtp(): boolean {
+  if (process.env.EXPOSE_LOGIN_OTP === 'false') return false;
+  if (process.env.EXPOSE_LOGIN_OTP === 'true') return true;
+  return !smtpFullyConfigured;
+}
+
 export const config = {
   // Server
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -36,16 +53,26 @@ export const config = {
 
   auth: {
     loginOtpExpiresMinutes: parseInt(process.env.LOGIN_OTP_EXPIRES_MINUTES || '15', 10),
-    /** Dev-only: include OTP in login API response */
-    exposeLoginOtp: process.env.EXPOSE_LOGIN_OTP === 'true',
+    /** OTP echoed in API as `debugOtp` when no SMTP or when EXPOSE_LOGIN_OTP=true (see resolveExposeLoginOtp). */
+    exposeLoginOtp: resolveExposeLoginOtp(),
     /**
      * When true: POST /auth/login returns JWT immediately (no email OTP step).
      * Default ON in development; use SKIP_LOGIN_OTP=false locally when testing OTP flow.
-     * In production, OTP stays OFF unless SKIP_LOGIN_OTP=true is set explicitly.
+     * In production, the OTP step runs by default; set SKIP_LOGIN_OTP=true for password-only login.
      */
     skipLoginOtp:
       process.env.SKIP_LOGIN_OTP === 'true' ||
       (process.env.NODE_ENV !== 'production' && process.env.SKIP_LOGIN_OTP !== 'false'),
+  },
+
+  /** Optional SMTP for login OTP (and other transactional mail). If SMTP_HOST is unset, OTP is not emailed. */
+  mail: {
+    smtpHost: (process.env.SMTP_HOST || '').trim(),
+    smtpPort: parseInt(process.env.SMTP_PORT || '587', 10),
+    smtpSecure: process.env.SMTP_SECURE === 'true',
+    smtpUser: (process.env.SMTP_USER || '').trim(),
+    smtpPass: (process.env.SMTP_PASS || '').trim(),
+    from: (process.env.MAIL_FROM || process.env.SMTP_USER || '').trim(),
   },
 
   // AWS S3

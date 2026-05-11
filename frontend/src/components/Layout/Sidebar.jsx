@@ -17,44 +17,52 @@ function Sidebar({ isOpen, onClose }) {
 
     const guestLabel = t('sidebar.guest');
     const displayName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || guestLabel : guestLabel;
-    const initials = displayName !== guestLabel
-        ? (user?.firstName?.charAt(0) || '') + (user?.lastName?.charAt(0) || '')
-        : '?';
+    const initials =
+        displayName !== guestLabel
+            ? (user?.firstName?.charAt(0) || '') + (user?.lastName?.charAt(0) || '')
+            : '?';
     const plan = user?.subscriptionPlan || 'STANDARD';
     const premiumPlan = planAllowsPremiumAnalytics(plan);
 
-    const allNavItems = [
-        { to: '/data-input', icon: 'fas fa-pen-to-square', label: t('sidebar.dataInput'), show: () => canUpload(user?.role) },
-        { to: '/', icon: 'fas fa-gauge-high', label: t('sidebar.dashboard'), show: () => canAccessDashboard(user?.role) },
+    const linkItems = [
+        { to: '/', icon: 'fas fa-gauge-high', label: t('sidebar.dashboard'), end: true, show: () => canAccessDashboard(user?.role) },
+        { to: '/data-input', icon: 'fas fa-leaf', label: t('sidebar.ghg'), show: () => canUpload(user?.role) },
         {
             to: '/decarbonization',
             icon: 'fas fa-seedling',
-            label: t('sidebar.decarbonization'),
+            label: t('sidebar.esgDecarb'),
             show: () =>
                 premiumPlan &&
                 (canGenerateReports(user?.role) || String(user?.role || '').toUpperCase() === 'VIEWER'),
         },
         {
             to: '/reports',
-            icon: 'fas fa-file-lines',
-            label: t('sidebar.reports'),
+            icon: 'fas fa-magnifying-glass-chart',
+            label: t('sidebar.gapAnalysis'),
             show: () => premiumPlan && canGenerateReports(user?.role),
         },
-        { to: '/settings', icon: 'fas fa-gear', label: t('sidebar.settings'), show: () => canManageUsers(user?.role) },
+        { to: '/notifications', icon: 'fas fa-list-check', label: t('sidebar.userTasks'), show: () => canAccessDashboard(user?.role) },
         {
             to: '/user-management',
             icon: 'fas fa-user-group',
             label: t('sidebar.userManagement'),
             show: () => canManageUsers(user?.role),
         },
+        { to: '/settings', icon: 'fas fa-id-badge', label: t('sidebar.roleSubscription'), show: () => canManageUsers(user?.role) },
     ];
-    const navItems = allNavItems.filter((item) => (item.show ? item.show() : true));
+
+    const soonItems = [
+        { icon: 'fas fa-link', label: t('sidebar.supplychain') },
+        { icon: 'fas fa-building', label: t('sidebar.businessSustainability') },
+        { icon: 'fas fa-graduation-cap', label: t('sidebar.learnWithUs') },
+    ];
+
+    const visibleLinks = linkItems.filter((item) => (item.show ? item.show() : true));
 
     return (
         <>
-            {/* Overlay for mobile */}
             {isOpen && <div className="sidebar-overlay" onClick={onClose} />}
-            
+
             <aside className={`sidebar ${isOpen ? 'active' : ''}`}>
                 <div className="sidebar-header">
                     <div className="logo">
@@ -62,18 +70,27 @@ function Sidebar({ isOpen, onClose }) {
                     </div>
                 </div>
 
-                <nav className="sidebar-nav">
+                <nav className="sidebar-nav" aria-label={t('sidebar.mainNav')}>
                     <ul>
-                        {navItems.map((item) => (
-                            <li key={item.to}>
-                                <NavLink 
-                                    to={item.to} 
-                                    className={({ isActive }) => isActive ? 'active' : ''}
+                        {visibleLinks.map((item) => (
+                            <li key={`${item.label}`}>
+                                <NavLink
+                                    to={item.to}
+                                    end={item.end === true}
+                                    className={({ isActive }) => (isActive ? 'active' : '')}
                                     onClick={onClose}
                                 >
-                                    <i className={item.icon}></i>
+                                    <i className={item.icon} />
                                     <span>{item.label}</span>
                                 </NavLink>
+                            </li>
+                        ))}
+                        {soonItems.map((item) => (
+                            <li key={item.label}>
+                                <button type="button" className="sidebar-nav-soon" disabled title={t('sidebar.comingSoon')}>
+                                    <i className={item.icon} />
+                                    <span>{item.label}</span>
+                                </button>
                             </li>
                         ))}
                     </ul>
@@ -92,7 +109,7 @@ function Sidebar({ isOpen, onClose }) {
                             <span className="sidebar-user-name">{displayName}</span>
                             <span className="sidebar-user-role">{roleLabel(user?.role)}</span>
                         </div>
-                        <i className="fas fa-chevron-right sidebar-user-chevron" aria-hidden></i>
+                        <i className="fas fa-chevron-right sidebar-user-chevron" aria-hidden />
                     </Link>
                 </div>
             </aside>

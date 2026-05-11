@@ -280,12 +280,13 @@ function Login() {
                         <form className="auth-form active" onSubmit={handleSignInOtp}>
                             <h2>Verify your email</h2>
                             <p className="form-subtitle">
-                                Enter the one-time code sent to your inbox. In development, check API logs or use EXPOSE_LOGIN_OTP=true.
+                                Enter the one-time code below. While email delivery is not configured, the same code
+                                appears on this page after you continue from your password.
                             </p>
                             {debugOtp && (
                                 <div className="error-alert" style={{ borderColor: '#fbbf24', background: '#fffbeb', color: '#92400e' }}>
                                     <span>
-                                        Dev OTP: <strong>{debugOtp}</strong>
+                                        Sign-in code: <strong>{debugOtp}</strong>
                                     </span>
                                 </div>
                             )}

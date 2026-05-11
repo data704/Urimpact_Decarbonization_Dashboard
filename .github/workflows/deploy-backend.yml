@@ -14,6 +14,7 @@ on:
 env:
   AWS_REGION: eu-central-1
   ECR_REPOSITORY: carbonemission-backend
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
@@ -69,7 +70,7 @@ jobs:
           aws-region: eu-central-1
 
       - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ec2-user
