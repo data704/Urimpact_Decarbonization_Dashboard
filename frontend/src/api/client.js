@@ -241,35 +241,271 @@ export async function submitReceiptBatch(documentId, entries) {
 }
 
 /**
- * Login against backend. Returns { user, accessToken, refreshToken, expiresIn } or throws.
+ * Login step 1 — credentials.
+ * When SKIP_LOGIN_OTP is enabled (default in development), response includes accessToken + user immediately.
+ * Otherwise returns loginChallengeId for POST /auth/login/verify.
  */
-export async function loginWithBackend(email, password) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
+export async function initiateLogin(email, password, rememberMe = false) {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ email, password, rememberMe }),
+    });
 
-  const data = await res.json().catch(() => ({}));
-  const errMsg = data?.error || data?.message || (res.ok ? null : `Login failed (${res.status})`);
+    const data = await res.json().catch(() => ({}));
+    const errMsg = data?.error || data?.message || (res.ok ? null : `Login failed (${res.status})`);
 
-  if (!res.ok) {
-    throw new Error(errMsg || 'Login failed');
-  }
+    if (!res.ok) {
+        throw new Error(errMsg || 'Login failed');
+    }
 
-  const payload = data?.data ?? data;
-  return {
-    user: payload.user,
-    accessToken: payload.accessToken,
-    refreshToken: payload.refreshToken,
-    expiresIn: payload.expiresIn,
-  };
+    const payload = data?.data ?? data;
+    return payload;
 }
 
 /**
- * Register against backend. Returns created user. Does not return tokens; call loginWithBackend after to get token.
+ * Login step 2 — OTP (+ optional TOTP). Returns same shape as legacy login.
+ */
+export async function verifyLoginWithBackend(loginChallengeId, otp, totpCode) {
+    const res = await fetch(`${API_BASE}/auth/login/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+            loginChallengeId,
+            otp,
+            ...(totpCode ? { totpCode } : {}),
+        }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    const errMsg = data?.error || data?.message || (res.ok ? null : `Verification failed (${res.status})`);
+
+    if (!res.ok) {
+        throw new Error(errMsg || 'Verification failed');
+    }
+
+    const payload = data?.data ?? data;
+    return {
+        user: payload.user,
+        accessToken: payload.accessToken,
+        refreshToken: payload.refreshToken,
+        expiresIn: payload.expiresIn,
+    };
+}
+
+/**
+ * Current session profile (onboarding flags, subscription, etc.)
+ */
+export async function fetchAuthProfile() {
+    const res = await fetch(`${API_BASE}/auth/profile`, {
+        method: 'GET',
+        headers: authHeaders(),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Profile failed'));
+    }
+
+    const json = await res.json();
+    return json?.data ?? json;
+}
+
+export async function changePasswordApi({ currentPassword, newPassword }) {
+    const body = {};
+    if (currentPassword !== undefined && currentPassword !== '') {
+        body.currentPassword = currentPassword;
+    }
+    body.newPassword = newPassword;
+
+    const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Password change failed'));
+    }
+
+    const json = await res.json();
+    const payload = json?.data ?? json;
+    if (payload?.accessToken) setAuthToken(payload.accessToken);
+    if (payload?.refreshToken) setRefreshToken(payload.refreshToken);
+    return payload;
+}
+
+export async function fetchOrganizationMe() {
+    const res = await authFetch(`${API_BASE}/organizations/me`, {
+        method: 'GET',
+        headers: authHeaders(),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Organization failed'));
+    }
+
+    const json = await res.json();
+    return json?.data ?? json;
+}
+
+export async function saveOnboardingDraftApi(payload) {
+    const res = await authFetch(`${API_BASE}/organizations/me/onboarding/draft`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {}),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Save draft failed'));
+    }
+
+    return true;
+}
+
+export async function submitOnboardingApi(payload) {
+    const res = await authFetch(`${API_BASE}/organizations/me/onboarding/submit`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Submit failed'));
+    }
+
+    return true;
+}
+
+/** Merge partial draft keys (e.g. { scope1 }, { scope2 }, or both). */
+export async function saveScopeOnboardingDraftApi(draftPatch) {
+    const res = await authFetch(`${API_BASE}/organizations/me/onboarding/scope-draft`, {
+        method: 'PUT',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftPatch || {}),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Save draft failed'));
+    }
+
+    return true;
+}
+
+export async function submitScope1OnboardingApi(scope1Payload) {
+    const res = await authFetch(`${API_BASE}/organizations/me/onboarding/scope1/submit`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(scope1Payload),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Submit failed'));
+    }
+
+    return true;
+}
+
+export async function submitScope2OnboardingApi(scope2Payload) {
+    const res = await authFetch(`${API_BASE}/organizations/me/onboarding/scope2/submit`, {
+        method: 'POST',
+        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(scope2Payload),
+    });
+
+    if (!res.ok) {
+        throw new Error(await buildApiError(res, 'Submit failed'));
+    }
+
+    return true;
+}
+
+/**
+ * Upload registration certificate with optional progress callback (0–100).
+ */
+export function uploadRegistrationDocument(file, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const fd = new FormData();
+        fd.append('file', file);
+
+        xhr.open('POST', `${API_BASE}/organizations/me/onboarding/registration-document`);
+        const token = getAuthToken();
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.responseType = 'json';
+
+        xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable && typeof onProgress === 'function') {
+                const pct = Math.round((ev.loaded / ev.total) * 100);
+                onProgress(pct);
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                const body = xhr.response;
+                const filename = body?.data?.filename ?? body?.filename;
+                resolve({ filename });
+                return;
+            }
+            let msg = `Upload failed (${xhr.status})`;
+            try {
+                const b = xhr.response;
+                msg = b?.error || b?.message || msg;
+            } catch (_) {
+                /* ignore */
+            }
+            reject(new Error(msg));
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.send(fd);
+    });
+}
+
+export function uploadOnboardingFacilityProof(file, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        const fd = new FormData();
+        fd.append('file', file);
+
+        xhr.open('POST', `${API_BASE}/organizations/me/onboarding/facility-proof-document`);
+        const token = getAuthToken();
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.responseType = 'json';
+
+        xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable && typeof onProgress === 'function') {
+                const pct = Math.round((ev.loaded / ev.total) * 100);
+                onProgress(pct);
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+                const body = xhr.response;
+                const filename = body?.data?.filename ?? body?.filename;
+                resolve({ filename });
+                return;
+            }
+            let msg = `Upload failed (${xhr.status})`;
+            try {
+                const b = xhr.response;
+                msg = b?.error || b?.message || msg;
+            } catch (_) {
+                /* ignore */
+            }
+            reject(new Error(msg));
+        };
+
+        xhr.onerror = () => reject(new Error('Network error during upload'));
+        xhr.send(fd);
+    });
+}
+
+/**
+ * Register against backend. Does not issue JWT — user completes OTP login after signup.
  * Body: { email, password, firstName, lastName, company? }
- * Backend requires: password min 8 chars, at least one uppercase, one lowercase, one number.
+ * Backend requires: min 8 chars, one uppercase, one special character.
  */
 export async function registerWithBackend({ email, password, firstName, lastName, company }) {
   const trimmedCompany = company != null && String(company).trim() !== '' ? String(company).trim() : undefined;

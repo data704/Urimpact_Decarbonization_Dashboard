@@ -1,12 +1,21 @@
 import { createContext, useContext, useState, useEffect } from 'react';
-import { loginWithBackend, registerWithBackend, setAuthToken, setRefreshToken } from '../api/client.js';
+import {
+    registerWithBackend,
+    setAuthToken,
+    setRefreshToken,
+    getAuthToken,
+    initiateLogin,
+    verifyLoginWithBackend,
+    fetchAuthProfile,
+} from '../api/client.js';
 
 const AuthContext = createContext();
 
 const AUTH_KEY = 'urimpact_user';
 const SESSION_EXPIRED_EVENT = 'urimpact:session-expired';
 
-function toFrontendUser(backendUser) {
+export function toFrontendUser(backendUser) {
+    if (!backendUser) return null;
     return {
         id: backendUser.id,
         email: backendUser.email,
@@ -15,7 +24,13 @@ function toFrontendUser(backendUser) {
         role: backendUser.role,
         organizationId: backendUser.organizationId || null,
         company: backendUser.company ?? '',
-        avatar: null
+        avatar: null,
+        passwordMustChange: !!backendUser.passwordMustChange,
+        totpEnabled: !!backendUser.totpEnabled,
+        organizationOnboardingComplete: !!backendUser.organizationOnboardingComplete,
+        scope1OnboardingComplete: !!backendUser.scope1OnboardingComplete,
+        scope2OnboardingComplete: !!backendUser.scope2OnboardingComplete,
+        subscriptionPlan: backendUser.subscriptionPlan || 'STANDARD',
     };
 }
 
@@ -24,15 +39,38 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const storedUser = localStorage.getItem(AUTH_KEY);
-        if (storedUser) {
-            try {
-                setUser(JSON.parse(storedUser));
-            } catch (_) {
-                localStorage.removeItem(AUTH_KEY);
+        let cancelled = false;
+
+        (async () => {
+            const storedUser = localStorage.getItem(AUTH_KEY);
+            if (storedUser) {
+                try {
+                    setUser(JSON.parse(storedUser));
+                } catch (_) {
+                    localStorage.removeItem(AUTH_KEY);
+                }
             }
-        }
-        setLoading(false);
+
+            const token = getAuthToken();
+            if (token) {
+                try {
+                    const profile = await fetchAuthProfile();
+                    if (!cancelled) {
+                        const u = toFrontendUser(profile);
+                        setUser(u);
+                        localStorage.setItem(AUTH_KEY, JSON.stringify(u));
+                    }
+                } catch (_) {
+                    /* invalid session — client.js may clear tokens */
+                }
+            }
+
+            if (!cancelled) setLoading(false);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -46,8 +84,37 @@ export function AuthProvider({ children }) {
         return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionExpired);
     }, []);
 
-    const login = async (email, password) => {
-        const { user: backendUser, accessToken, refreshToken } = await loginWithBackend(email, password);
+    const refreshSession = async () => {
+        const profile = await fetchAuthProfile();
+        const u = toFrontendUser(profile);
+        setUser(u);
+        localStorage.setItem(AUTH_KEY, JSON.stringify(u));
+        return u;
+    };
+
+    /** Step 1 — password check; returns OTP challenge or completes login when backend skips OTP */
+    const loginStart = async (email, password, rememberMe = false) => {
+        const payload = await initiateLogin(email, password, rememberMe);
+
+        if (payload?.accessToken && payload?.user) {
+            const userData = toFrontendUser(payload.user);
+            setUser(userData);
+            localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
+            setAuthToken(payload.accessToken);
+            if (payload.refreshToken) setRefreshToken(payload.refreshToken);
+            return { completed: true, user: userData };
+        }
+
+        return { completed: false, payload };
+    };
+
+    /** Step 2 — OTP (+ optional TOTP), stores JWT */
+    const loginVerify = async (loginChallengeId, otp, totpCode) => {
+        const { user: backendUser, accessToken, refreshToken } = await verifyLoginWithBackend(
+            loginChallengeId,
+            otp,
+            totpCode
+        );
         const userData = toFrontendUser(backendUser);
         setUser(userData);
         localStorage.setItem(AUTH_KEY, JSON.stringify(userData));
@@ -64,14 +131,7 @@ export function AuthProvider({ children }) {
             lastName: userData.lastName,
             company: userData.company,
         });
-        // Auto-login after signup to get token
-        const { user: backendUser, accessToken, refreshToken } = await loginWithBackend(userData.email, userData.password);
-        const frontendUser = toFrontendUser(backendUser);
-        setUser(frontendUser);
-        localStorage.setItem(AUTH_KEY, JSON.stringify(frontendUser));
-        setAuthToken(accessToken);
-        if (refreshToken) setRefreshToken(refreshToken);
-        return frontendUser;
+        return { registered: true };
     };
 
     const logout = () => {
@@ -91,18 +151,16 @@ export function AuthProvider({ children }) {
     const value = {
         user,
         loading,
-        login,
+        loginStart,
+        loginVerify,
+        refreshSession,
         signup,
         logout,
         updateProfile,
-        isAuthenticated: !!user
+        isAuthenticated: !!user,
     };
 
-    return (
-        <AuthContext.Provider value={value}>
-            {children}
-        </AuthContext.Provider>
-    );
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

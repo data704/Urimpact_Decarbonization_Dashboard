@@ -79,6 +79,30 @@ export const uploadToMemory = multer({
   },
 });
 
+const registrationFileFilter = (
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) => {
+  const extension = getFileExtension(file.originalname).toLowerCase();
+  const allowed = ['pdf', 'jpg', 'jpeg', 'png'];
+  if (allowed.includes(extension)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Registration document must be PDF, JPG, or PNG'));
+  }
+};
+
+/** Single-file upload for company registration certificate (PDF/JPG/PNG only). */
+export const uploadOrgRegistration = multer({
+  storage,
+  fileFilter: registrationFileFilter,
+  limits: {
+    fileSize: config.upload.maxFileSize,
+    files: 1,
+  },
+});
+
 /**
  * Delete a file from uploads directory
  */

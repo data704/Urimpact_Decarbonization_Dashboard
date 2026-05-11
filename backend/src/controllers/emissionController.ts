@@ -18,7 +18,7 @@ import { EmissionScope, EmissionCategory } from '@prisma/client';
 import {
   canUpload,
   canEditDeleteData,
-  canExportDatasets,
+  canExportDatasets,2                                                                                                                                                                                                     
   isOrgAdmin,
   canAccessDashboard,
 } from '../utils/rolePermissions.js';
@@ -77,7 +77,8 @@ export async function getEmission(req: AuthRequest, res: Response): Promise<void
       sendError(res, 'Emission ID required', 400);
       return;
     }
-    const isAdmin = req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN';
+    const isAdmin =
+      req.user.role === 'ADMINISTRATOR' || req.user.role === 'SUPER_ADMIN';
     
     const emission = await getEmissionById(id, req.user.userId, isAdmin);
     sendSuccess(res, emission);

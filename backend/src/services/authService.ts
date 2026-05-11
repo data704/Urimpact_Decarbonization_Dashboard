@@ -7,6 +7,9 @@ import { config } from '../config/index.js';
 import { AuthTokens, CreateUserInput, UserProfile } from '../types/index.js';
 import { ConflictError, UnauthorizedError, NotFoundError } from '../middleware/errorHandler.js';
 import { UserRole } from '@prisma/client';
+import { assertCorporateEmailAllowed } from '../utils/corporateEmail.js';
+import { verifyTotpToken } from './totpService.js';
+import { logger } from '../utils/logger.js';
 
 const SALT_ROUNDS = 12;
 
@@ -30,15 +33,28 @@ export async function comparePassword(
 /**
  * Generate JWT access token
  */
-export function generateAccessToken(user: {
-  id: string;
-  email: string;
-  role: UserRole;
-}): string {
+export function generateAccessToken(
+  user: {
+    id: string;
+    email: string;
+    role: UserRole;
+    passwordMustChange?: boolean;
+  },
+  options?: { expiresIn?: string }
+): string {
+  const expiresIn =
+    options?.expiresIn ??
+    (typeof config.jwt.expiresIn === 'string' ? config.jwt.expiresIn : String(config.jwt.expiresIn));
+
   return jwt.sign(
-    { userId: user.id, email: user.email, role: user.role },
+    {
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      ...(user.passwordMustChange ? { pwdReq: true } : {}),
+    },
     config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn } as jwt.SignOptions
+    { expiresIn } as jwt.SignOptions
   );
 }
 
@@ -61,13 +77,67 @@ export async function generateRefreshToken(userId: string): Promise<string> {
   return token;
 }
 
+export async function buildUserProfile(userId: string): Promise<UserProfile> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      company: true,
+      organizationId: true,
+      role: true,
+      isActive: true,
+      emailVerified: true,
+      createdAt: true,
+      passwordMustChange: true,
+      totpEnabled: true,
+      organization: {
+        select: {
+          onboardingCompletedAt: true,
+          scope1OnboardingCompletedAt: true,
+          scope2OnboardingCompletedAt: true,
+          subscriptionPlan: true,
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    throw new NotFoundError('User');
+  }
+
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    company: user.company ?? undefined,
+    organizationId: user.organizationId ?? undefined,
+    role: user.role,
+    isActive: user.isActive,
+    emailVerified: user.emailVerified,
+    createdAt: user.createdAt,
+    passwordMustChange: user.passwordMustChange,
+    totpEnabled: user.totpEnabled,
+    organizationOnboardingComplete: !!user.organization?.onboardingCompletedAt,
+    scope1OnboardingComplete: !!user.organization?.scope1OnboardingCompletedAt,
+    scope2OnboardingComplete: !!user.organization?.scope2OnboardingCompletedAt,
+    subscriptionPlan: user.organization?.subscriptionPlan ?? 'STANDARD',
+  };
+}
+
 /**
  * Register a new user
  */
 export async function registerUser(input: CreateUserInput): Promise<UserProfile> {
+  const email = input.email.toLowerCase().trim();
+  assertCorporateEmailAllowed(email, [...config.corporateEmailDomains]);
+
   // Check if email already exists
   const existingUser = await prisma.user.findUnique({
-    where: { email: input.email.toLowerCase() },
+    where: { email },
   });
 
   if (existingUser) {
@@ -91,7 +161,7 @@ export async function registerUser(input: CreateUserInput): Promise<UserProfile>
   // Create user — self-signup is org admin; all data is scoped by organizationId
   const user = await prisma.user.create({
     data: {
-      email: input.email.toLowerCase(),
+      email,
       password: hashedPassword,
       firstName: input.firstName,
       lastName: input.lastName,
@@ -99,43 +169,36 @@ export async function registerUser(input: CreateUserInput): Promise<UserProfile>
       organizationId: organization.id,
       role: UserRole.ADMINISTRATOR,
     },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      company: true,
-      organizationId: true,
-      role: true,
-      isActive: true,
-      emailVerified: true,
-      createdAt: true,
-    },
   });
 
-  return {
-    id: user.id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    company: user.company ?? undefined,
-    role: user.role,
-    isActive: user.isActive,
-    emailVerified: user.emailVerified,
-    createdAt: user.createdAt,
-  };
+  return buildUserProfile(user.id);
+}
+
+function otpExpiresSeconds(rememberMe: boolean): number {
+  const days = rememberMe ? 30 : 7;
+  return days * 24 * 60 * 60;
+}
+
+export interface LoginChallengeResult {
+  loginChallengeId: string;
+  expiresAt: string;
+  totpRequired: boolean;
+  debugOtp?: string;
 }
 
 /**
- * Login user and return tokens
+ * Step 1: validate credentials and issue email OTP challenge (no JWT yet).
  */
-export async function loginUser(
-  email: string,
-  password: string
-): Promise<{ user: UserProfile; tokens: AuthTokens }> {
-  // Find user
+export async function initiateLogin(
+  emailRaw: string,
+  password: string,
+  rememberMe: boolean
+): Promise<LoginChallengeResult> {
+  const email = emailRaw.toLowerCase().trim();
+  assertCorporateEmailAllowed(email, [...config.corporateEmailDomains]);
+
   const user = await prisma.user.findUnique({
-    where: { email: email.toLowerCase() },
+    where: { email },
   });
 
   if (!user) {
@@ -146,45 +209,177 @@ export async function loginUser(
     throw new UnauthorizedError('Account is deactivated');
   }
 
-  // Verify password
   const isValidPassword = await comparePassword(password, user.password);
   if (!isValidPassword) {
     throw new UnauthorizedError('Invalid email or password');
   }
 
-  // Update last login
+  await prisma.loginChallenge.deleteMany({ where: { userId: user.id } });
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  const otpHash = await bcrypt.hash(otp, 10);
+
+  const expiresAt = new Date();
+  expiresAt.setMinutes(expiresAt.getMinutes() + config.auth.loginOtpExpiresMinutes);
+
+  const challenge = await prisma.loginChallenge.create({
+    data: {
+      email,
+      otpHash,
+      expiresAt,
+      rememberMe,
+      userId: user.id,
+    },
+  });
+
+  logger.info(`Login email OTP for ${email}: ${otp} (expires ${expiresAt.toISOString()})`);
+
+  return {
+    loginChallengeId: challenge.id,
+    expiresAt: expiresAt.toISOString(),
+    totpRequired: user.totpEnabled && !!user.totpSecret,
+    ...(config.auth.exposeLoginOtp ? { debugOtp: otp } : {}),
+  };
+}
+
+/**
+ * Step 2: verify email OTP (+ optional TOTP) and return JWT + refresh token.
+ */
+export async function verifyLoginChallenge(
+  loginChallengeId: string,
+  otp: string,
+  totpCode?: string
+): Promise<{ user: UserProfile; tokens: AuthTokens }> {
+  const challenge = await prisma.loginChallenge.findUnique({
+    where: { id: loginChallengeId },
+    include: {
+      user: true,
+    },
+  });
+
+  if (!challenge || !challenge.user) {
+    throw new UnauthorizedError('Invalid or expired login session');
+  }
+
+  if (challenge.expiresAt < new Date()) {
+    await prisma.loginChallenge.delete({ where: { id: challenge.id } }).catch(() => undefined);
+    throw new UnauthorizedError('Login code has expired. Please sign in again.');
+  }
+
+  const otpOk = await bcrypt.compare(String(otp).trim(), challenge.otpHash);
+  if (!otpOk) {
+    throw new UnauthorizedError('Invalid verification code');
+  }
+
+  const user = challenge.user;
+
+  if (user.totpEnabled && user.totpSecret) {
+    const code = totpCode?.trim();
+    if (!code || !verifyTotpToken(user.totpSecret, code)) {
+      throw new UnauthorizedError('Authenticator code required or invalid');
+    }
+  }
+
+  await prisma.loginChallenge.delete({ where: { id: challenge.id } });
+
   await prisma.user.update({
     where: { id: user.id },
-    data: { lastLoginAt: new Date() },
+    data: { lastLoginAt: new Date(), emailVerified: true },
   });
 
-  // Generate tokens
-  const accessToken = generateAccessToken({
-    id: user.id,
-    email: user.email,
-    role: user.role,
-  });
+  const rememberMe = challenge.rememberMe;
+  const accessExpires =
+    typeof config.jwt.rememberExpiresIn === 'string'
+      ? config.jwt.rememberExpiresIn
+      : String(config.jwt.rememberExpiresIn);
+  const normalExpires =
+    typeof config.jwt.expiresIn === 'string' ? config.jwt.expiresIn : String(config.jwt.expiresIn);
+
+  const accessToken = generateAccessToken(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      passwordMustChange: user.passwordMustChange,
+    },
+    { expiresIn: rememberMe ? accessExpires : normalExpires }
+  );
   const refreshToken = await generateRefreshToken(user.id);
 
-  const userProfile: UserProfile = {
-    id: user.id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    company: user.company ?? undefined,
-    organizationId: user.organizationId ?? undefined,
-    role: user.role,
-    isActive: user.isActive,
-    emailVerified: user.emailVerified,
-    createdAt: user.createdAt,
-  };
+  const seconds = otpExpiresSeconds(rememberMe);
+
+  const userProfile = await buildUserProfile(user.id);
 
   return {
     user: userProfile,
     tokens: {
       accessToken,
       refreshToken,
-      expiresIn: 7 * 24 * 60 * 60, // 7 days in seconds
+      expiresIn: seconds,
+    },
+  };
+}
+
+/**
+ * Password-only login (used when email OTP is disabled via SKIP_LOGIN_OTP).
+ */
+export async function loginWithPasswordOnly(
+  emailRaw: string,
+  password: string,
+  rememberMe: boolean
+): Promise<{ user: UserProfile; tokens: AuthTokens }> {
+  const email = emailRaw.toLowerCase().trim();
+  assertCorporateEmailAllowed(email, [...config.corporateEmailDomains]);
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+
+  if (!user) {
+    throw new UnauthorizedError('Invalid email or password');
+  }
+
+  if (!user.isActive) {
+    throw new UnauthorizedError('Account is deactivated');
+  }
+
+  const isValidPassword = await comparePassword(password, user.password);
+  if (!isValidPassword) {
+    throw new UnauthorizedError('Invalid email or password');
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date(), emailVerified: true },
+  });
+
+  const accessExpires =
+    typeof config.jwt.rememberExpiresIn === 'string'
+      ? config.jwt.rememberExpiresIn
+      : String(config.jwt.rememberExpiresIn);
+  const normalExpires =
+    typeof config.jwt.expiresIn === 'string' ? config.jwt.expiresIn : String(config.jwt.expiresIn);
+
+  const accessToken = generateAccessToken(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      passwordMustChange: user.passwordMustChange,
+    },
+    { expiresIn: rememberMe ? accessExpires : normalExpires }
+  );
+  const refreshToken = await generateRefreshToken(user.id);
+
+  const seconds = otpExpiresSeconds(rememberMe);
+  const userProfile = await buildUserProfile(user.id);
+
+  return {
+    user: userProfile,
+    tokens: {
+      accessToken,
+      refreshToken,
+      expiresIn: seconds,
     },
   };
 }
@@ -231,6 +426,7 @@ export async function refreshAccessToken(
     id: user.id,
     email: user.email,
     role: user.role,
+    passwordMustChange: user.passwordMustChange,
   });
   const newRefreshToken = await generateRefreshToken(user.id);
 
@@ -255,36 +451,7 @@ export async function logoutUser(refreshToken: string): Promise<void> {
  * Get user profile by ID
  */
 export async function getUserProfile(userId: string): Promise<UserProfile> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      company: true,
-      role: true,
-      isActive: true,
-      emailVerified: true,
-      createdAt: true,
-    },
-  });
-
-  if (!user) {
-    throw new NotFoundError('User');
-  }
-
-  return {
-    id: user.id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    company: user.company ?? undefined,
-    role: user.role,
-    isActive: user.isActive,
-    emailVerified: user.emailVerified,
-    createdAt: user.createdAt,
-  };
+  return buildUserProfile(userId);
 }
 
 /**
@@ -294,43 +461,23 @@ export async function updateUserProfile(
   userId: string,
   data: { firstName?: string; lastName?: string; company?: string }
 ): Promise<UserProfile> {
-  const user = await prisma.user.update({
+  await prisma.user.update({
     where: { id: userId },
     data,
-    select: {
-      id: true,
-      email: true,
-      firstName: true,
-      lastName: true,
-      company: true,
-      role: true,
-      isActive: true,
-      emailVerified: true,
-      createdAt: true,
-    },
   });
 
-  return {
-    id: user.id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    company: user.company ?? undefined,
-    role: user.role,
-    isActive: user.isActive,
-    emailVerified: user.emailVerified,
-    createdAt: user.createdAt,
-  };
+  return buildUserProfile(userId);
 }
 
 /**
- * Change user password
+ * Change user password. When `passwordMustChange` is true, `currentPassword` may be omitted (still authenticated via JWT).
+ * Returns new tokens (refresh tokens rotated).
  */
 export async function changePassword(
   userId: string,
-  currentPassword: string,
+  currentPassword: string | undefined,
   newPassword: string
-): Promise<void> {
+): Promise<AuthTokens> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
   });
@@ -339,23 +486,48 @@ export async function changePassword(
     throw new NotFoundError('User');
   }
 
-  const isValidPassword = await comparePassword(currentPassword, user.password);
-  if (!isValidPassword) {
-    throw new UnauthorizedError('Current password is incorrect');
+  if (user.passwordMustChange) {
+    if (currentPassword !== undefined && currentPassword !== '') {
+      const ok = await comparePassword(currentPassword, user.password);
+      if (!ok) {
+        throw new UnauthorizedError('Current password is incorrect');
+      }
+    }
+  } else {
+    if (!currentPassword) {
+      throw new UnauthorizedError('Current password is required');
+    }
+    const isValidPassword = await comparePassword(currentPassword, user.password);
+    if (!isValidPassword) {
+      throw new UnauthorizedError('Current password is incorrect');
+    }
   }
 
   const hashedPassword = await hashPassword(newPassword);
 
   await prisma.user.update({
     where: { id: userId },
-    data: { password: hashedPassword },
+    data: { password: hashedPassword, passwordMustChange: false },
   });
 
-  // Revoke all refresh tokens for security
   await prisma.refreshToken.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+
+  const accessToken = generateAccessToken({
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    passwordMustChange: false,
+  });
+  const refreshToken = await generateRefreshToken(user.id);
+
+  return {
+    accessToken,
+    refreshToken,
+    expiresIn: 7 * 24 * 60 * 60,
+  };
 }
 
 /**

@@ -2,7 +2,54 @@
 .login-container {
     display: flex;
     min-height: 100vh;
+    position: relative;
 }
+
+/* Language switcher — visible on sign-in and sign-up */
+.login-lang-switch {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.login-lang-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.login-lang-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.login-lang-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.login-lang-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.login-lang-btn.active {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+}
+
 
 /* Left Side - Branding */
 .login-branding {

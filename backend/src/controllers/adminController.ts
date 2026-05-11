@@ -169,6 +169,7 @@ export async function createUser(req: AuthRequest, res: Response): Promise<void>
         role: targetRole,
         isActive: true,
         emailVerified: false,
+        passwordMustChange: true,
       },
       select: {
         id: true,

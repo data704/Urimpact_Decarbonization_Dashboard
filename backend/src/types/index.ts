@@ -184,6 +184,16 @@ export interface UserProfile {
   isActive: boolean;
   emailVerified: boolean;
   createdAt: Date;
+  /** Mandatory password change before full product access */
+  passwordMustChange?: boolean;
+  totpEnabled?: boolean;
+  /** Derived from organization.onboardingCompletedAt */
+  organizationOnboardingComplete?: boolean;
+  /** Derived from organization.scope1OnboardingCompletedAt */
+  scope1OnboardingComplete?: boolean;
+  /** Derived from organization.scope2OnboardingCompletedAt */
+  scope2OnboardingComplete?: boolean;
+  subscriptionPlan?: string;
 }
 
 export interface CreateUserInput {

@@ -6,6 +6,7 @@ import {
     canAccessDashboard,
     canGenerateReports,
     canManageUsers,
+    planAllowsPremiumAnalytics,
     roleLabel,
 } from '../../utils/roles';
 import './Layout.css';
@@ -19,13 +20,33 @@ function Sidebar({ isOpen, onClose }) {
     const initials = displayName !== guestLabel
         ? (user?.firstName?.charAt(0) || '') + (user?.lastName?.charAt(0) || '')
         : '?';
+    const plan = user?.subscriptionPlan || 'STANDARD';
+    const premiumPlan = planAllowsPremiumAnalytics(plan);
+
     const allNavItems = [
         { to: '/data-input', icon: 'fas fa-pen-to-square', label: t('sidebar.dataInput'), show: () => canUpload(user?.role) },
         { to: '/', icon: 'fas fa-gauge-high', label: t('sidebar.dashboard'), show: () => canAccessDashboard(user?.role) },
-        { to: '/decarbonization', icon: 'fas fa-seedling', label: t('sidebar.decarbonization'), show: () => canGenerateReports(user?.role) || String(user?.role || '').toUpperCase() === 'VIEWER' },
-        { to: '/reports', icon: 'fas fa-file-lines', label: t('sidebar.reports'), show: () => canGenerateReports(user?.role) },
+        {
+            to: '/decarbonization',
+            icon: 'fas fa-seedling',
+            label: t('sidebar.decarbonization'),
+            show: () =>
+                premiumPlan &&
+                (canGenerateReports(user?.role) || String(user?.role || '').toUpperCase() === 'VIEWER'),
+        },
+        {
+            to: '/reports',
+            icon: 'fas fa-file-lines',
+            label: t('sidebar.reports'),
+            show: () => premiumPlan && canGenerateReports(user?.role),
+        },
         { to: '/settings', icon: 'fas fa-gear', label: t('sidebar.settings'), show: () => canManageUsers(user?.role) },
-        { to: '/user-management', icon: 'fas fa-user-group', label: t('sidebar.userManagement'), show: () => canManageUsers(user?.role) },
+        {
+            to: '/user-management',
+            icon: 'fas fa-user-group',
+            label: t('sidebar.userManagement'),
+            show: () => canManageUsers(user?.role),
+        },
     ];
     const navItems = allNavItems.filter((item) => (item.show ? item.show() : true));
 

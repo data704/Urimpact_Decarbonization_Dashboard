@@ -10,6 +10,7 @@ interface JwtPayload {
   userId: string;
   email: string;
   role: UserRole;
+  pwdReq?: boolean;
 }
 
 /**

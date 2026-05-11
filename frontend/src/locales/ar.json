@@ -655,6 +655,7 @@
     "featureReporting": "تقارير آلية",
     "featurePathways": "مسارات إزالة الكربون",
     "featureCompliance": "إدارة الامتثال",
+    "languageSwitcher": "اختر اللغة",
     "signInTab": "تسجيل الدخول",
     "signUpTab": "إنشاء حساب",
     "welcomeBack": "مرحبًا بعودتك",
@@ -690,5 +691,11 @@
     "strengthWeak": "ضعيفة",
     "strengthMedium": "متوسطة",
     "strengthStrong": "قوية"
+  },
+  "pendingSetup": {
+    "title": "جاري إعداد الشركة",
+    "description": "مسؤول مؤسستك يُكمّل إعداد الشركة. ستصلك صلاحية الوصول إلى لوحة العمل بعد اكتمال هذه الخطوة.",
+    "signOutHint": "هل تحتاج تسجيل الدخول كمسؤول لإنهاء الإعداد؟",
+    "signOutButton": "تسجيل الخروج والعودة لتسجيل الدخول"
   }
 }

@@ -1,23 +1,33 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../types/index.js';
+import type { CreateUserInput } from '../types/index.js';
 import { sendSuccess, sendError } from '../utils/helpers.js';
 import {
   registerUser,
-  loginUser,
+  initiateLogin,
+  verifyLoginChallenge,
+  loginWithPasswordOnly,
   refreshAccessToken,
   logoutUser,
   getUserProfile,
   updateUserProfile,
   changePassword,
 } from '../services/authService.js';
-import { logUserAction, AuditActions } from '../services/auditService.js';
+import { config } from '../config/index.js';
 import {
   registerSchema,
   loginSchema,
+  loginVerifySchema,
   updateProfileSchema,
   changePasswordSchema,
   validate,
 } from '../utils/validators.js';
+import {
+  beginTotpSetup,
+  confirmTotpSetup,
+  disableTotp,
+} from '../services/totpService.js';
+import { logUserAction, AuditActions } from '../services/auditService.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -32,7 +42,7 @@ export async function register(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const user = await registerUser(validation.data!);
+    const user = await registerUser(validation.data! as CreateUserInput);
 
     // Log audit
     await logUserAction(
@@ -61,7 +71,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 }
 
 /**
- * Login user
+ * Login step 1 — either password-only (SKIP_LOGIN_OTP) or email OTP challenge.
  * POST /api/auth/login
  */
 export async function login(req: Request, res: Response): Promise<void> {
@@ -72,10 +82,66 @@ export async function login(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const { email, password } = validation.data!;
-    const { user, tokens } = await loginUser(email, password);
+    const { email, password, rememberMe } = validation.data!;
 
-    // Log audit
+    if (config.auth.skipLoginOtp) {
+      const { user, tokens } = await loginWithPasswordOnly(email, password, !!rememberMe);
+
+      await logUserAction(
+        user.id,
+        AuditActions.USER_LOGIN,
+        'user',
+        user.id,
+        { email: user.email, skipOtp: true },
+        req
+      );
+
+      logger.info(`User logged in (password only, SKIP_LOGIN_OTP): ${user.email}`);
+      sendSuccess(res, { user, ...tokens }, 'Login successful');
+      return;
+    }
+
+    const challenge = await initiateLogin(email, password, !!rememberMe);
+
+    sendSuccess(
+      res,
+      {
+        loginChallengeId: challenge.loginChallengeId,
+        expiresAt: challenge.expiresAt,
+        totpRequired: challenge.totpRequired,
+        ...(challenge.debugOtp ? { debugOtp: challenge.debugOtp } : {}),
+      },
+      'Verification code sent — check your inbox or server logs (development)'
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message.includes('Invalid') || error.message.includes('deactivated') || error.message.includes('not authorized')) {
+        sendError(res, error.message, 401);
+        return;
+      }
+      logger.error('Login error:', error);
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Login failed', 500);
+    }
+  }
+}
+
+/**
+ * Login step 2 — verify email OTP and optional TOTP, then issue JWT.
+ * POST /api/auth/login/verify
+ */
+export async function verifyLogin(req: Request, res: Response): Promise<void> {
+  try {
+    const validation = validate(loginVerifySchema, req.body);
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    const { loginChallengeId, otp, totpCode } = validation.data!;
+    const { user, tokens } = await verifyLoginChallenge(loginChallengeId, otp, totpCode);
+
     await logUserAction(
       user.id,
       AuditActions.USER_LOGIN,
@@ -85,18 +151,23 @@ export async function login(req: Request, res: Response): Promise<void> {
       req
     );
 
-    logger.info(`User logged in: ${user.email}`);
+    logger.info(`User logged in (OTP verified): ${user.email}`);
     sendSuccess(res, { user, ...tokens }, 'Login successful');
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('Invalid') || error.message.includes('deactivated')) {
+      if (
+        error.message.includes('Invalid') ||
+        error.message.includes('expired') ||
+        error.message.includes('required') ||
+        error.message.includes('Authenticator')
+      ) {
         sendError(res, error.message, 401);
         return;
       }
-      logger.error('Login error:', error);
+      logger.error('Verify login error:', error);
       sendError(res, error.message, 500);
     } else {
-      sendError(res, 'Login failed', 500);
+      sendError(res, 'Login verification failed', 500);
     }
   }
 }
@@ -242,7 +313,7 @@ export async function changeUserPassword(req: AuthRequest, res: Response): Promi
     }
 
     const { currentPassword, newPassword } = validation.data!;
-    await changePassword(req.user.userId, currentPassword, newPassword);
+    const tokens = await changePassword(req.user.userId, currentPassword, newPassword);
 
     // Log audit
     await logUserAction(
@@ -254,10 +325,10 @@ export async function changeUserPassword(req: AuthRequest, res: Response): Promi
       req
     );
 
-    sendSuccess(res, null, 'Password changed successfully');
+    sendSuccess(res, tokens, 'Password changed successfully');
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message.includes('incorrect')) {
+      if (error.message.includes('incorrect') || error.message.includes('required')) {
         sendError(res, error.message, 400);
         return;
       }
@@ -266,5 +337,80 @@ export async function changeUserPassword(req: AuthRequest, res: Response): Promi
     } else {
       sendError(res, 'Failed to change password', 500);
     }
+  }
+}
+
+/**
+ * GET /api/auth/totp/setup — returns otpauth URL + QR for authenticator apps.
+ */
+export async function totpSetupStart(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    const payload = await beginTotpSetup(req.user.userId);
+    sendSuccess(res, payload, 'Scan QR code then confirm with a 6-digit code');
+  } catch (error) {
+    if (error instanceof Error) {
+      sendError(res, error.message, error.message.includes('Unauthorized') ? 403 : 400);
+      return;
+    }
+    sendError(res, 'Failed', 500);
+  }
+}
+
+/**
+ * POST /api/auth/totp/confirm — body: { token: string }
+ */
+export async function totpSetupConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!token) {
+      sendError(res, 'token is required', 400);
+      return;
+    }
+
+    await confirmTotpSetup(req.user.userId, token);
+    sendSuccess(res, { enabled: true }, 'Two-factor authentication enabled');
+  } catch (error) {
+    if (error instanceof Error) {
+      sendError(res, error.message, 401);
+      return;
+    }
+    sendError(res, 'Failed', 500);
+  }
+}
+
+/**
+ * POST /api/auth/totp/disable — body: { token: string }
+ */
+export async function totpDisable(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+
+    const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+    if (!token) {
+      sendError(res, 'token is required', 400);
+      return;
+    }
+
+    await disableTotp(req.user.userId, token);
+    sendSuccess(res, { enabled: false }, 'Two-factor authentication disabled');
+  } catch (error) {
+    if (error instanceof Error) {
+      sendError(res, error.message, 401);
+      return;
+    }
+    sendError(res, 'Failed', 500);
   }
 }

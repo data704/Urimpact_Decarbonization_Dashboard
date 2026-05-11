@@ -41,7 +41,13 @@ export function canGenerateReports(role) {
 }
 
 export function canManageUsers(role) {
-  return isAdministrator(role);
+    return isAdministrator(role);
+}
+
+/** Subscription tier — FREE hides premium analytics tabs */
+export function planAllowsPremiumAnalytics(plan) {
+    const p = String(plan || 'STANDARD').toUpperCase();
+    return p !== 'FREE';
 }
 
 export function roleLabel(role) {

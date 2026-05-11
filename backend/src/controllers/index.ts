@@ -2,11 +2,15 @@
 export {
   register,
   login,
+  verifyLogin,
   refresh,
   logout,
   getProfile,
   updateProfile,
   changeUserPassword,
+  totpSetupStart,
+  totpSetupConfirm,
+  totpDisable,
 } from './authController.js';
 
 // Document Controllers

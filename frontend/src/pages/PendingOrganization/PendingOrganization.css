@@ -1,0 +1,103 @@
+.pending-setup-page {
+    min-height: 100vh;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: #f8fafc;
+}
+
+.pending-setup-lang {
+    position: absolute;
+    top: 16px;
+    inset-inline-end: 16px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.08);
+    border: 1px solid #e2e8f0;
+}
+
+.pending-setup-lang-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.pending-setup-lang-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.pending-setup-lang-btn {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #334155;
+    cursor: pointer;
+}
+
+.pending-setup-lang-btn:hover {
+    background: #f8fafc;
+}
+
+.pending-setup-lang-btn.active {
+    background: #0f766e;
+    border-color: #0f766e;
+    color: #fff;
+}
+
+.pending-setup-card {
+    max-width: 520px;
+    text-align: center;
+}
+
+.pending-setup-card h1 {
+    margin: 0 0 12px;
+    font-size: 1.5rem;
+    color: #0f172a;
+}
+
+.pending-setup-desc {
+    color: #64748b;
+    line-height: 1.65;
+    margin: 0 0 16px;
+}
+
+.pending-setup-hint {
+    font-size: 0.95rem;
+    color: #475569;
+    margin: 0 0 20px;
+}
+
+.pending-setup-signout {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 22px;
+    border-radius: 10px;
+    border: 1px solid #0f766e;
+    background: #fff;
+    color: #0f766e;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.pending-setup-signout:hover {
+    background: #0f766e;
+    color: #fff;
+}

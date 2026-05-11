@@ -10,6 +10,10 @@ import {
   submitDocumentBatch,
 } from '../controllers/documentController.js';
 import { authenticate } from '../middleware/auth.js';
+import {
+  blockPendingPasswordChange,
+  blockIncompleteOrganizationOnboarding,
+} from '../middleware/accountStatus.js';
 import { upload, uploadMultiple } from '../middleware/upload.js';
 import { uploadLimiter } from '../middleware/rateLimit.js';
 
@@ -17,6 +21,8 @@ const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+router.use(blockPendingPasswordChange);
+router.use(blockIncompleteOrganizationOnboarding);
 
 // Document routes
 router.post('/upload', uploadLimiter, upload.single('file'), uploadDocument);

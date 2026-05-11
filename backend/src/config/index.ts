@@ -24,7 +24,28 @@ export const config = {
   jwt: {
     secret: process.env.JWT_SECRET || 'default-secret-change-in-production',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    rememberExpiresIn: process.env.JWT_REMEMBER_EXPIRES_IN || '30d',
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d',
+  },
+
+  /** Empty list = any domain allowed */
+  corporateEmailDomains: (process.env.CORPORATE_EMAIL_DOMAINS || '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean),
+
+  auth: {
+    loginOtpExpiresMinutes: parseInt(process.env.LOGIN_OTP_EXPIRES_MINUTES || '15', 10),
+    /** Dev-only: include OTP in login API response */
+    exposeLoginOtp: process.env.EXPOSE_LOGIN_OTP === 'true',
+    /**
+     * When true: POST /auth/login returns JWT immediately (no email OTP step).
+     * Default ON in development; use SKIP_LOGIN_OTP=false locally when testing OTP flow.
+     * In production, OTP stays OFF unless SKIP_LOGIN_OTP=true is set explicitly.
+     */
+    skipLoginOtp:
+      process.env.SKIP_LOGIN_OTP === 'true' ||
+      (process.env.NODE_ENV !== 'production' && process.env.SKIP_LOGIN_OTP !== 'false'),
   },
 
   // AWS S3

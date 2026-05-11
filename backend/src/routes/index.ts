@@ -7,6 +7,8 @@ import adminRoutes from './adminRoutes.js';
 import clientConfigRoutes from './clientConfigRoutes.js';
 import activityRoutes from './activityRoutes.js';
 
+import organizationRoutes from './organizationRoutes.js';
+
 const router = Router();
 
 // Health check
@@ -21,6 +23,7 @@ router.get('/health', (req, res) => {
 
 // API routes
 router.use('/auth', authRoutes);
+router.use('/organizations', organizationRoutes);
 router.use('/documents', documentRoutes);
 router.use('/emissions', emissionRoutes);
 router.use('/reports', reportRoutes);

@@ -655,6 +655,7 @@
     "featureReporting": "Automated reporting",
     "featurePathways": "Decarbonization pathways",
     "featureCompliance": "Compliance management",
+    "languageSwitcher": "Choose language",
     "signInTab": "Sign In",
     "signUpTab": "Sign Up",
     "welcomeBack": "Welcome Back",
@@ -690,5 +691,11 @@
     "strengthWeak": "weak",
     "strengthMedium": "medium",
     "strengthStrong": "strong"
+  },
+  "pendingSetup": {
+    "title": "Company setup in progress",
+    "description": "Your organization administrator is completing company onboarding. You will get access to the workspace once that step is finished.",
+    "signOutHint": "Need to sign in as an administrator to finish onboarding?",
+    "signOutButton": "Sign out and go to login"
   }
 }

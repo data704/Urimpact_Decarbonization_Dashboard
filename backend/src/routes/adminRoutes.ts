@@ -10,12 +10,18 @@ import {
   getAllDocumentsHandler,
 } from '../controllers/adminController.js';
 import { authenticate, adminOnly } from '../middleware/auth.js';
+import {
+  blockPendingPasswordChange,
+  blockIncompleteOrganizationOnboarding,
+} from '../middleware/accountStatus.js';
 
 const router = Router();
 
 // All routes require authentication and admin role
 router.use(authenticate);
 router.use(adminOnly);
+router.use(blockPendingPasswordChange);
+router.use(blockIncompleteOrganizationOnboarding);
 
 // User management
 router.get('/users', getUsers);
