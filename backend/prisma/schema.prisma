@@ -240,6 +240,12 @@ model Emission {
   billingPeriodStart DateTime?
   billingPeriodEnd   DateTime?
   notes              String?
+  /// GHG UI category card (e.g. stationary-combustion, purchased-electricity); set by /api/ghg routes
+  ghgCategorySlug    String?
+  /// How the row was created: FORM | BULK_UPLOAD | AI_EXTRACT
+  dataEntryChannel   String?
+  /// Climatiq estimate subset or local fallback metadata (JSON), for audit and UI detail
+  calculationSnapshot Json?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
@@ -250,6 +256,7 @@ model Emission {
 
   @@index([userId])
   @@index([organizationId])
+  @@index([organizationId, scope, ghgCategorySlug])
   @@index([documentId])
   @@index([scope])
   @@index([category])

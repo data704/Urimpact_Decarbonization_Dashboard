@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import {
     fetchOrganizationMe,
@@ -11,6 +12,7 @@ import { ISIC_SECTORS } from '../../data/isicRev4GHGSectors.js';
 import { PROCESS_SECTORS, typesForProcessSector } from '../../data/scope1ProcessEmissions.js';
 import { readSitesForOrganization } from '../../utils/dataInputSitesStorage.js';
 import { onboardingFacilitiesToSiteOptions } from '../../utils/onboardingFacilities.js';
+import { canOpenRevisitOnboarding } from '../../utils/onboardingRevisit.js';
 
 const DRAFT_PREFIX = 'urimpact_scope1_onboarding_draft_';
 
@@ -217,8 +219,11 @@ function toSubmitPayload(s) {
 }
 
 export default function ScopeOnboarding() {
+    const { t } = useTranslation();
     const { user, refreshSession } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const allowWizardRevisit = canOpenRevisitOnboarding(user?.role, searchParams);
     const [step, setStep] = useState(1);
     const [s1, setS1] = useState(emptyScope1);
     const [fieldErrors, setFieldErrors] = useState({});
@@ -318,7 +323,7 @@ export default function ScopeOnboarding() {
         return <Navigate to="/company-onboarding" replace />;
     }
 
-    if (user.scope1OnboardingComplete) {
+    if (user.scope1OnboardingComplete && !allowWizardRevisit) {
         return <Navigate to="/" replace />;
     }
 
@@ -416,7 +421,10 @@ export default function ScopeOnboarding() {
             }
             await refreshSession();
             setToast('Scope 1 saved. Continue with Scope 2.');
-            setTimeout(() => navigate('/scope-2-onboarding', { replace: true }), 800);
+            setTimeout(
+                () => navigate(allowWizardRevisit ? '/' : '/scope-2-onboarding', { replace: true }),
+                800
+            );
         } catch (e) {
             setToast(e?.message || 'Submission failed');
         } finally {
@@ -629,6 +637,12 @@ export default function ScopeOnboarding() {
 
     return (
         <div className="cob-page">
+            {allowWizardRevisit && (
+                <div className="cob-revisit-banner" role="status">
+                    <i className="fas fa-pen-to-square" aria-hidden />
+                    <span>{t('onboarding.revisitBannerScope1')}</span>
+                </div>
+            )}
             {toast && (
                 <div
                     className={`cob-toast ${

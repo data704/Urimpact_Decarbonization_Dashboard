@@ -229,13 +229,14 @@ export async function getReportInsights(req: AuthRequest, res: Response): Promis
     }
 
     const userId = req.user.userId;
+    const orgId = req.user.organizationId;
 
     const [clientConfig, totalEmissions, byScope, byCategory, trend] = await Promise.all([
       getLatestClientConfigOrNull(userId),
-      getTotalEmissions(userId),
-      getEmissionsSummaryByScope(userId),
-      getEmissionsSummaryByCategory(userId),
-      getEmissionsTrend(userId, 12),
+      getTotalEmissions(userId, undefined, undefined, orgId),
+      getEmissionsSummaryByScope(userId, undefined, undefined, orgId),
+      getEmissionsSummaryByCategory(userId, undefined, undefined, orgId),
+      getEmissionsTrend(userId, 12, orgId),
     ]);
 
     const emissionsSummary = {

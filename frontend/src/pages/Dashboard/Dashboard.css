@@ -814,6 +814,23 @@
     color: #1D4ED8;
 }
 
+.dashboard-calc-detail {
+    margin-top: 6px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #475569;
+    max-width: 220px;
+}
+
+.dashboard-emission-meta {
+    margin-top: 4px;
+    font-size: 10px;
+    line-height: 1.3;
+    color: #94a3b8;
+    text-transform: none;
+    letter-spacing: 0.01em;
+}
+
 /* Type Badge */
 .type-badge {
     display: inline-flex;

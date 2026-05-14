@@ -1,6 +1,5 @@
 /**
  * API client for URIMPACT backend.
- * Receipt uploads are sent to the backend for AI extraction and emission calculation.
  */
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -135,109 +134,6 @@ async function buildApiError(response, fallbackLabel) {
   }
 
   return message;
-}
-
-/**
- * Upload a receipt and run AI extraction. Returns { documentId, extractedFields } for verification.
- */
-export async function uploadReceiptAndExtract(file) {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const uploadRes = await fetch(`${API_BASE}/documents/upload`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: formData,
-  });
-
-  if (!uploadRes.ok) {
-    throw new Error(await buildApiError(uploadRes, 'Upload failed'));
-  }
-
-  const uploadData = await uploadRes.json();
-  const documentId = uploadData?.data?.id;
-  if (!documentId) throw new Error('Upload did not return document id');
-
-  return processDocument(documentId, file.name);
-}
-
-/**
- * Upload multiple receipts in one request. Returns array of documents (each with id, fileName, etc.).
- */
-export async function uploadReceiptsMultiple(files) {
-  const formData = new FormData();
-  for (let i = 0; i < files.length; i++) {
-    formData.append('file', files[i]);
-  }
-
-  const res = await fetch(`${API_BASE}/documents/upload-multiple`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: formData,
-  });
-
-  if (!res.ok) {
-    throw new Error(await buildApiError(res, 'Upload failed'));
-  }
-
-  const json = await res.json();
-  return Array.isArray(json?.data) ? json.data : [];
-}
-
-/**
- * Run AI extraction on an already-uploaded document. Returns { documentId, fileName, extractedFields }.
- */
-export async function processDocument(documentId, fileName = '') {
-  const processRes = await fetch(`${API_BASE}/documents/${documentId}/process`, {
-    method: 'POST',
-    headers: authHeaders(),
-  });
-
-  if (!processRes.ok) {
-    throw new Error(await buildApiError(processRes, 'Extraction failed'));
-  }
-
-  const processData = await processRes.json();
-  const data = processData?.data || processData;
-  return { documentId, fileName, ...data };
-}
-
-/**
- * Submit verified (and optionally edited) extraction and store emission.
- * Payload: { activityType, activityAmount, activityUnit, region?, scope?, category?, billingPeriodStart?, billingPeriodEnd? }
- */
-export async function submitReceiptExtraction(documentId, payload) {
-  const res = await fetch(`${API_BASE}/documents/${documentId}/submit`, {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload || {}),
-  });
-
-  if (!res.ok) {
-    throw new Error(await buildApiError(res, 'Submit failed'));
-  }
-
-  const data = await res.json();
-  return data?.data || data;
-}
-
-/**
- * Submit multiple entries (e.g. from multi-row Excel). Creates one emission per entry.
- * Payload: { entries: Array<{ activityType, activityAmount, activityUnit, region?, ... }> }
- */
-export async function submitReceiptBatch(documentId, entries) {
-  const res = await fetch(`${API_BASE}/documents/${documentId}/submit-batch`, {
-    method: 'POST',
-    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ entries }),
-  });
-
-  if (!res.ok) {
-    throw new Error(await buildApiError(res, 'Batch submit failed'));
-  }
-
-  const data = await res.json();
-  return data?.data || data;
 }
 
 /**
@@ -555,19 +451,21 @@ export async function getDashboard(params = {}) {
 }
 
 /**
- * Submit manual emission entry and save (no document).
- * Body: { activityType, activityAmount, activityUnit, scope?, category?, region?, billingPeriodStart?, billingPeriodEnd?, notes? }
- * Returns created emission.
+ * GHG module — submit one activity row for a single Scope 1 or 2 category (POST /api/ghg/scope-{n}/categories/:slug/form).
+ * @param {1|2} scopeNum
+ * @param {string} categorySlug e.g. stationary-combustion, purchased-electricity
+ * @param {object} payload { activityType, activityAmount, activityUnit, category?, region?, billingPeriodStart?, billingPeriodEnd?, notes?, siteId?, siteName?, dataEntryChannel? }
  */
-export async function submitManualEmission(payload) {
-  const res = await fetch(`${API_BASE}/emissions/calculate`, {
+export async function submitGhgCategoryForm(scopeNum, categorySlug, payload) {
+  const path = `${API_BASE}/ghg/scope-${scopeNum}/categories/${encodeURIComponent(categorySlug)}/form`;
+  const res = await authFetch(path, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
-    throw new Error(await buildApiError(res, 'Emission calculation failed'));
+    throw new Error(await buildApiError(res, 'GHG activity save failed'));
   }
 
   const data = await res.json();
@@ -575,8 +473,180 @@ export async function submitManualEmission(payload) {
 }
 
 /**
+ * GHG module — list emissions for one category card (GET /api/ghg/scope-{n}/categories/:slug/entries).
+ * @param {1|2} scopeNum
+ * @param {string} categorySlug
+ * @param {object} [params] { page?, limit?, startDate?, endDate? } ISO datetimes when used
+ */
+export async function getGhgCategoryEntries(scopeNum, categorySlug, params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v != null && v !== '') qs.set(k, String(v));
+  });
+  const query = qs.toString() ? `?${qs.toString()}` : '';
+  const path = `${API_BASE}/ghg/scope-${scopeNum}/categories/${encodeURIComponent(categorySlug)}/entries${query}`;
+
+  const res = await authFetch(path, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    throw new Error(await buildApiError(res, 'GHG entries failed'));
+  }
+
+  const json = await res.json();
+  return {
+    data: json?.data ?? [],
+    pagination: json?.pagination ?? {},
+  };
+}
+
+/**
+ * Download official Excel template for Scope 1 — stationary combustion (sheet "Stationary Combustion").
+ */
+export async function downloadStationaryCombustionTemplate() {
+  const res = await authFetch(
+    `${API_BASE}/ghg/scope-1/categories/stationary-combustion/template`,
+    {
+      method: 'GET',
+      headers: authHeaders(),
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 240) || 'Template download failed');
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'stationary-combustion-template.xlsx';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Parse workbook for stationary combustion bulk import (preview only). Form field name: `file`.
+ * @returns { rows: Array<{ excelRow, status, errors, input, mappedPreview? }>, summary: { total, validCount, invalidCount } }
+ */
+export async function previewStationaryCombustionBulk(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/stationary-combustion/bulk/preview`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Preview failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm reviewed stationary combustion rows (JSON). Each row is saved and calculated (Climatiq).
+ * Body: { rows: Array<{ asset, fuelUsed, fuelUsedQuantity, fuelUsedUnit, facility, dateOfTransaction, notes?, excelRow? }> }
+ * @returns { createdCount, emissionIds, failedCount, rowErrors }
+ */
+export async function confirmStationaryCombustionBulk(rows) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/stationary-combustion/bulk/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Facility and asset name suggestions for stationary combustion (org onboarding + past entries).
+ * @returns {{ facilities: string[], assets: string[], pastActivityTypes: string[] }}
+ */
+export async function getStationaryCombustionLookupOptions() {
+  const res = await authFetch(
+    `${API_BASE}/ghg/scope-1/categories/stationary-combustion/lookup-options`,
+    {
+      method: 'GET',
+      headers: authHeaders(),
+    }
+  );
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Lookup failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  const data = json?.data ?? json;
+  return {
+    facilities: Array.isArray(data?.facilities) ? data.facilities : [],
+    assets: Array.isArray(data?.assets) ? data.assets : [],
+    pastActivityTypes: Array.isArray(data?.pastActivityTypes) ? data.pastActivityTypes : [],
+  };
+}
+
+/**
+ * AI receipt extraction — upload receipt image/PDF, get structured stationary combustion data.
+ * @returns { asset, fuelUsed, fuelUsedQuantity, fuelUsedUnit, facility, dateOfTransaction, notes, confidence }
+ */
+export async function aiExtractReceipt(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/stationary-combustion/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm AI-extracted receipt data — validate, calculate via Climatiq, persist.
+ * Body: { asset, fuelUsed, fuelUsedQuantity, fuelUsedUnit, facility, dateOfTransaction, notes? }
+ * @returns emission object
+ */
+export async function aiConfirmReceipt(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/stationary-combustion/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
  * Fetch user's emissions list with optional filters. Requires auth.
- * Query: { scope?, category?, region?, startDate?, endDate?, page?, limit? }
+ * Query: { scope?, category?, ghgCategorySlug?, region?, startDate?, endDate?, page?, limit? }
  * Returns { data: emissions[], pagination: { page, limit, total, totalPages } }.
  */
 export async function getEmissions(params = {}) {

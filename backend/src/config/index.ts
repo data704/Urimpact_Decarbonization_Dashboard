@@ -93,7 +93,7 @@ export const config = {
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
     apiUrl: process.env.ANTHROPIC_API_URL || 'https://api.anthropic.com/v1',
-    model: process.env.ANTHROPIC_MODEL || 'claude-opus-4-5-20251101',
+    model: process.env.ANTHROPIC_MODEL || 'claude-opus-4-6',
     maxTokens: parseInt(process.env.ANTHROPIC_MAX_TOKENS || '8192', 10),
   },
 

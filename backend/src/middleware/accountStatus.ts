@@ -100,3 +100,41 @@ export async function blockIncompleteOrganizationOnboarding(
     next();
   }
 }
+
+/**
+ * GHG activity APIs require Scope 1 and Scope 2 onboarding inventories so category
+ * boundaries and facilities exist before operational data entry.
+ */
+export async function requireGhgScopeOnboardingComplete(
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    if (!req.user?.organizationId) {
+      sendError(res, 'Organization is required for GHG data entry.', 403);
+      return;
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: req.user.organizationId },
+      select: {
+        scope1OnboardingCompletedAt: true,
+        scope2OnboardingCompletedAt: true,
+      },
+    });
+
+    if (!org?.scope1OnboardingCompletedAt || !org?.scope2OnboardingCompletedAt) {
+      sendError(
+        res,
+        'Complete Scope 1 and Scope 2 organization onboarding before submitting GHG activity data.',
+        403
+      );
+      return;
+    }
+
+    next();
+  } catch {
+    next();
+  }
+}

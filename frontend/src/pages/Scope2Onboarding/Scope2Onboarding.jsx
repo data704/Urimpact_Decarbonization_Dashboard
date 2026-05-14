@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import {
     fetchOrganizationMe,
@@ -7,6 +8,7 @@ import {
     submitScope2OnboardingApi,
 } from '../../api/client.js';
 import '../CompanyOnboarding/CompanyOnboarding.css';
+import { canOpenRevisitOnboarding } from '../../utils/onboardingRevisit.js';
 
 const DRAFT_PREFIX = 'urimpact_scope2_onboarding_draft_';
 
@@ -177,8 +179,11 @@ function YesNoField({ name, value, onPick }) {
 }
 
 export default function Scope2Onboarding() {
+    const { t } = useTranslation();
     const { user, refreshSession } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const allowWizardRevisit = canOpenRevisitOnboarding(user?.role, searchParams);
     const [step, setStep] = useState(1);
     const [s2, setS2] = useState(emptyScope2);
     const [fieldErrors, setFieldErrors] = useState({});
@@ -259,7 +264,7 @@ export default function Scope2Onboarding() {
         return <Navigate to="/scope-onboarding" replace />;
     }
 
-    if (user.scope2OnboardingComplete) {
+    if (user.scope2OnboardingComplete && !allowWizardRevisit) {
         return <Navigate to="/" replace />;
     }
 
@@ -470,6 +475,12 @@ export default function Scope2Onboarding() {
 
     return (
         <div className="cob-page">
+            {allowWizardRevisit && (
+                <div className="cob-revisit-banner" role="status">
+                    <i className="fas fa-pen-to-square" aria-hidden />
+                    <span>{t('onboarding.revisitBannerScope2')}</span>
+                </div>
+            )}
             {toast && (
                 <div
                     className={`cob-toast ${toast.includes('fail') ? 'cob-toast-err' : ''}`}

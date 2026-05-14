@@ -165,6 +165,7 @@ jobs:
               -e JWT_SECRET="$JWT_SECRET" \
               -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
               -e CLIMATIQ_API_KEY="$CLIMATIQ_API_KEY" \
+              -e SKIP_LOGIN_OTP=true \
               -e CORS_ORIGIN="${{ secrets.CORS_ORIGIN }}" \
               -e REDIS_HOST="${{ secrets.REDIS_HOST }}" \
               -e UPLOADS_S3_BUCKET="${{ secrets.UPLOADS_S3_BUCKET }}" \

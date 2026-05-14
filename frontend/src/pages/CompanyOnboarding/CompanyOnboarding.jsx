@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
 import {
     fetchOrganizationMe,
@@ -55,8 +56,11 @@ const emptyForm = () => ({
 });
 
 export default function CompanyOnboarding() {
+    const { t } = useTranslation();
     const { user, refreshSession } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const isRevisit = canOpenRevisitOnboarding(user?.role, searchParams);
     const [step, setStep] = useState(1);
     const [form, setForm] = useState(emptyForm);
     const [fieldErrors, setFieldErrors] = useState({});
@@ -173,7 +177,7 @@ export default function CompanyOnboarding() {
         return <Navigate to="/login" replace />;
     }
 
-    if (user.organizationOnboardingComplete) {
+    if (user.organizationOnboardingComplete && !isRevisit) {
         return <Navigate to="/" replace />;
     }
 
@@ -390,7 +394,7 @@ export default function CompanyOnboarding() {
                 syncOnboardingFacilitiesToDataInputSites(user.organizationId, facilities);
             }
             setToast('Company profile submitted successfully.');
-            setTimeout(() => navigate('/scope-onboarding', { replace: true }), 600);
+            setTimeout(() => navigate(isRevisit ? '/' : '/scope-onboarding', { replace: true }), 600);
         } catch (e) {
             setToast(e?.message || 'Submission failed');
         } finally {
@@ -408,6 +412,12 @@ export default function CompanyOnboarding() {
 
     return (
         <div className="cob-page">
+            {isRevisit && (
+                <div className="cob-revisit-banner" role="status">
+                    <i className="fas fa-pen-to-square" aria-hidden />
+                    <span>{t('onboarding.revisitBannerCompany')}</span>
+                </div>
+            )}
             {toast && (
                 <div className={`cob-toast ${toast.includes('failed') || toast.includes('Upload') ? 'cob-toast-err' : ''}`}>
                     {toast}

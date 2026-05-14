@@ -17,8 +17,7 @@ import { logger } from '../utils/logger.js';
 import { EmissionScope, EmissionCategory } from '@prisma/client';
 import {
   canUpload,
-  canEditDeleteData,
-  canExportDatasets,                                                                                                                                                                                                     
+  canExportDatasets,
   isOrgAdmin,
   canAccessDashboard,
 } from '../utils/rolePermissions.js';
@@ -39,15 +38,19 @@ export async function getEmissions(req: AuthRequest, res: Response): Promise<voi
     const filters = {
       scope: req.query.scope as string,
       category: req.query.category as string,
+      ghgCategorySlug: req.query.ghgCategorySlug as string,
       region: req.query.region as string,
       startDate: req.query.startDate as string,
       endDate: req.query.endDate as string,
     };
 
+    const orgWide = canAccessDashboard(req.user.role) && Boolean(req.user.organizationId);
+
     const { emissions, pagination } = await getUserEmissions(
       req.user.userId,
       filters,
-      req.query as { page?: string; limit?: string }
+      req.query as { page?: string; limit?: string },
+      { organizationId: req.user.organizationId, orgWide }
     );
 
     sendPaginated(res, emissions, pagination);
@@ -79,8 +82,11 @@ export async function getEmission(req: AuthRequest, res: Response): Promise<void
     }
     const isAdmin =
       req.user.role === 'ADMINISTRATOR' || req.user.role === 'SUPER_ADMIN';
-    
-    const emission = await getEmissionById(id, req.user.userId, isAdmin);
+
+    const emission = await getEmissionById(id, req.user.userId, isAdmin, {
+      organizationId: req.user.organizationId ?? '',
+      allowOrgReaders: canAccessDashboard(req.user.role) && Boolean(req.user.organizationId),
+    });
     sendSuccess(res, emission);
   } catch (error) {
     if (error instanceof Error) {
@@ -101,8 +107,9 @@ export async function getEmission(req: AuthRequest, res: Response): Promise<void
 }
 
 /**
- * Manual emissions calculation
- * POST /api/emissions/calculate
+ * Manual emissions calculation (legacy — single generic endpoint).
+ * New GHG flows: POST /api/ghg/scope-1/categories/:slug/form and POST /api/ghg/scope-2/categories/:slug/form
+ * (one activity row per request, tagged with ghgCategorySlug).
  */
 export async function calculateEmission(req: AuthRequest, res: Response): Promise<void> {
   try {
@@ -291,8 +298,8 @@ export async function getEmissionsSummary(req: AuthRequest, res: Response): Prom
       : undefined;
 
     const [byScope, byCategory] = await Promise.all([
-      getEmissionsSummaryByScope(req.user.userId, startDate, endDate),
-      getEmissionsSummaryByCategory(req.user.userId, startDate, endDate),
+      getEmissionsSummaryByScope(req.user.userId, startDate, endDate, req.user.organizationId),
+      getEmissionsSummaryByCategory(req.user.userId, startDate, endDate, req.user.organizationId),
     ]);
 
     // Calculate totals
@@ -336,13 +343,18 @@ export async function exportEmissions(req: AuthRequest, res: Response): Promise<
     const filters = {
       scope: req.query.scope as string,
       category: req.query.category as string,
+      ghgCategorySlug: req.query.ghgCategorySlug as string,
       region: req.query.region as string,
       startDate: req.query.startDate as string,
       endDate: req.query.endDate as string,
     };
 
     const format = (req.query.format as string) || 'json';
-    const emissions = await getEmissionsForExport(req.user.userId, filters);
+    const orgWide = canAccessDashboard(req.user.role) && Boolean(req.user.organizationId);
+    const emissions = await getEmissionsForExport(req.user.userId, filters, {
+      organizationId: req.user.organizationId,
+      orgWide,
+    });
 
     // Log audit
     await logUserAction(

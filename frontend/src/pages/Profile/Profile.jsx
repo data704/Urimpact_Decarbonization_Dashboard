@@ -1,6 +1,9 @@
 import { useState, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../context/AuthContext';
+import { isAdministrator } from '../../utils/roles';
+import { ONBOARDING_EDIT_QUERY } from '../../utils/onboardingRevisit';
 import './Profile.css';
 
 function Profile() {
@@ -70,6 +73,13 @@ function Profile() {
         setPasswords({ current: '', new: '', confirm: '' });
     };
 
+    const showOnboardingRevisit =
+        isAdministrator(user?.role) &&
+        user?.organizationId &&
+        (user.organizationOnboardingComplete ||
+            user.scope1OnboardingComplete ||
+            user.scope2OnboardingComplete);
+
     return (
         <div className="profile-content">
             {/* Notification */}
@@ -85,6 +95,33 @@ function Profile() {
                 <h1>{t('profile.title')}</h1>
                 <p>{t('profile.subtitle')}</p>
             </div>
+
+            {showOnboardingRevisit && (
+                <div className="card profile-onboarding-card">
+                    <h2>{t('onboarding.profileSectionTitle')}</h2>
+                    <p className="profile-onboarding-lead">{t('onboarding.profileSectionLead')}</p>
+                    <div className="profile-onboarding-links">
+                        {user.organizationOnboardingComplete && (
+                            <Link to={`/company-onboarding${ONBOARDING_EDIT_QUERY}`} className="profile-onboarding-link">
+                                <i className="fas fa-building" aria-hidden />
+                                {t('onboarding.linkCompany')}
+                            </Link>
+                        )}
+                        {user.scope1OnboardingComplete && (
+                            <Link to={`/scope-onboarding${ONBOARDING_EDIT_QUERY}`} className="profile-onboarding-link">
+                                <i className="fas fa-fire" aria-hidden />
+                                {t('onboarding.linkScope1')}
+                            </Link>
+                        )}
+                        {user.scope2OnboardingComplete && (
+                            <Link to={`/scope-2-onboarding${ONBOARDING_EDIT_QUERY}`} className="profile-onboarding-link">
+                                <i className="fas fa-bolt" aria-hidden />
+                                {t('onboarding.linkScope2')}
+                            </Link>
+                        )}
+                    </div>
+                </div>
+            )}
 
             <div className="profile-grid">
                 {/* Profile Card */}

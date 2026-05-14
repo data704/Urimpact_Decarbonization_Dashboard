@@ -79,6 +79,52 @@ export const uploadToMemory = multer({
   },
 });
 
+const ghgBulkSpreadsheetFilter = (
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) => {
+  const extension = getFileExtension(file.originalname).toLowerCase();
+  if (['csv', 'xlsx', 'xls'].includes(extension)) {
+    cb(null, true);
+  } else {
+    cb(new Error('GHG bulk import allows only .csv, .xlsx, or .xls'));
+  }
+};
+
+/** In-memory upload for GHG category bulk spreadsheets (CSV / Excel). */
+export const uploadGhgBulkMemory = multer({
+  storage: memoryStorage,
+  fileFilter: ghgBulkSpreadsheetFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1,
+  },
+});
+
+const receiptFileFilter = (
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) => {
+  const extension = getFileExtension(file.originalname).toLowerCase();
+  if (['pdf', 'jpg', 'jpeg', 'png'].includes(extension)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Receipt must be PDF, JPG, or PNG'));
+  }
+};
+
+/** In-memory upload for AI receipt extraction (PDF/JPG/PNG). */
+export const uploadReceiptMemory = multer({
+  storage: memoryStorage,
+  fileFilter: receiptFileFilter,
+  limits: {
+    fileSize: config.upload.maxFileSize,
+    files: 1,
+  },
+});
+
 const registrationFileFilter = (
   _req: Express.Request,
   file: Express.Multer.File,

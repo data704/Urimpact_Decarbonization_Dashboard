@@ -677,6 +677,15 @@
     margin: 8px 0;
 }
 
+.dropdown-group-label {
+    padding: 6px 16px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+}
+
 .dropdown-item.logout {
     color: var(--error);
 }

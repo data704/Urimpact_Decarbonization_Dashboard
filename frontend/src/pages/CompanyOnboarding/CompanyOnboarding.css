@@ -512,3 +512,23 @@
         width: 100%;
     }
 }
+
+.cob-revisit-banner {
+    max-width: 960px;
+    margin: 0 auto 16px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: rgba(251, 191, 36, 0.18);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #92400e;
+    font-size: 0.9rem;
+    line-height: 1.45;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.cob-revisit-banner i {
+    margin-top: 2px;
+    flex-shrink: 0;
+}

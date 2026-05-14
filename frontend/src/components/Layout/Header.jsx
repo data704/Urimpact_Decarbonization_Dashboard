@@ -3,6 +3,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
 import { getRecentActivity } from '../../api/client';
+import { isAdministrator } from '../../utils/roles';
+import { ONBOARDING_EDIT_QUERY } from '../../utils/onboardingRevisit';
 import './Layout.css';
 
 function Header({ onMenuToggle }) {
@@ -94,6 +96,13 @@ function Header({ onMenuToggle }) {
         if (!user?.firstName && !user?.lastName) return '?';
         return `${user?.firstName?.charAt(0) || ''}${user?.lastName?.charAt(0) || ''}`.toUpperCase() || '?';
     }, [user]);
+
+    const showOnboardingRevisit =
+        isAdministrator(user?.role) &&
+        user?.organizationId &&
+        (user.organizationOnboardingComplete ||
+            user.scope1OnboardingComplete ||
+            user.scope2OnboardingComplete);
 
     const companyLabel = (user?.company || '').trim() || t('header.defaultOrganization');
 
@@ -229,6 +238,42 @@ function Header({ onMenuToggle }) {
                                 <i className="fas fa-cog"></i>
                                 <span>{t('header.settings')}</span>
                             </Link>
+                            {showOnboardingRevisit && (
+                                <>
+                                    <div className="dropdown-divider" />
+                                    <div className="dropdown-group-label">{t('header.editOnboarding')}</div>
+                                    {user.organizationOnboardingComplete && (
+                                        <Link
+                                            to={`/company-onboarding${ONBOARDING_EDIT_QUERY}`}
+                                            className="dropdown-item"
+                                            onClick={() => setShowProfile(false)}
+                                        >
+                                            <i className="fas fa-building"></i>
+                                            <span>{t('header.editOnboardingCompany')}</span>
+                                        </Link>
+                                    )}
+                                    {user.scope1OnboardingComplete && (
+                                        <Link
+                                            to={`/scope-onboarding${ONBOARDING_EDIT_QUERY}`}
+                                            className="dropdown-item"
+                                            onClick={() => setShowProfile(false)}
+                                        >
+                                            <i className="fas fa-fire"></i>
+                                            <span>{t('header.editOnboardingScope1')}</span>
+                                        </Link>
+                                    )}
+                                    {user.scope2OnboardingComplete && (
+                                        <Link
+                                            to={`/scope-2-onboarding${ONBOARDING_EDIT_QUERY}`}
+                                            className="dropdown-item"
+                                            onClick={() => setShowProfile(false)}
+                                        >
+                                            <i className="fas fa-bolt"></i>
+                                            <span>{t('header.editOnboardingScope2')}</span>
+                                        </Link>
+                                    )}
+                                </>
+                            )}
                             <div className="dropdown-divider"></div>
                             <button className="dropdown-item logout" onClick={handleLogout}>
                                 <i className="fas fa-sign-out-alt"></i>

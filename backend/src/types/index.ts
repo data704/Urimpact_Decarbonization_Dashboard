@@ -85,6 +85,8 @@ export interface EmissionCalculationResult {
   emissionFactorUnit: string;
   dataSource: string;
   dataYear?: number;
+  /** Stored on Emission.calculationSnapshot — Climatiq response subset or local fallback metadata */
+  calculationSnapshot?: Record<string, unknown> | null;
 }
 
 // Climatiq API Types
@@ -159,6 +161,8 @@ export interface DashboardStats {
 export interface EmissionFilters {
   scope?: string;
   category?: string;
+  /** GHG card slug from /api/ghg routes */
+  ghgCategorySlug?: string;
   startDate?: string;
   endDate?: string;
   region?: string;

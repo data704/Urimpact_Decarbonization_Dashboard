@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EmissionCategory } from '@prisma/client';
 import { passwordFieldSchema } from './passwordPolicy.js';
 
 // User Registration Schema
@@ -52,10 +53,85 @@ export const emissionCalculationSchema = z.object({
   billingPeriodStart: z.string().datetime().optional(),
   billingPeriodEnd: z.string().datetime().optional(),
   notes: z.string().optional(),
-  // Optional site attribution (used by DataInput + dashboard SITE column)
+  // Optional site attribution (dashboard / GHG forms)
   siteId: z.string().optional(),
   siteName: z.string().optional(),
 });
+
+/** Single activity row for POST /api/ghg/scope-{1|2}/categories/:slug/form (one emission per request) */
+export const ghgCategoryFormBodySchema = z.object({
+  activityType: z.string().min(1, 'Activity type is required'),
+  activityAmount: z.number().positive('Activity amount must be positive'),
+  activityUnit: z.string().min(1, 'Activity unit is required'),
+  /** Optional override of registry default EmissionCategory */
+  category: z.nativeEnum(EmissionCategory).optional(),
+  region: z.string().optional(),
+  billingPeriodStart: z.string().datetime().optional(),
+  billingPeriodEnd: z.string().datetime().optional(),
+  notes: z.string().optional(),
+  siteId: z.string().optional(),
+  siteName: z.string().optional(),
+  dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+});
+
+export type GhgCategoryFormBody = z.infer<typeof ghgCategoryFormBodySchema>;
+
+/**
+ * Strict body for Scope 1 — stationary combustion (matches workbook column semantics).
+ * Mapped server-side to `GhgCategoryFormBody` for Climatiq / persistence.
+ */
+export const stationaryCombustionTemplateFormSchema = z
+  .object({
+    asset: z.string().max(500),
+    fuelUsed: z.string().min(1).max(4000),
+    fuelUsedQuantity: z.coerce.number().positive(),
+    fuelUsedUnit: z.string().min(1).max(120),
+    facility: z.string().max(500),
+    dateOfTransaction: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (!data.asset.trim() && !data.facility.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide Asset or Facility (or both).',
+        path: ['asset'],
+      });
+    }
+  });
+
+export type StationaryCombustionTemplateFormBody = z.infer<typeof stationaryCombustionTemplateFormSchema>;
+
+/** Confirmed bulk rows (after user review); `excelRow` is optional metadata for error messages. */
+export const stationaryBulkConfirmBodySchema = z
+  .object({
+    rows: z
+      .array(
+        z
+          .object({
+            asset: z.string().max(500),
+            fuelUsed: z.string().min(1).max(4000),
+            fuelUsedQuantity: z.coerce.number().positive(),
+            fuelUsedUnit: z.string().min(1).max(120),
+            facility: z.string().max(500),
+            dateOfTransaction: z.union([z.string(), z.number()]),
+            notes: z.string().max(5000).optional(),
+            excelRow: z.number().int().positive().optional(),
+          })
+          .strict()
+      )
+      .min(1),
+  })
+  .strict();
+
+export type StationaryBulkConfirmBody = z.infer<typeof stationaryBulkConfirmBodySchema>;
+
+/** Non-stationary categories use the generic GHG row schema. Stationary uses `stationaryCombustionTemplateFormSchema` in the controller. */
+export function getGhgCategoryFormBodySchema(_categorySlug: string): z.ZodTypeAny {
+  return ghgCategoryFormBodySchema;
+}
 
 // Emission Filter Schema
 export const emissionFilterSchema = z.object({

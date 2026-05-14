@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { DataStoreProvider } from './context/DataStoreContext';
 import PostLoginGate from './components/PostLoginGate';
@@ -10,7 +10,7 @@ import PendingOrganization from './pages/PendingOrganization/PendingOrganization
 import ScopeOnboarding from './pages/ScopeOnboarding/ScopeOnboarding.jsx';
 import Scope2Onboarding from './pages/Scope2Onboarding/Scope2Onboarding.jsx';
 import Dashboard from './pages/Dashboard';
-import DataInput from './pages/DataInput';
+import { GHGModule, GHGLanding, GHGCategoryDetail } from './pages/GHG';
 import Reports from './pages/Reports';
 import Decarbonization from './pages/Decarbonization';
 import Settings from './pages/Settings';
@@ -35,7 +35,11 @@ function App() {
 
                             <Route element={<Layout />}>
                                 <Route path="/" element={<Dashboard />} />
-                                <Route path="/data-input" element={<DataInput />} />
+                                <Route path="/data-input" element={<GHGModule />}>
+                                    <Route index element={<GHGLanding />} />
+                                    <Route path="legacy" element={<Navigate to="/data-input" replace />} />
+                                    <Route path="scope/:scopeNum/category/:slug" element={<GHGCategoryDetail />} />
+                                </Route>
                                 <Route path="/reports" element={<Reports />} />
                                 <Route path="/decarbonization" element={<Decarbonization />} />
                                 <Route path="/settings" element={<Settings />} />

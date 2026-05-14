@@ -35,6 +35,10 @@ const ACTIVITY_MAPPINGS: Record<string, string> = {
   'petrol': 'fuel_type_motor_gasoline-fuel_use_stationary_combustion',
   'gasoline': 'fuel_type_motor_gasoline-fuel_use_stationary_combustion',
   'lpg': 'fuel_type_lpg-fuel_use_stationary_combustion',
+  'kerosene': 'fuel_type_kerosene-fuel_use_stationary_combustion',
+  'coal': 'fuel_type_bituminous_coal-fuel_use_stationary_combustion',
+  'fuel-oil': 'fuel_type_distillate_fuel_oil-fuel_use_stationary_combustion',
+  'biomass': 'fuel_type_biomass-fuel_use_stationary_combustion',
   
   // Transportation
   'vehicle-diesel': 'passenger_vehicle-vehicle_type_car-fuel_source_diesel-engine_size_medium-vehicle_age_na-vehicle_weight_na',
@@ -93,6 +97,9 @@ function getActivityId(activityType: string, region?: string): string {
   if (normalizedType.includes('gas') && !normalizedType.includes('petrol') && naturalGasId) return naturalGasId;
   if (normalizedType.includes('diesel') && dieselId) return dieselId;
   if ((normalizedType.includes('petrol') || normalizedType.includes('gasoline')) && petrolId) return petrolId;
+  if (normalizedType.includes('kerosene') && ACTIVITY_MAPPINGS['kerosene']) return ACTIVITY_MAPPINGS['kerosene'];
+  if (normalizedType.includes('coal') && ACTIVITY_MAPPINGS['coal']) return ACTIVITY_MAPPINGS['coal'];
+  if (normalizedType.includes('biomass') && ACTIVITY_MAPPINGS['biomass']) return ACTIVITY_MAPPINGS['biomass'];
 
   // Return as-is if no mapping found (user might provide exact Climatiq ID)
   return activityType;
@@ -177,6 +184,35 @@ export async function calculateEmissions(
 
     logger.debug('Climatiq API response:', data);
 
+    const ef = data.emission_factor;
+    const calculationSnapshot: Record<string, unknown> = {
+      provider: 'climatiq',
+      request: {
+        activity_id: activityId,
+        region: input.region && input.region !== 'GLOBAL' ? input.region : undefined,
+        parameters: request.parameters,
+      },
+      response: {
+        co2e: data.co2e,
+        co2e_unit: data.co2e_unit,
+        co2e_calculation_method: data.co2e_calculation_method,
+        co2e_calculation_origin: data.co2e_calculation_origin,
+        constituent_gases: data.constituent_gases,
+        emission_factor: ef
+          ? {
+              id: ef.id,
+              activity_id: ef.activity_id,
+              name: ef.name,
+              source: ef.source,
+              source_dataset: ef.source_dataset,
+              year: ef.year,
+              region: ef.region,
+              category: ef.category,
+            }
+          : undefined,
+      },
+    };
+
     return {
       co2e: data.co2e,
       co2eUnit: data.co2e_unit,
@@ -187,6 +223,7 @@ export async function calculateEmissions(
       emissionFactorUnit: `${data.co2e_unit}/${normalizedUnit}`,
       dataSource: data.emission_factor?.source || 'Emissions API',
       dataYear: data.emission_factor?.year,
+      calculationSnapshot,
     };
   } catch (error) {
     if (axios.isAxiosError(error)) {
@@ -243,6 +280,8 @@ const FALLBACK_EMISSION_FACTORS: Record<string, {
   'lpg': { factor: 1.56, unit: 'kg/L', source: 'DEFRA 2024', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
   'kerosene': { factor: 2.54, unit: 'kg/L', source: 'DEFRA 2024', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
   'fuel-oil': { factor: 3.18, unit: 'kg/L', source: 'DEFRA 2024', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
+  'coal': { factor: 2410, unit: 'kg/t', source: 'IPCC stationary coal (order of magnitude)', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
+  'biomass': { factor: 120, unit: 'kg/t', source: 'Generic biomass combustion (indicative)', co2Ratio: 0.95, ch4Ratio: 0.03, n2oRatio: 0.02 },
   
   // ============ NATURAL GAS (kg CO2e per m3) ============
   'natural-gas': { factor: 2.02, unit: 'kg/m3', source: 'IPCC 2024', co2Ratio: 0.995, ch4Ratio: 0.003, n2oRatio: 0.002 },
@@ -321,6 +360,12 @@ function getFallbackCalculation(
       factorData = FALLBACK_EMISSION_FACTORS['natural-gas'];
     } else if (normalizedType.includes('diesel')) {
       factorData = FALLBACK_EMISSION_FACTORS['diesel'];
+    } else if (normalizedType.includes('coal')) {
+      factorData = FALLBACK_EMISSION_FACTORS['coal'];
+    } else if (normalizedType.includes('biomass')) {
+      factorData = FALLBACK_EMISSION_FACTORS['biomass'];
+    } else if (normalizedType.includes('kerosene')) {
+      factorData = FALLBACK_EMISSION_FACTORS['kerosene'];
     } else if (normalizedType.includes('petrol') || normalizedType.includes('gasoline')) {
       factorData = FALLBACK_EMISSION_FACTORS['petrol'];
     } else if (normalizedType.includes('water')) {
@@ -353,6 +398,8 @@ function getFallbackCalculation(
 
   logger.info(`Fallback emission calculation: ${input.activityAmount} ${input.activityUnit} of ${input.activityType} = ${co2e.toFixed(2)} kg CO2e (using ${factorData.source})`);
 
+  const activityIdResolved = getActivityId(input.activityType, input.region);
+
   return {
     co2e: parseFloat(co2e.toFixed(4)),
     co2eUnit: 'kg',
@@ -363,6 +410,14 @@ function getFallbackCalculation(
     emissionFactorUnit: factorData.unit,
     dataSource: `Local Calculation - ${factorData.source}`,
     dataYear: new Date().getFullYear(),
+    calculationSnapshot: {
+      provider: 'local_fallback',
+      activityTypeInput: input.activityType,
+      climatiqActivityIdAttempted: activityIdResolved,
+      matchedSource: factorData.source,
+      matchedFactor: factorData.factor,
+      matchedUnit: factorData.unit,
+    },
   };
 }
 

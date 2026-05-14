@@ -1,5 +1,5 @@
 /**
- * Reads facility/site list persisted by Data Input (same key as DataInput.jsx).
+ * Facility/site list per organization in localStorage (used by Scope 1 onboarding and related flows).
  * Used by Scope 1 onboarding for facility mapping on process-emission rows.
  */
 export const DATA_INPUT_SITES_PREFIX = 'urimpact_data_input_sites_';

@@ -8,6 +8,7 @@ import clientConfigRoutes from './clientConfigRoutes.js';
 import activityRoutes from './activityRoutes.js';
 
 import organizationRoutes from './organizationRoutes.js';
+import ghgRoutes from './ghgRoutes.js';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ router.get('/health', (req, res) => {
 // API routes
 router.use('/auth', authRoutes);
 router.use('/organizations', organizationRoutes);
+router.use('/ghg', ghgRoutes);
 router.use('/documents', documentRoutes);
 router.use('/emissions', emissionRoutes);
 router.use('/reports', reportRoutes);

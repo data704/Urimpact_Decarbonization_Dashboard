@@ -1,5 +1,5 @@
 import prisma from '../config/database.js';
-import { EmissionScope, EmissionCategory } from '@prisma/client';
+import { EmissionScope, EmissionCategory, Prisma } from '@prisma/client';
 import { NotFoundError, ForbiddenError } from '../middleware/errorHandler.js';
 import { EmissionFilters, EmissionCalculationResult } from '../types/index.js';
 import { parsePagination, kgToTonnes } from '../utils/helpers.js';
@@ -56,6 +56,8 @@ interface CreateEmissionInput {
   billingPeriodStart?: Date;
   billingPeriodEnd?: Date;
   notes?: string;
+  ghgCategorySlug?: string | null;
+  dataEntryChannel?: string | null;
 }
 
 /**
@@ -89,6 +91,11 @@ export async function createEmission(
       billingPeriodStart: input.billingPeriodStart,
       billingPeriodEnd: input.billingPeriodEnd,
       notes: input.notes,
+      ghgCategorySlug: input.ghgCategorySlug ?? undefined,
+      dataEntryChannel: input.dataEntryChannel ?? undefined,
+      ...(calculationResult.calculationSnapshot != null
+        ? { calculationSnapshot: calculationResult.calculationSnapshot as Prisma.InputJsonValue }
+        : {}),
     },
   });
 
@@ -115,7 +122,12 @@ export async function calculateAndCreateEmission(input: CreateEmissionInput) {
 /**
  * Get emission by ID with ownership check
  */
-export async function getEmissionById(emissionId: string, userId: string, isAdmin = false) {
+export async function getEmissionById(
+  emissionId: string,
+  userId: string,
+  isAdmin = false,
+  orgRead?: { organizationId: string; allowOrgReaders: boolean }
+) {
   const emission = await prisma.emission.findUnique({
     where: { id: emissionId },
     include: {
@@ -133,32 +145,43 @@ export async function getEmissionById(emissionId: string, userId: string, isAdmi
     throw new NotFoundError('Emission record');
   }
 
-  if (!isAdmin && emission.userId !== userId) {
-    throw new ForbiddenError('You do not have access to this record');
+  if (emission.userId === userId) {
+    return emission;
   }
 
-  return emission;
+  if (isAdmin) {
+    return emission;
+  }
+
+  if (
+    orgRead?.allowOrgReaders &&
+    orgRead.organizationId &&
+    emission.organizationId === orgRead.organizationId
+  ) {
+    return emission;
+  }
+
+  throw new ForbiddenError('You do not have access to this record');
 }
 
 /**
- * Get user's emissions with pagination and filters
- * When startDate/endDate are provided, filters and orders by activity date (billingPeriodStart ?? calculatedAt).
+ * Get emissions with pagination and filters.
+ * Dashboard roles with an organization see the full org inventory; data contributors see only their own rows.
  */
 export async function getUserEmissions(
   userId: string,
   filters: EmissionFilters,
-  query: { page?: string; limit?: string }
+  query: { page?: string; limit?: string },
+  options?: { organizationId?: string | null; orgWide?: boolean }
 ) {
   const { page, limit, skip } = parsePagination(query);
+  const orgWide = options?.orgWide === true;
+  const organizationId = options?.organizationId ?? null;
+  const useOrg = orgWide && Boolean(organizationId);
 
-  const where: {
-    userId: string;
-    scope?: EmissionScope;
-    category?: EmissionCategory;
-    region?: string;
-    calculatedAt?: { gte?: Date; lte?: Date };
-    OR?: unknown[];
-  } = { userId };
+  const where: Prisma.EmissionWhereInput = useOrg
+    ? { organizationId: organizationId as string }
+    : { userId };
 
   if (filters.scope) {
     where.scope = filters.scope as EmissionScope;
@@ -168,6 +191,10 @@ export async function getUserEmissions(
     where.category = filters.category as EmissionCategory;
   }
 
+  if (filters.ghgCategorySlug) {
+    where.ghgCategorySlug = filters.ghgCategorySlug;
+  }
+
   if (filters.region) {
     where.region = filters.region;
   }
@@ -175,7 +202,11 @@ export async function getUserEmissions(
   if (filters.startDate && filters.endDate) {
     const start = new Date(filters.startDate);
     const end = new Date(filters.endDate);
-    Object.assign(where, activityDateInRangeWhere(userId, start, end));
+    if (useOrg) {
+      Object.assign(where, activityDateInRangeWhereOrg(organizationId as string, start, end));
+    } else {
+      Object.assign(where, activityDateInRangeWhere(userId, start, end));
+    }
   } else if (filters.startDate || filters.endDate) {
     where.calculatedAt = {};
     if (filters.startDate) {
@@ -200,19 +231,22 @@ export async function getUserEmissions(
             documentType: true,
           },
         },
+        user: {
+          select: { id: true, firstName: true, lastName: true, email: true },
+        },
       },
     }),
     prisma.emission.count({ where }),
   ]);
 
-  // When filtering by activity date, sort by activity date desc (billingPeriodStart nulls are already last)
-  const sorted = filters.startDate && filters.endDate
-    ? [...emissions].sort((a, b) => {
-        const da = getActivityDate(a).getTime();
-        const db = getActivityDate(b).getTime();
-        return db - da;
-      })
-    : emissions;
+  const sorted =
+    filters.startDate && filters.endDate
+      ? [...emissions].sort((a, b) => {
+          const da = getActivityDate(a).getTime();
+          const db = getActivityDate(b).getTime();
+          return db - da;
+        })
+      : emissions;
 
   return {
     emissions: sorted,
@@ -555,16 +589,16 @@ export async function deleteEmissionsBulk(
  */
 export async function getEmissionsForExport(
   userId: string,
-  filters: EmissionFilters
+  filters: EmissionFilters,
+  options?: { organizationId?: string | null; orgWide?: boolean }
 ) {
-  const where: {
-    userId: string;
-    scope?: EmissionScope;
-    category?: EmissionCategory;
-    region?: string;
-    calculatedAt?: { gte?: Date; lte?: Date };
-    OR?: unknown[];
-  } = { userId };
+  const orgWide = options?.orgWide === true;
+  const organizationId = options?.organizationId ?? null;
+  const useOrg = orgWide && Boolean(organizationId);
+
+  const where: Prisma.EmissionWhereInput = useOrg
+    ? { organizationId: organizationId as string }
+    : { userId };
 
   if (filters.scope) {
     where.scope = filters.scope as EmissionScope;
@@ -574,6 +608,10 @@ export async function getEmissionsForExport(
     where.category = filters.category as EmissionCategory;
   }
 
+  if (filters.ghgCategorySlug) {
+    where.ghgCategorySlug = filters.ghgCategorySlug;
+  }
+
   if (filters.region) {
     where.region = filters.region;
   }
@@ -581,7 +619,11 @@ export async function getEmissionsForExport(
   if (filters.startDate && filters.endDate) {
     const start = new Date(filters.startDate);
     const end = new Date(filters.endDate);
-    Object.assign(where, activityDateInRangeWhere(userId, start, end));
+    if (useOrg) {
+      Object.assign(where, activityDateInRangeWhereOrg(organizationId as string, start, end));
+    } else {
+      Object.assign(where, activityDateInRangeWhere(userId, start, end));
+    }
   } else if (filters.startDate || filters.endDate) {
     where.calculatedAt = {};
     if (filters.startDate) {

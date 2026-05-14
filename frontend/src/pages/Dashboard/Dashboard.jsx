@@ -21,6 +21,45 @@ import './Dashboard.css';
 
 const kgToTonnes = (kg) => (kg == null ? 0 : kg / 1000);
 
+/** Stored Climatiq / local fallback snapshot — show factor name or activity id on dashboard. */
+function emissionCalculationCaption(entry) {
+    const snap = entry?.calculationSnapshot;
+    if (!snap || typeof snap !== 'object') return null;
+    if (snap.provider === 'climatiq') {
+        const ef = snap.response?.emission_factor;
+        if (ef && typeof ef === 'object') {
+            if (typeof ef.name === 'string' && ef.name.trim()) return ef.name.trim();
+            if (typeof ef.activity_id === 'string' && ef.activity_id.trim()) return ef.activity_id.trim();
+        }
+    }
+    if (snap.provider === 'local_fallback' && typeof snap.matchedSource === 'string') {
+        return snap.matchedSource;
+    }
+    return null;
+}
+
+function humanDataEntryChannel(ch, t) {
+    if (!ch) return '';
+    if (ch === 'FORM') return t('dashboard.channelForm');
+    if (ch === 'BULK_UPLOAD') return t('dashboard.channelBulk');
+    if (ch === 'AI_EXTRACT') return t('dashboard.channelAi');
+    return String(ch);
+}
+
+function renderEmissionSourceCell(entry, dataSource, t) {
+    const cap = emissionCalculationCaption(entry);
+    const metaParts = [];
+    if (entry.dataEntryChannel) metaParts.push(humanDataEntryChannel(entry.dataEntryChannel, t));
+    if (entry.ghgCategorySlug) metaParts.push(String(entry.ghgCategorySlug).replace(/-/g, ' '));
+    return (
+        <td>
+            <span className="source-badge">{dataSource}</span>
+            {cap ? <div className="dashboard-calc-detail">{cap}</div> : null}
+            {metaParts.length > 0 ? <div className="dashboard-emission-meta">{metaParts.join(' · ')}</div> : null}
+        </td>
+    );
+}
+
 function monthLabelsShort(locale) {
     return Array.from({ length: 12 }, (_, i) =>
         new Date(2000, i, 1).toLocaleDateString(locale, { month: 'short' })
@@ -141,7 +180,7 @@ function Dashboard() {
                 if (!cancelled) setApiLoading(false);
             });
         return () => { cancelled = true; };
-    }, [hasToken, fromSubmit, filterYear, filterPeriod]);
+    }, [hasToken, location.pathname, location.key, dateRange, t]);
 
     // Load recent activity from audit logs
     useEffect(() => {
@@ -164,7 +203,7 @@ function Dashboard() {
                 }
             });
         return () => { cancelled = true; };
-    }, [hasToken, fromSubmit]);
+    }, [hasToken, fromSubmit, location.key]);
 
     useEffect(() => {
         if (!calendarModalOpen || !hasToken) {
@@ -1026,7 +1065,7 @@ function Dashboard() {
                                                 </span>
                                                 {formatNumber(emissions)} tCO₂e
                                             </td>
-                                            <td><span className="source-badge">{dataSource}</span></td>
+                                            {renderEmissionSourceCell(entry, dataSource, t)}
                                             <td>
                                                 <span className="status-badge verified">{t('dashboard.verified')}</span>
                                             </td>
@@ -1138,7 +1177,7 @@ function Dashboard() {
                                                 </span>
                                                 {formatNumber(emissions)} tCO₂e
                                             </td>
-                                            <td><span className="source-badge">{dataSource}</span></td>
+                                            {renderEmissionSourceCell(entry, dataSource, t)}
                                             <td>
                                                 <span className="status-badge verified">{t('dashboard.verified')}</span>
                                             </td>
