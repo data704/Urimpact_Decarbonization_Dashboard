@@ -1,35 +1,79 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getAdminUsers, createAdminUser, updateAdminUser, deleteAdminUser } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import './UserManagement.css';
 
 const ROLE_OPTIONS = [
-    { value: 'ADMINISTRATOR', label: 'Administrator' },
-    { value: 'DATA_CONTRIBUTOR', label: 'Data Contributor' },
-    { value: 'ANALYST', label: 'Analyst' },
-    { value: 'VIEWER', label: 'Viewer' },
-    { value: 'SUPER_ADMIN', label: 'Super Admin' },
+    { value: 'ADMINISTRATOR', labelKey: 'roleAdmin' },
+    { value: 'DATA_CONTRIBUTOR', labelKey: 'roleDataEntry' },
+    { value: 'ANALYST', labelKey: 'roleAnalyst' },
+    { value: 'VIEWER', labelKey: 'roleViewer' },
+    { value: 'SUPER_ADMIN', labelKey: 'roleSuperAdmin' },
 ];
 
-function formatLastActive(isoDate) {
+const PLAN_DISPLAY = {
+    ENTERPRISE: {
+        planKey: 'planEnterprise',
+        billingKey: 'billingAnnual',
+        amountValueKey: 'amountEnterpriseValue',
+        supportKey: 'supportDedicated',
+        descKey: 'planDescEnterprise',
+    },
+    PREMIUM: {
+        planKey: 'planPremium',
+        billingKey: 'billingAnnual',
+        amountValueKey: 'amountPremiumValue',
+        supportKey: 'supportPriority',
+        descKey: 'planDescPremium',
+    },
+    STANDARD: {
+        planKey: 'planStandard',
+        billingKey: 'billingMonthly',
+        amountValueKey: 'amountStandardValue',
+        supportKey: 'supportEmail',
+        descKey: 'planDescStandard',
+    },
+    FREE: {
+        planKey: 'planFree',
+        billingKey: 'billingNone',
+        amountValueKey: 'amountFreeValue',
+        supportKey: 'supportCommunity',
+        descKey: 'planDescFree',
+    },
+};
+
+function formatLastActive(isoDate, t) {
     if (!isoDate) return '—';
     const d = new Date(isoDate);
     if (Number.isNaN(d.getTime())) return '—';
     const now = new Date();
     const diff = now - d;
     const mins = Math.floor(diff / 60000);
-    if (mins < 60) return mins <= 1 ? 'Just now' : `${mins} mins ago`;
+    if (mins < 1) return t('userManagement.lastActiveJustNow');
+    if (mins < 60) return t('userManagement.lastActiveMins', { count: mins });
     const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    if (hours < 24) return t('userManagement.lastActiveHours', { count: hours });
     const days = Math.floor(hours / 24);
-    if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+    if (days === 1) return t('userManagement.lastActiveYesterday');
+    if (days < 7) return t('userManagement.lastActiveDays', { count: days });
     return d.toLocaleDateString();
 }
 
-function roleLabel(role) {
-    const r = ROLE_OPTIONS.find((o) => o.value === role);
-    return r ? r.label : role;
+function rolePillClass(role) {
+    const r = String(role || '').toUpperCase();
+    if (r === 'ADMINISTRATOR' || r === 'SUPER_ADMIN' || r === 'ADMIN') return 'rs-pill rs-pill--dark';
+    if (r === 'ANALYST') return 'rs-pill rs-pill--teal';
+    if (r === 'DATA_CONTRIBUTOR' || r === 'USER') return 'rs-pill rs-pill--blue';
+    return 'rs-pill rs-pill--gray';
+}
+
+function moduleAccessForRole(role, t) {
+    const r = String(role || '').toUpperCase();
+    if (r === 'ADMINISTRATOR' || r === 'SUPER_ADMIN' || r === 'ADMIN') return t('userManagement.moduleAll');
+    if (r === 'ANALYST') return t('userManagement.moduleGhgEsg');
+    if (r === 'DATA_CONTRIBUTOR' || r === 'USER') return t('userManagement.moduleGhgOnly');
+    return t('userManagement.moduleDashboard');
 }
 
 function UserManagement() {
@@ -37,12 +81,17 @@ function UserManagement() {
     const { user: currentUser } = useAuth();
     const [notification, setNotification] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [roleFilter, setRoleFilter] = useState('All');
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [createOpen, setCreateOpen] = useState(false);
+    const [inviteOpen, setInviteOpen] = useState(false);
     const [organizationLimit, setOrganizationLimit] = useState(null);
+    const [editUserId, setEditUserId] = useState(null);
+    const [rolesUserId, setRolesUserId] = useState(null);
+    const [rolesDraft, setRolesDraft] = useState('');
     const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+    const [roleSubmitting, setRoleSubmitting] = useState(false);
 
     const [createForm, setCreateForm] = useState({
         email: '',
@@ -50,9 +99,20 @@ function UserManagement() {
         firstName: '',
         lastName: '',
         company: '',
-        role: 'USER',
+        role: 'DATA_CONTRIBUTOR',
     });
     const [createSubmitting, setCreateSubmitting] = useState(false);
+
+    const roleLabel = useCallback(
+        (role) => {
+            const opt = ROLE_OPTIONS.find((o) => o.value === role);
+            if (opt) return t(`userManagement.${opt.labelKey}`);
+            const r = String(role || '').toUpperCase();
+            if (r === 'USER') return t('userManagement.roleDataEntry');
+            return role;
+        },
+        [t]
+    );
 
     const loadUsers = useCallback(async () => {
         setLoading(true);
@@ -62,13 +122,13 @@ function UserManagement() {
             setUsers(Array.isArray(result.data) ? result.data : []);
             setOrganizationLimit(result.organizationLimit ?? null);
         } catch (e) {
-            setError(e?.message || 'Failed to load users');
+            setError(e?.message || t('userManagement.loadFailed'));
             setUsers([]);
             setOrganizationLimit(null);
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         loadUsers();
@@ -91,54 +151,62 @@ function UserManagement() {
                 company: createForm.company.trim() || undefined,
                 role: createForm.role,
             });
-            showNotification('User created. They can sign in with the password you set.');
-            setCreateOpen(false);
+            showNotification(t('userManagement.createdSuccess'));
+            setInviteOpen(false);
             setCreateForm({
                 email: '',
                 password: '',
                 firstName: '',
                 lastName: '',
                 company: '',
-                role: 'USER',
+                role: 'DATA_CONTRIBUTOR',
             });
             await loadUsers();
         } catch (err) {
-            showNotification(err?.message || 'Failed to create user', 'error');
+            showNotification(err?.message || t('userManagement.createFailed'), 'error');
         } finally {
             setCreateSubmitting(false);
         }
     };
 
-    const handleToggleActive = async (u) => {
+    const handleToggleActive = async (u, nextActive) => {
         try {
-            await updateAdminUser(u.id, { isActive: !u.isActive });
-            showNotification(u.isActive ? 'User deactivated' : 'User activated');
+            await updateAdminUser(u.id, { isActive: nextActive });
+            showNotification(nextActive ? t('userManagement.activated') : t('userManagement.deactivated'));
             await loadUsers();
         } catch (err) {
-            showNotification(err?.message || 'Update failed', 'error');
+            showNotification(err?.message || t('userManagement.updateFailed'), 'error');
         }
     };
 
-    const handleRoleChange = async (u, newRole) => {
-        if (newRole === u.role) return;
+    const handleRoleChange = async (u) => {
+        if (!rolesDraft || rolesDraft === u.role) {
+            setRolesUserId(null);
+            return;
+        }
+        setRoleSubmitting(true);
         try {
-            await updateAdminUser(u.id, { role: newRole });
-            showNotification('Role updated');
+            await updateAdminUser(u.id, { role: rolesDraft });
+            showNotification(t('userManagement.roleUpdated'));
+            setRolesUserId(null);
             await loadUsers();
         } catch (err) {
-            showNotification(err?.message || 'Update failed', 'error');
+            showNotification(err?.message || t('userManagement.updateFailed'), 'error');
+        } finally {
+            setRoleSubmitting(false);
         }
     };
 
     const handleDeleteUser = async (u) => {
-        if (!u || !u.id) return;
+        if (!u?.id) return;
         try {
             await deleteAdminUser(u.id);
-            showNotification('User deleted');
+            showNotification(t('userManagement.deletedSuccess'));
             setDeleteConfirmId(null);
+            setEditUserId(null);
             await loadUsers();
         } catch (err) {
-            showNotification(err?.message || 'Failed to delete user', 'error');
+            showNotification(err?.message || t('userManagement.deleteFailed'), 'error');
         }
     };
 
@@ -146,206 +214,199 @@ function UserManagement() {
         const name = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
         const email = (u.email || '').toLowerCase();
         const q = searchQuery.toLowerCase();
-        return name.includes(q) || email.includes(q);
+        const matchesSearch = name.includes(q) || email.includes(q);
+        const matchesRole = roleFilter === 'All' || u.role === roleFilter;
+        return matchesSearch && matchesRole;
     });
 
-    const stats = {
-        total: users.length,
-        admins: users.filter((u) => {
-            const r = String(u.role || '');
-            return r === 'ADMINISTRATOR' || r === 'SUPER_ADMIN' || r === 'ADMIN';
-        }).length,
-        active: users.filter((u) => u.isActive).length,
-        inactive: users.filter((u) => !u.isActive).length,
+    const canAssignSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
+    const atUserLimit =
+        organizationLimit != null && organizationLimit.userCount >= organizationLimit.maxUsers;
+
+    const editUser = editUserId ? users.find((x) => x.id === editUserId) : null;
+    const rolesUser = rolesUserId ? users.find((x) => x.id === rolesUserId) : null;
+
+    const subscriptionMeta = useMemo(() => {
+        const planCode = String(currentUser?.subscriptionPlan || 'STANDARD').toUpperCase();
+        const display = PLAN_DISPLAY[planCode] || PLAN_DISPLAY.STANDARD;
+        const max = organizationLimit?.maxUsers ?? 3;
+        const active = organizationLimit?.userCount ?? users.filter((u) => u.isActive).length;
+        const renewal = new Date();
+        renewal.setMonth(renewal.getMonth() + 3);
+        renewal.setDate(31);
+        return {
+            display,
+            usersLine: t('userManagement.usersAllowed', { max, active }),
+            renewal: renewal.toLocaleDateString(undefined, {
+                month: 'long',
+                day: 'numeric',
+                year: 'numeric',
+            }),
+        };
+    }, [currentUser?.subscriptionPlan, organizationLimit, users, t]);
+
+    const subscriptionRows = useMemo(
+        () => [
+            [t('userManagement.subPlan'), t(`userManagement.${subscriptionMeta.display.planKey}`)],
+            [t('userManagement.subBilling'), t(`userManagement.${subscriptionMeta.display.billingKey}`)],
+            [t('userManagement.subRenewal'), subscriptionMeta.renewal],
+            [t('userManagement.subUsers'), subscriptionMeta.usersLine],
+            [
+                t('userManagement.subAmount'),
+                `${t(`userManagement.${subscriptionMeta.display.amountValueKey}`)} ${t('userManagement.amountPeriod')}`,
+            ],
+            [t('userManagement.subSupport'), t(`userManagement.${subscriptionMeta.display.supportKey}`)],
+        ],
+        [subscriptionMeta, t]
+    );
+
+    const openRolesModal = (u) => {
+        setRolesDraft(u.role);
+        setRolesUserId(u.id);
     };
 
-    const canAssignSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
-
-    const atUserLimit =
-        organizationLimit != null &&
-        organizationLimit.userCount >= organizationLimit.maxUsers;
-
     return (
-        <div className="user-management-content">
+        <div className="rs-page">
             {notification && (
                 <div className={`notification ${notification.type}`}>
-                    <i
-                        className={`fas fa-${
-                            notification.type === 'success'
-                                ? 'check-circle'
-                                : notification.type === 'error'
-                                  ? 'exclamation-circle'
-                                  : 'info-circle'
-                        }`}
-                    ></i>
                     <span>{notification.message}</span>
                 </div>
             )}
 
-            <div className="page-header">
+            <div className="rs-header">
                 <div>
-                    <h1>{t('userManagement.title')}</h1>
-                    <p>{t('userManagement.subtitle')}</p>
+                    <h1 className="rs-title">{t('userManagement.pageTitle')}</h1>
+                    <p className="rs-subtitle">{t('userManagement.pageSubtitle')}</p>
                     {organizationLimit != null && (
-                        <p className="user-limit-hint">
-                            {t('userManagement.orgLimit', { current: organizationLimit.userCount, max: organizationLimit.maxUsers })}
+                        <p className="rs-limit-hint">
+                            {t('userManagement.orgLimit', {
+                                current: organizationLimit.userCount,
+                                max: organizationLimit.maxUsers,
+                            })}
                         </p>
                     )}
                 </div>
                 <button
-                    className="btn btn-primary"
-                    onClick={() => setCreateOpen(true)}
+                    type="button"
+                    className="rs-btn rs-btn--primary"
+                    onClick={() => setInviteOpen(true)}
                     disabled={atUserLimit}
-                    title={atUserLimit ? t('userManagement.atLimitTitle', { max: organizationLimit?.maxUsers ?? 3 }) : ''}
+                    title={
+                        atUserLimit
+                            ? t('userManagement.atLimitTitle', { max: organizationLimit?.maxUsers ?? 3 })
+                            : undefined
+                    }
                 >
-                    <i className="fas fa-user-plus"></i>
-                    {t('userManagement.addUser')}
+                    {t('userManagement.inviteUser')}
                 </button>
             </div>
 
             {error && (
-                <div className="notification error" style={{ marginBottom: '1rem' }}>
-                    <i className="fas fa-exclamation-circle"></i>
+                <div className="notification error rs-inline-error">
                     <span>{error}</span>
                 </div>
             )}
 
-            <div className="user-stats">
-                <div className="stat-card">
-                    <div className="stat-icon total">
-                        <i className="fas fa-users"></i>
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-value">{stats.total}</span>
-                        <span className="stat-label">Total Users</span>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon admin">
-                        <i className="fas fa-user-shield"></i>
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-value">{stats.admins}</span>
-                        <span className="stat-label">Admins</span>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon editor">
-                        <i className="fas fa-user-check"></i>
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-value">{stats.active}</span>
-                        <span className="stat-label">Active</span>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon viewer">
-                        <i className="fas fa-user-slash"></i>
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-value">{stats.inactive}</span>
-                        <span className="stat-label">Inactive</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="card users-table-card">
-                <div className="table-header">
-                    <h2>Team Members</h2>
-                    <div className="table-search">
-                        <i className="fas fa-search"></i>
-                        <input
-                            type="text"
-                            placeholder="Search users..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+            <div className="rs-table-card">
+                <div className="rs-table-header">
+                    <div className="rs-table-title">{t('userManagement.usersRolesTitle')}</div>
+                    <div className="rs-table-filters">
+                        <div className="rs-search">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13">
+                                <circle cx="11" cy="11" r="8" />
+                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                placeholder={t('userManagement.searchPlaceholder')}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <select className="rs-select" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+                            <option value="All">{t('userManagement.filterAllRoles')}</option>
+                            <option value="ADMINISTRATOR">{t('userManagement.roleAdmin')}</option>
+                            <option value="ANALYST">{t('userManagement.roleAnalyst')}</option>
+                            <option value="DATA_CONTRIBUTOR">{t('userManagement.roleDataEntry')}</option>
+                            <option value="VIEWER">{t('userManagement.roleViewer')}</option>
+                        </select>
                     </div>
                 </div>
 
                 {loading ? (
-                    <div style={{ padding: '2rem', textAlign: 'center' }}>Loading users…</div>
+                    <div className="rs-table-loading">{t('userManagement.loading')}</div>
+                ) : filteredUsers.length === 0 ? (
+                    <div className="rs-table-empty">{t('userManagement.noUsers')}</div>
                 ) : (
-                    <table className="users-table">
+                    <table className="rs-table">
                         <thead>
                             <tr>
-                                <th>User</th>
-                                <th>Role</th>
-                                <th>Status</th>
-                                <th>Last login</th>
-                                <th>Actions</th>
+                                <th>{t('userManagement.colUser')}</th>
+                                <th>{t('userManagement.colRole')}</th>
+                                <th>{t('userManagement.colModuleAccess')}</th>
+                                <th>{t('userManagement.colLastActive')}</th>
+                                <th>{t('userManagement.colStatus')}</th>
+                                <th>{t('userManagement.colActions')}</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredUsers.map((u) => {
-                                const name =
-                                    `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+                                const name = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+                                const initials = name
+                                    .split(' ')
+                                    .map((w) => w[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase();
                                 const isSelf = currentUser?.id === u.id;
+                                const canEdit =
+                                    !isSelf && !(u.role === 'SUPER_ADMIN' && !canAssignSuperAdmin);
+
                                 return (
                                     <tr key={u.id}>
                                         <td>
-                                            <div className="user-cell">
-                                                <div className="user-avatar">
-                                                    {(u.firstName?.charAt(0) || u.email?.charAt(0) || '?').toUpperCase()}
-                                                </div>
-                                                <div className="user-info">
-                                                    <span className="user-name">{name}</span>
-                                                    <span className="user-email">{u.email}</span>
+                                            <div className="rs-user-cell">
+                                                <div className="rs-user-avatar">{initials}</div>
+                                                <div>
+                                                    <div className="rs-user-name">{name}</div>
+                                                    <div className="rs-user-email">{u.email}</div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td>
-                                            {isSelf || (u.role === 'SUPER_ADMIN' && !canAssignSuperAdmin) ? (
-                                                <span className={`role-badge ${String(u.role || 'DATA_CONTRIBUTOR').toLowerCase().replace(/_/g, '-')}`}>
-                                                    {roleLabel(u.role)}
-                                                </span>
+                                            <span className={rolePillClass(u.role)}>{roleLabel(u.role)}</span>
+                                        </td>
+                                        <td className="rs-module-access">{moduleAccessForRole(u.role, t)}</td>
+                                        <td className="rs-last-active">{formatLastActive(u.lastLoginAt, t)}</td>
+                                        <td>
+                                            <span
+                                                className={`rs-badge ${u.isActive ? 'rs-badge--green' : 'rs-badge--gray'}`}
+                                            >
+                                                {u.isActive
+                                                    ? t('userManagement.statusActive')
+                                                    : t('userManagement.statusInactive')}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {canEdit ? (
+                                                <div className="rs-actions">
+                                                    <button
+                                                        type="button"
+                                                        className="rs-btn rs-btn--outline rs-btn--sm"
+                                                        onClick={() => setEditUserId(u.id)}
+                                                    >
+                                                        {t('userManagement.edit')}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="rs-btn rs-btn--outline rs-btn--sm"
+                                                        onClick={() => openRolesModal(u)}
+                                                    >
+                                                        {t('userManagement.roles')}
+                                                    </button>
+                                                </div>
                                             ) : (
-                                                <select
-                                                    className="role-select"
-                                                    value={u.role}
-                                                    onChange={(e) => handleRoleChange(u, e.target.value)}
-                                                    disabled={u.role === 'SUPER_ADMIN' && !canAssignSuperAdmin}
-                                                >
-                                                    {ROLE_OPTIONS.filter(
-                                                        (o) => o.value !== 'SUPER_ADMIN' || canAssignSuperAdmin
-                                                    ).map((o) => (
-                                                        <option key={o.value} value={o.value}>
-                                                            {o.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
+                                                <span className="rs-last-active">—</span>
                                             )}
-                                        </td>
-                                        <td>
-                                            <span className={`status-dot ${u.isActive ? 'active' : 'inactive'}`}></span>
-                                            {u.isActive ? 'Active' : 'Inactive'}
-                                        </td>
-                                        <td>{formatLastActive(u.lastLoginAt)}</td>
-                                        <td>
-                                            <div className="action-buttons">
-                                                {!isSelf && (
-                                                    <>
-                                                        <button
-                                                            type="button"
-                                                            className="action-btn"
-                                                            title={u.isActive ? 'Deactivate' : 'Activate'}
-                                                            onClick={() => handleToggleActive(u)}
-                                                        >
-                                                            <i
-                                                                className={`fas fa-${u.isActive ? 'user-slash' : 'user-check'}`}
-                                                            ></i>
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="action-btn danger"
-                                                            title="Delete user"
-                                                            onClick={() => setDeleteConfirmId(u.id)}
-                                                        >
-                                                            <i className="fas fa-trash"></i>
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -355,17 +416,41 @@ function UserManagement() {
                 )}
             </div>
 
-            {createOpen && (
-                <div className="modal-overlay" onClick={() => !createSubmitting && setCreateOpen(false)}>
-                    <div className="modal-content card" onClick={(e) => e.stopPropagation()}>
-                        <h3>Add user</h3>
-                        <p className="modal-hint">
-                            Password must be 8+ chars with uppercase, lowercase, and a number. User can sign in
-                            immediately; access is limited by role.
-                        </p>
+            <div className="rs-card">
+                <div className="rs-card-title">{t('userManagement.subscriptionTitle')}</div>
+                <div className="rs-sub-grid">
+                    <div>
+                        {subscriptionRows.map(([key, val]) => (
+                            <div key={key} className="rs-sub-row">
+                                <span className="rs-sub-key">{key}</span>
+                                <span className="rs-sub-val">{val}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="rs-sub-highlight">
+                        <div className="rs-sub-plan-name">
+                            {t(`userManagement.${subscriptionMeta.display.planKey}`)}
+                        </div>
+                        <div className="rs-sub-price">
+                            {t(`userManagement.${subscriptionMeta.display.amountValueKey}`)}
+                            <span>{t('userManagement.amountPeriod')}</span>
+                        </div>
+                        <p className="rs-sub-desc">{t(`userManagement.${subscriptionMeta.display.descKey}`)}</p>
+                        <button type="button" className="rs-btn rs-btn--primary rs-sub-manage">
+                            {t('userManagement.manageSubscription')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {inviteOpen && (
+                <div className="rs-modal-overlay" onClick={() => !createSubmitting && setInviteOpen(false)}>
+                    <div className="rs-modal" onClick={(e) => e.stopPropagation()}>
+                        <h3>{t('userManagement.inviteModalTitle')}</h3>
+                        <p className="rs-modal-hint">{t('userManagement.inviteModalHint')}</p>
                         <form onSubmit={handleCreateUser}>
                             <label>
-                                Email
+                                {t('userManagement.email')}
                                 <input
                                     type="email"
                                     required
@@ -374,7 +459,7 @@ function UserManagement() {
                                 />
                             </label>
                             <label>
-                                Password
+                                {t('userManagement.password')}
                                 <input
                                     type="password"
                                     required
@@ -383,9 +468,9 @@ function UserManagement() {
                                     onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
                                 />
                             </label>
-                            <div className="form-row">
+                            <div className="rs-form-row">
                                 <label>
-                                    First name
+                                    {t('userManagement.firstName')}
                                     <input
                                         required
                                         value={createForm.firstName}
@@ -393,7 +478,7 @@ function UserManagement() {
                                     />
                                 </label>
                                 <label>
-                                    Last name
+                                    {t('userManagement.lastName')}
                                     <input
                                         required
                                         value={createForm.lastName}
@@ -402,14 +487,14 @@ function UserManagement() {
                                 </label>
                             </div>
                             <label>
-                                Company (optional)
+                                {t('userManagement.companyOptional')}
                                 <input
                                     value={createForm.company}
                                     onChange={(e) => setCreateForm((f) => ({ ...f, company: e.target.value }))}
                                 />
                             </label>
                             <label>
-                                Role
+                                {t('userManagement.colRole')}
                                 <select
                                     value={createForm.role}
                                     onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value }))}
@@ -418,48 +503,148 @@ function UserManagement() {
                                         (o) => o.value !== 'SUPER_ADMIN' || canAssignSuperAdmin
                                     ).map((o) => (
                                         <option key={o.value} value={o.value}>
-                                            {o.label}
+                                            {t(`userManagement.${o.labelKey}`)}
                                         </option>
                                     ))}
                                 </select>
                             </label>
-                            <div className="modal-actions">
-                                <button type="button" className="btn btn-ghost" onClick={() => setCreateOpen(false)}>
-                                    Cancel
+                            <div className="rs-modal-actions">
+                                <button
+                                    type="button"
+                                    className="rs-btn rs-btn--outline"
+                                    onClick={() => setInviteOpen(false)}
+                                >
+                                    {t('userManagement.cancel')}
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={createSubmitting}>
-                                    {createSubmitting ? 'Creating…' : 'Create user'}
+                                <button type="submit" className="rs-btn rs-btn--primary" disabled={createSubmitting}>
+                                    {createSubmitting
+                                        ? t('userManagement.creating')
+                                        : t('userManagement.createUser')}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-            {deleteConfirmId && (
-                <div className="modal-overlay" onClick={() => setDeleteConfirmId(null)}>
-                    <div className="modal-content card" onClick={(e) => e.stopPropagation()}>
-                        <h3>Delete user</h3>
-                        <p className="modal-hint">
-                            This will permanently remove the user and their access. Emissions and documents they
-                            created will remain for reporting.
-                        </p>
-                        <div className="modal-actions">
+
+            {editUser && (
+                <div className="rs-modal-overlay" onClick={() => setEditUserId(null)}>
+                    <div className="rs-modal" onClick={(e) => e.stopPropagation()}>
+                        <h3>{t('userManagement.editModalTitle')}</h3>
+                        <div className="rs-modal-user-preview">
+                            <div className="rs-user-avatar">
+                                {`${editUser.firstName || ''} ${editUser.lastName || ''}`
+                                    .trim()
+                                    .split(' ')
+                                    .map((w) => w[0])
+                                    .join('')
+                                    .slice(0, 2)
+                                    .toUpperCase() || '?'}
+                            </div>
+                            <div>
+                                <div className="rs-user-name">
+                                    {`${editUser.firstName || ''} ${editUser.lastName || ''}`.trim() || editUser.email}
+                                </div>
+                                <div className="rs-user-email">{editUser.email}</div>
+                            </div>
+                        </div>
+                        <div className="rs-modal-toggle-row">
+                            <span>{t('userManagement.statusActive')}</span>
+                            <label className="rs-toggle">
+                                <input
+                                    type="checkbox"
+                                    checked={editUser.isActive}
+                                    onChange={(e) => handleToggleActive(editUser, e.target.checked)}
+                                />
+                                <span className="rs-toggle-slider" />
+                            </label>
+                        </div>
+                        <p className="rs-modal-hint">{t('userManagement.editModalHint')}</p>
+                        <div className="rs-modal-actions">
                             <button
                                 type="button"
-                                className="btn btn-ghost"
-                                onClick={() => setDeleteConfirmId(null)}
+                                className="rs-btn rs-btn--outline"
+                                onClick={() => setDeleteConfirmId(editUser.id)}
                             >
-                                Cancel
+                                {t('userManagement.deleteUser')}
+                            </button>
+                            <button type="button" className="rs-btn rs-btn--primary" onClick={() => setEditUserId(null)}>
+                                {t('userManagement.done')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {rolesUser && (
+                <div className="rs-modal-overlay" onClick={() => !roleSubmitting && setRolesUserId(null)}>
+                    <div className="rs-modal" onClick={(e) => e.stopPropagation()}>
+                        <h3>{t('userManagement.rolesModalTitle')}</h3>
+                        <p className="rs-modal-hint">
+                            {t('userManagement.rolesModalHint', {
+                                name: `${rolesUser.firstName || ''} ${rolesUser.lastName || ''}`.trim() || rolesUser.email,
+                            })}
+                        </p>
+                        <label>
+                            {t('userManagement.colRole')}
+                            <select
+                                value={rolesDraft}
+                                onChange={(e) => setRolesDraft(e.target.value)}
+                                disabled={roleSubmitting}
+                            >
+                                {ROLE_OPTIONS.filter(
+                                    (o) => o.value !== 'SUPER_ADMIN' || canAssignSuperAdmin
+                                ).map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {t(`userManagement.${o.labelKey}`)}
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+                        <p className="rs-modal-hint" style={{ marginTop: 8 }}>
+                            {t('userManagement.moduleAccessPreview')}:{' '}
+                            <strong>{moduleAccessForRole(rolesDraft, t)}</strong>
+                        </p>
+                        <div className="rs-modal-actions">
+                            <button
+                                type="button"
+                                className="rs-btn rs-btn--outline"
+                                onClick={() => setRolesUserId(null)}
+                                disabled={roleSubmitting}
+                            >
+                                {t('userManagement.cancel')}
                             </button>
                             <button
                                 type="button"
-                                className="btn btn-danger"
+                                className="rs-btn rs-btn--primary"
+                                disabled={roleSubmitting}
+                                onClick={() => handleRoleChange(rolesUser)}
+                            >
+                                {roleSubmitting ? t('userManagement.saving') : t('userManagement.saveRole')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {deleteConfirmId && (
+                <div className="rs-modal-overlay" onClick={() => setDeleteConfirmId(null)}>
+                    <div className="rs-modal" onClick={(e) => e.stopPropagation()}>
+                        <h3>{t('userManagement.deleteModalTitle')}</h3>
+                        <p className="rs-modal-hint">{t('userManagement.deleteModalHint')}</p>
+                        <div className="rs-modal-actions">
+                            <button type="button" className="rs-btn rs-btn--outline" onClick={() => setDeleteConfirmId(null)}>
+                                {t('userManagement.cancel')}
+                            </button>
+                            <button
+                                type="button"
+                                className="rs-btn rs-btn--danger"
                                 onClick={() => {
                                     const u = users.find((x) => x.id === deleteConfirmId);
                                     handleDeleteUser(u);
                                 }}
                             >
-                                Delete user
+                                {t('userManagement.confirmDelete')}
                             </button>
                         </div>
                     </div>

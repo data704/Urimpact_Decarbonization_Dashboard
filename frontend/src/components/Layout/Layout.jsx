@@ -3,6 +3,7 @@ import { Outlet, Navigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import './platform-v2.css';
 import './Layout.css';
 
 function Layout() {
@@ -22,7 +23,7 @@ function Layout() {
     }
 
     return (
-        <div className="app-layout">
+        <div className="app-layout app-platform">
             <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
             <main className="main-content">
                 <Header onMenuToggle={() => setSidebarOpen(!sidebarOpen)} />

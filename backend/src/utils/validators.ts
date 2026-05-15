@@ -104,6 +104,34 @@ export const stationaryCombustionTemplateFormSchema = z
 
 export type StationaryCombustionTemplateFormBody = z.infer<typeof stationaryCombustionTemplateFormSchema>;
 
+/**
+ * Strict body for Scope 1 — mobile combustion (matches workbook column semantics).
+ * Mapped server-side to `GhgCategoryFormBody` for Climatiq / persistence.
+ */
+export const mobileCombustionTemplateFormSchema = z
+  .object({
+    vehicleType: z.string().max(500),
+    fuelUsed: z.string().min(1).max(4000),
+    fuelUsedQuantity: z.coerce.number().positive(),
+    fuelUsedUnit: z.string().min(1).max(120),
+    facility: z.string().max(500),
+    dateOfTransaction: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict()
+  .superRefine((data, ctx) => {
+    if (!data.vehicleType.trim() && !data.facility.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide Vehicle Type or Facility (or both).',
+        path: ['vehicleType'],
+      });
+    }
+  });
+
+export type MobileCombustionTemplateFormBody = z.infer<typeof mobileCombustionTemplateFormSchema>;
+
 /** Confirmed bulk rows (after user review); `excelRow` is optional metadata for error messages. */
 export const stationaryBulkConfirmBodySchema = z
   .object({
@@ -127,6 +155,30 @@ export const stationaryBulkConfirmBodySchema = z
   .strict();
 
 export type StationaryBulkConfirmBody = z.infer<typeof stationaryBulkConfirmBodySchema>;
+
+/** Mobile combustion bulk confirm — same row shape as template, plus optional excelRow. */
+export const mobileBulkConfirmBodySchema = z
+  .object({
+    rows: z
+      .array(
+        z
+          .object({
+            vehicleType: z.string().max(500),
+            fuelUsed: z.string().min(1).max(4000),
+            fuelUsedQuantity: z.coerce.number().positive(),
+            fuelUsedUnit: z.string().min(1).max(120),
+            facility: z.string().max(500),
+            dateOfTransaction: z.union([z.string(), z.number()]),
+            notes: z.string().max(5000).optional(),
+            excelRow: z.number().int().positive().optional(),
+          })
+          .strict()
+      )
+      .min(1),
+  })
+  .strict();
+
+export type MobileBulkConfirmBody = z.infer<typeof mobileBulkConfirmBodySchema>;
 
 /** Non-stationary categories use the generic GHG row schema. Stationary uses `stationaryCombustionTemplateFormSchema` in the controller. */
 export function getGhgCategoryFormBodySchema(_categorySlug: string): z.ZodTypeAny {

@@ -112,6 +112,13 @@ function Header({ onMenuToggle }) {
                 <button type="button" className="menu-toggle" onClick={onMenuToggle} aria-label={t('header.openMenu')}>
                     <i className="fas fa-bars"></i>
                 </button>
+                <nav className="tb-breadcrumb" aria-label={t('header.breadcrumbNav')}>
+                    <Link to="/">{t('header.breadcrumbHome')}</Link>
+                    <span className="tb-breadcrumb-sep" aria-hidden>
+                        ›
+                    </span>
+                    <span className="tb-breadcrumb-cur">{pageTitle}</span>
+                </nav>
                 <h1 className="header-page-title">{pageTitle}</h1>
                 <div className="search-box header-search-desktop">
                     <i className="fas fa-search"></i>
@@ -132,6 +139,10 @@ function Header({ onMenuToggle }) {
                 <div className="header-item header-date-desktop">
                     <span className="date-display">{currentDate}</span>
                 </div>
+
+                <button type="button" className="header-item tb-icon-btn" title={t('header.help')} aria-label={t('header.help')}>
+                    <i className="fas fa-circle-question" />
+                </button>
 
                 <div className="header-item">
                     <select

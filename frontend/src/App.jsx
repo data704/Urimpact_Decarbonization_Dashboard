@@ -13,6 +13,10 @@ import Dashboard from './pages/Dashboard';
 import { GHGModule, GHGLanding, GHGCategoryDetail } from './pages/GHG';
 import Reports from './pages/Reports';
 import Decarbonization from './pages/Decarbonization';
+import ESGModule from './pages/ESG/ESGModule';
+import SupplyChain from './pages/SupplyChain/SupplyChain';
+import BSM from './pages/BSM/BSM';
+import LearnWithUs from './pages/LearnWithUs/LearnWithUs';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
 import Notifications from './pages/Notifications';
@@ -41,7 +45,11 @@ function App() {
                                     <Route path="scope/:scopeNum/category/:slug" element={<GHGCategoryDetail />} />
                                 </Route>
                                 <Route path="/reports" element={<Reports />} />
+                                <Route path="/esg" element={<ESGModule />} />
                                 <Route path="/decarbonization" element={<Decarbonization />} />
+                                <Route path="/supply-chain" element={<SupplyChain />} />
+                                <Route path="/bsm" element={<BSM />} />
+                                <Route path="/learn" element={<LearnWithUs />} />
                                 <Route path="/settings" element={<Settings />} />
                                 <Route path="/notifications" element={<Notifications />} />
                                 <Route

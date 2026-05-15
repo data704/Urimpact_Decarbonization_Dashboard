@@ -24,6 +24,81 @@
     margin-bottom: 0.75rem;
 }
 
+/* ── Summary stats bar (v2) ── */
+.ghg-summary-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.ghg-summary-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1rem;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    min-width: 0;
+}
+
+.ghg-summary-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.ghg-summary-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.ghg-summary-value {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: #0f172a;
+    white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+    .ghg-summary-bar {
+        gap: 0.5rem;
+    }
+    .ghg-summary-pill {
+        flex: 1 1 calc(50% - 0.5rem);
+        min-width: 0;
+    }
+}
+
+/* ── Card progress bar (v2) ── */
+.ghg-card-progress {
+    width: 100%;
+    height: 6px;
+    background: #f1f5f9;
+    border-radius: 3px;
+    margin-top: 0.75rem;
+    overflow: hidden;
+}
+
+.ghg-card-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+    min-width: 0;
+}
+
+.ghg-card-pct {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 0.35rem;
+    font-weight: 500;
+}
+
 .ghg-breadcrumb-current {
     color: #0f172a;
     font-weight: 600;
@@ -34,44 +109,42 @@
     user-select: none;
 }
 
+/* Scope tabs — platform v2 `.tabs` / `.tab` */
 .ghg-scope-tabs {
     display: flex;
-    gap: 0;
-    border-bottom: 1px solid #e2e8f0;
-    margin-bottom: 1.5rem;
+    border-bottom: 2px solid #e4edeb;
+    margin-bottom: 20px;
 }
 
 .ghg-scope-tab {
     background: none;
     border: none;
-    padding: 0.75rem 1.25rem;
-    font-size: 0.95rem;
+    padding: 9px 20px;
+    font-size: 12.5px;
     font-weight: 500;
-    color: #64748b;
+    color: #6b8a85;
     cursor: pointer;
-    position: relative;
     font-family: inherit;
-    transition: color 0.15s ease;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .ghg-scope-tab:hover {
-    color: #0f172a;
+    color: #1a9a8f;
 }
 
 .ghg-scope-tab.active {
-    color: var(--accent, #14b8a6);
+    color: #1a9a8f;
+    border-bottom-color: #1a9a8f;
     font-weight: 600;
 }
 
 .ghg-scope-tab.active::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -1px;
-    height: 2px;
-    background: var(--accent, #14b8a6);
-    border-radius: 2px 2px 0 0;
+    display: none;
 }
 
 .ghg-section-head {
@@ -179,27 +252,46 @@
     }
 }
 
+/* Category cards — platform v2 `.cc` */
 .ghg-category-card {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 1.35rem 1rem;
+    padding: 24px 16px 20px;
     background: #fff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
+    border: 1.5px solid #e4edeb;
+    border-radius: 14px;
     cursor: pointer;
-    transition:
-        border-color 0.15s ease,
-        box-shadow 0.15s ease,
-        transform 0.12s ease;
+    transition: all 0.18s ease;
     font-family: inherit;
+    position: relative;
+    gap: 11px;
+    width: 100%;
 }
 
 .ghg-category-card:hover {
-    border-color: var(--accent, #14b8a6);
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
-    transform: translateY(-1px);
+    border-color: #c8edea;
+    box-shadow: 0 4px 18px rgba(43, 191, 179, 0.1);
+    transform: translateY(-2px);
+}
+
+.ghg-category-card:hover .ghg-card-icon {
+    background: #c8edea;
+}
+
+.ghg-category-card:hover .ghg-card-arrow {
+    opacity: 1;
+}
+
+.ghg-card-arrow {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    color: #1a9a8f;
+    font-size: 13px;
 }
 
 .ghg-category-card:focus-visible {
@@ -208,28 +300,71 @@
 }
 
 .ghg-card-icon {
-    width: 3rem;
-    height: 3rem;
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: #eaf7f6;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 0.75rem;
-    color: var(--accent, #14b8a6);
+    color: #1a9a8f;
     font-size: 1.5rem;
+    transition: background 0.18s ease;
+}
+
+.ghg-card-icon-svg {
+    width: 26px;
+    height: 26px;
+    display: block;
+    flex-shrink: 0;
 }
 
 .ghg-card-title {
-    font-size: 0.9375rem;
+    font-size: 12.5px;
     font-weight: 600;
-    color: #0f172a;
-    margin-bottom: 0.5rem;
-    line-height: 1.35;
+    color: #1a2e2b;
+    line-height: 1.4;
 }
 
 .ghg-card-value {
-    font-size: 0.875rem;
-    color: #475569;
+    font-size: 11px;
+    color: #9bb5b0;
     font-weight: 500;
+}
+
+.ghg-card-progress {
+    width: 100%;
+    height: 4px;
+    background: #e4edeb;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 0;
+}
+
+.ghg-card-progress-fill {
+    height: 100%;
+    background: #1a9a8f;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+.ghg-card-pct {
+    font-size: 11px;
+    color: #9bb5b0;
+    font-weight: 500;
+}
+
+.ghg-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1a2e2b;
+    margin: 0 0 4px;
+}
+
+.ghg-section-sub {
+    font-size: 12px;
+    color: #6b8a85;
+    margin: 0 0 18px;
 }
 
 .ghg-footnote {
@@ -1091,4 +1226,199 @@
 .ghg-ai-result {
     font-size: 1.1rem;
     color: #1e293b;
+}
+
+/* ── GHG v2 summary bar ── */
+.ghg-summary-bar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.ghg-summary-pill {
+    background: #fff;
+    border: 1px solid var(--up-border, #e4edeb);
+    border-radius: 10px;
+    padding: 10px 15px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.ghg-summary-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+
+.ghg-summary-pill-label {
+    font-size: 11px;
+    color: var(--up-text-sub, #6b8a85);
+    font-weight: 500;
+}
+
+.ghg-summary-pill-value {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--up-text, #1a2e2b);
+}
+
+/* ── GHG v2 category card enhancements ── */
+.app-platform .ghg-category-card {
+    background: var(--up-card, #fff);
+    border: 1.5px solid var(--up-border, #e4edeb);
+    border-radius: 14px;
+    padding: 24px 16px 20px;
+    gap: 11px;
+    position: relative;
+    transition: all .18s;
+}
+
+.app-platform .ghg-category-card:hover {
+    border-color: var(--up-teal-mid, #c8edea);
+    box-shadow: 0 4px 18px rgba(43,191,179,.1);
+    transform: translateY(-2px);
+}
+
+.app-platform .ghg-category-card:hover .ghg-card-icon {
+    background: var(--up-teal-mid, #c8edea);
+}
+
+.app-platform .ghg-card-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--up-teal-bg, #eaf7f6);
+    color: var(--up-teal-dark, #1a9a8f);
+    font-size: 1.5rem;
+    transition: background .18s;
+}
+
+.app-platform .ghg-card-icon-svg {
+    width: 26px;
+    height: 26px;
+}
+
+.app-platform .ghg-card-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--up-text, #1a2e2b);
+    line-height: 1.4;
+}
+
+.app-platform .ghg-card-value {
+    font-size: 11px;
+    color: var(--up-muted, #9bb5b0);
+}
+
+.ghg-card-progress {
+    width: 100%;
+    background: var(--up-border, #e4edeb);
+    border-radius: 10px;
+    height: 4px;
+    overflow: hidden;
+}
+
+.ghg-card-progress-fill {
+    height: 100%;
+    background: var(--up-teal-dark, #1a9a8f);
+    border-radius: 10px;
+}
+
+.ghg-card-pct {
+    font-size: 11px;
+    color: var(--up-muted, #9bb5b0);
+}
+
+.ghg-card-arrow {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    opacity: 0;
+    transition: .18s;
+    color: var(--up-teal-dark, #1a9a8f);
+    font-size: 13px;
+}
+
+.app-platform .ghg-category-card:hover .ghg-card-arrow {
+    opacity: 1;
+}
+
+/* ── GHG v2 scope tabs refinement ── */
+.app-platform .ghg-scope-tabs {
+    border-bottom: 2px solid var(--up-border, #e4edeb);
+    margin-bottom: 20px;
+}
+
+.app-platform .ghg-scope-tab {
+    padding: 9px 20px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--up-text-sub, #6b8a85);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all .15s;
+}
+
+.app-platform .ghg-scope-tab:hover {
+    color: var(--up-teal-dark, #1a9a8f);
+}
+
+.app-platform .ghg-scope-tab.active {
+    color: var(--up-teal-dark, #1a9a8f);
+    border-bottom-color: var(--up-teal-dark, #1a9a8f);
+    font-weight: 600;
+}
+
+.app-platform .ghg-scope-tab.active::after {
+    display: none;
+}
+
+/* ── GHG v2 section styling ── */
+.app-platform .ghg-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--up-text, #1a2e2b);
+    margin-bottom: 4px;
+}
+
+.app-platform .ghg-section-sub {
+    font-size: 12px;
+    color: var(--up-text-sub, #6b8a85);
+    margin-bottom: 18px;
+}
+
+.app-platform .ghg-subsection-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--up-text-sub, #6b8a85);
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-platform .ghg-subsection-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--up-border, #e4edeb);
+}
+
+.app-platform .ghg-card-grid {
+    gap: 14px;
+}
+
+/* ── Scope 3 downstream cards ── */
+.app-platform .ghg-card-grid--downstream .ghg-card-icon {
+    background: #FEF6E4;
+    color: #E67E22;
+}
+
+.app-platform .ghg-card-grid--downstream .ghg-category-card:hover .ghg-card-icon {
+    background: #FDE6C8;
 }

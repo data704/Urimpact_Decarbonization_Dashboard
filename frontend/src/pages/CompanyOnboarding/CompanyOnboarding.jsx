@@ -15,6 +15,7 @@ import {
     ONBOARDING_FACILITY_TYPES,
     syncOnboardingFacilitiesToDataInputSites,
 } from '../../utils/onboardingFacilities.js';
+import { canOpenRevisitOnboarding } from '../../utils/onboardingRevisit.js';
 import './CompanyOnboarding.css';
 
 const DRAFT_PREFIX = 'urimpact_onboarding_draft_';

@@ -33,8 +33,8 @@
     --scope2-light: rgba(59, 130, 246, 0.2);
 
     /* Layout */
-    --sidebar-width: 240px;
-    --header-height: 64px;
+    --sidebar-width: 195px;
+    --header-height: 56px;
     --border-radius: 12px;
     --border-radius-sm: 8px;
     --border-color: rgba(148, 163, 184, 0.1);

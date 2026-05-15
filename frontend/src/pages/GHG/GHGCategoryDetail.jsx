@@ -9,6 +9,10 @@ import {
     previewStationaryCombustionBulk,
     confirmStationaryCombustionBulk,
     getStationaryCombustionLookupOptions,
+    downloadMobileCombustionTemplate,
+    previewMobileCombustionBulk,
+    confirmMobileCombustionBulk,
+    getMobileCombustionLookupOptions,
     deleteEmission,
     deleteEmissionsBulk,
     aiExtractReceipt,
@@ -18,6 +22,12 @@ import { useAuth } from '../../context/AuthContext.jsx';
 import { readSitesForOrganization } from '../../utils/dataInputSitesStorage.js';
 import { findCategory, titleKeyForCategory } from './ghgCategories.js';
 import { STATIONARY_TEMPLATE_COLUMNS, STATIONARY_TEMPLATE_UNITS, STATIONARY_FUEL_SELECT_PRESETS } from './stationaryCombustionConfig.js';
+import {
+    MOBILE_TEMPLATE_COLUMNS,
+    MOBILE_TEMPLATE_UNITS,
+    MOBILE_VEHICLE_SELECT_PRESETS,
+    MOBILE_FUEL_SELECT_PRESETS,
+} from './mobileCombustionConfig.js';
 import './GHG.css';
 
 function formatTonnes(n) {
@@ -70,6 +80,9 @@ export default function GHGCategoryDetail() {
     const [stFuelSelectKey, setStFuelSelectKey] = useState('Diesel');
     const [stFuelUsed, setStFuelUsed] = useState('Diesel');
     const [stFacility, setStFacility] = useState('');
+    /** Mobile combustion: vehicle type (workbook column). */
+    const [mcVehicleType, setMcVehicleType] = useState('');
+    const [mcFacility, setMcFacility] = useState('');
     const [stFuelUnit, setStFuelUnit] = useState('Litre');
     const [stDate, setStDate] = useState('');
 
@@ -87,6 +100,7 @@ export default function GHGCategoryDetail() {
 
     const [lookupFacilities, setLookupFacilities] = useState([]);
     const [lookupAssets, setLookupAssets] = useState([]);
+    const [lookupVehicleTypes, setLookupVehicleTypes] = useState([]);
     const [lookupPastActivityTypes, setLookupPastActivityTypes] = useState([]);
 
     const [submitting, setSubmitting] = useState(false);
@@ -113,6 +127,21 @@ export default function GHGCategoryDetail() {
     const titleKey = slug ? titleKeyForCategory(slug) : 'ghg.unknownCategory';
     const demoTonnes = meta?.demoTonnes ?? null;
     const isStationaryCombustion = Boolean(slug === 'stationary-combustion' && scope === 1);
+    const isMobileCombustion = Boolean(slug === 'mobile-combustion' && scope === 1);
+    const isWorkbookScope1 = isStationaryCombustion || isMobileCombustion;
+
+    /** i18n + column list for Scope 1 workbook bulk (stationary vs mobile). */
+    const wbBulk = isStationaryCombustion ? 'ghg.stationary' : 'ghg.mobile';
+    const wbTemplateColumns = isStationaryCombustion ? STATIONARY_TEMPLATE_COLUMNS : MOBILE_TEMPLATE_COLUMNS;
+
+    const addMethodChoices = useMemo(() => {
+        const cards = [
+            { id: 'form', icon: 'fa-file-pen' },
+            { id: 'bulk', icon: 'fa-cloud-arrow-up' },
+        ];
+        if (isStationaryCombustion) cards.push({ id: 'ai', icon: 'fa-wand-magic-sparkles' });
+        return cards;
+    }, [isStationaryCombustion]);
 
     const stationaryExtraPastFuels = useMemo(() => {
         const presetLower = new Set(STATIONARY_FUEL_SELECT_PRESETS.map((p) => p.value.toLowerCase()));
@@ -130,10 +159,27 @@ export default function GHGCategoryDetail() {
         return out.sort((a, b) => a.localeCompare(b));
     }, [lookupPastActivityTypes]);
 
+    const mobileExtraPastFuels = useMemo(() => {
+        const presetLower = new Set(MOBILE_FUEL_SELECT_PRESETS.map((p) => p.value.toLowerCase()));
+        const seen = new Set();
+        const out = [];
+        for (const raw of lookupPastActivityTypes) {
+            const s = String(raw).trim();
+            if (!s) continue;
+            const key = s.toLowerCase();
+            if (presetLower.has(key)) continue;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            out.push(s);
+        }
+        return out.sort((a, b) => a.localeCompare(b));
+    }, [lookupPastActivityTypes]);
+
     useEffect(() => {
-        if (!isStationaryCombustion || !hasApi || !getAuthToken()) return;
+        if (!isWorkbookScope1 || !hasApi || !getAuthToken()) return;
         let cancelled = false;
-        getStationaryCombustionLookupOptions()
+        const loader = isStationaryCombustion ? getStationaryCombustionLookupOptions : getMobileCombustionLookupOptions;
+        loader()
             .then((opts) => {
                 if (cancelled) return;
                 const localNames = (user?.organizationId ? readSitesForOrganization(user.organizationId) : [])
@@ -141,10 +187,15 @@ export default function GHGCategoryDetail() {
                     .filter(Boolean);
                 const fac = new Set([...(opts.facilities || []), ...localNames]);
                 setLookupFacilities([...fac].sort((a, b) => a.localeCompare(b)));
-                setLookupAssets([...(opts.assets || [])].sort((a, b) => a.localeCompare(b)));
-                setLookupPastActivityTypes(
-                    Array.isArray(opts.pastActivityTypes) ? opts.pastActivityTypes : []
-                );
+                if (isStationaryCombustion) {
+                    setLookupAssets([...(opts.assets || [])].sort((a, b) => a.localeCompare(b)));
+                    setLookupVehicleTypes([]);
+                    setLookupPastActivityTypes(Array.isArray(opts.pastActivityTypes) ? opts.pastActivityTypes : []);
+                } else {
+                    setLookupAssets([]);
+                    setLookupVehicleTypes(Array.isArray(opts.vehicleTypes) ? opts.vehicleTypes : []);
+                    setLookupPastActivityTypes(Array.isArray(opts.pastActivityTypes) ? opts.pastActivityTypes : []);
+                }
             })
             .catch(() => {
                 if (cancelled) return;
@@ -153,12 +204,13 @@ export default function GHGCategoryDetail() {
                     .filter(Boolean);
                 setLookupFacilities([...new Set(localNames)].sort((a, b) => a.localeCompare(b)));
                 setLookupAssets([]);
+                setLookupVehicleTypes([]);
                 setLookupPastActivityTypes([]);
             });
         return () => {
             cancelled = true;
         };
-    }, [isStationaryCombustion, hasApi, user?.organizationId]);
+    }, [isWorkbookScope1, isStationaryCombustion, hasApi, user?.organizationId]);
 
     const loadEntries = useCallback(async () => {
         if (!hasApi || !slug) return;
@@ -193,6 +245,15 @@ export default function GHGCategoryDetail() {
         if (slug === 'stationary-combustion' && scope === 1) {
             setStFuelSelectKey('Diesel');
             setStFuelUsed('Diesel');
+        } else if (slug === 'mobile-combustion' && scope === 1) {
+            setMcVehicleType('Car');
+            setMcFacility('');
+            setStFuelSelectKey('CNG');
+            setStFuelUsed('CNG');
+            setStFuelUnit('Metric ton');
+        } else {
+            setMcVehicleType('');
+            setMcFacility('');
         }
     }, [slug, scopeNum, scope]);
 
@@ -269,13 +330,21 @@ export default function GHGCategoryDetail() {
         }
     };
 
-    const handleDownloadStationaryTemplate = async () => {
+    const handleDownloadWorkbookTemplate = async () => {
         setBulkFeedback(null);
         try {
-            await downloadStationaryCombustionTemplate();
-            setBulkFeedback({ type: 'ok', text: t('ghg.stationary.templateDownloaded') });
+            if (isStationaryCombustion) {
+                await downloadStationaryCombustionTemplate();
+                setBulkFeedback({ type: 'ok', text: t('ghg.stationary.templateDownloaded') });
+            } else {
+                await downloadMobileCombustionTemplate();
+                setBulkFeedback({ type: 'ok', text: t('ghg.mobile.templateDownloaded') });
+            }
         } catch (err) {
-            setBulkFeedback({ type: 'err', text: err?.message || t('ghg.stationary.templateDownloadError') });
+            setBulkFeedback({
+                type: 'err',
+                text: err?.message || (isStationaryCombustion ? t('ghg.stationary.templateDownloadError') : t('ghg.mobile.templateDownloadError')),
+            });
         }
     };
 
@@ -294,7 +363,9 @@ export default function GHGCategoryDetail() {
         setBulkUploading(true);
         setBulkFeedback(null);
         try {
-            const data = await previewStationaryCombustionBulk(bulkFile);
+            const data = isStationaryCombustion
+                ? await previewStationaryCombustionBulk(bulkFile)
+                : await previewMobileCombustionBulk(bulkFile);
             const rows = Array.isArray(data.rows) ? data.rows : [];
             setBulkReviewRows(
                 rows.map((r) => ({
@@ -307,16 +378,20 @@ export default function GHGCategoryDetail() {
                 }))
             );
             setBulkStep('review');
+            const previewKey = isStationaryCombustion ? 'ghg.stationary.bulkPreviewReady' : 'ghg.mobile.bulkPreviewReady';
             setBulkFeedback({
                 type: 'ok',
-                text: t('ghg.stationary.bulkPreviewReady', {
+                text: t(previewKey, {
                     total: data.summary?.total ?? rows.length,
                     valid: data.summary?.validCount ?? 0,
                     invalid: data.summary?.invalidCount ?? 0,
                 }),
             });
         } catch (err) {
-            setBulkFeedback({ type: 'err', text: err?.message || t('ghg.stationary.bulkError') });
+            setBulkFeedback({
+                type: 'err',
+                text: err?.message || (isStationaryCombustion ? t('ghg.stationary.bulkError') : t('ghg.mobile.bulkError')),
+            });
         } finally {
             setBulkUploading(false);
         }
@@ -329,8 +404,7 @@ export default function GHGCategoryDetail() {
         try {
             const rows = bulkReviewRows.map((r) => {
                 const q = parseFloat(String(r.input.fuelUsedQuantity).replace(',', '.'));
-                return {
-                    asset: String(r.input.asset ?? '').trim(),
+                const base = {
                     fuelUsed: String(r.input.fuelUsed ?? '').trim(),
                     fuelUsedQuantity: Number.isFinite(q) && q > 0 ? q : r.input.fuelUsedQuantity,
                     fuelUsedUnit: String(r.input.fuelUsedUnit ?? '').trim(),
@@ -339,15 +413,20 @@ export default function GHGCategoryDetail() {
                     notes: r.input.notes ? String(r.input.notes).trim() : undefined,
                     excelRow: r.excelRow,
                 };
+                if (isStationaryCombustion) {
+                    return { ...base, asset: String(r.input.asset ?? '').trim() };
+                }
+                return { ...base, vehicleType: String(r.input.vehicleType ?? '').trim() };
             });
-            const data = await confirmStationaryCombustionBulk(rows);
+            const data = isStationaryCombustion
+                ? await confirmStationaryCombustionBulk(rows)
+                : await confirmMobileCombustionBulk(rows);
             const created = data.createdCount ?? 0;
             const failed = data.failedCount ?? 0;
             const rowErrors = Array.isArray(data.rowErrors) ? data.rowErrors.filter(Boolean) : [];
-            const summary =
-                failed > 0
-                    ? t('ghg.stationary.bulkPartial', { created, failed })
-                    : t('ghg.stationary.bulkOk', { created });
+            const bulkOkKey = isStationaryCombustion ? 'ghg.stationary.bulkOk' : 'ghg.mobile.bulkOk';
+            const bulkPartialKey = isStationaryCombustion ? 'ghg.stationary.bulkPartial' : 'ghg.mobile.bulkPartial';
+            const summary = failed > 0 ? t(bulkPartialKey, { created, failed }) : t(bulkOkKey, { created });
             const detail = rowErrors.length ? `\n${rowErrors.join('\n')}` : '';
             setBulkFeedback({
                 type: failed > 0 ? 'err' : 'ok',
@@ -358,13 +437,19 @@ export default function GHGCategoryDetail() {
             setBulkFile(null);
             await loadEntries();
             if (created > 0) {
+                const dashMsg = isStationaryCombustion
+                    ? t('ghg.stationary.dashboardAfterBulk')
+                    : t('ghg.mobile.dashboardAfterBulk');
                 navigate('/', {
                     replace: false,
-                    state: { fromSubmit: true, submitMessage: t('ghg.stationary.dashboardAfterBulk') },
+                    state: { fromSubmit: true, submitMessage: dashMsg },
                 });
             }
         } catch (err) {
-            setBulkFeedback({ type: 'err', text: err?.message || t('ghg.stationary.bulkError') });
+            setBulkFeedback({
+                type: 'err',
+                text: err?.message || (isStationaryCombustion ? t('ghg.stationary.bulkError') : t('ghg.mobile.bulkError')),
+            });
         } finally {
             setBulkUploading(false);
         }
@@ -391,13 +476,38 @@ export default function GHGCategoryDetail() {
         return true;
     };
 
+    const validateMobileManual = () => {
+        const amount = parseFloat(String(activityAmount).replace(',', '.'));
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setSubmitFeedback({ type: 'err', text: t('ghg.form.invalidAmount') });
+            return false;
+        }
+        if (!mcVehicleType.trim() && !mcFacility.trim()) {
+            setSubmitFeedback({ type: 'err', text: t('ghg.mobile.vehicleOrFacilityRequired') });
+            return false;
+        }
+        if (!stFuelUsed.trim()) {
+            setSubmitFeedback({ type: 'err', text: t('ghg.mobile.fuelUsedRequired') });
+            return false;
+        }
+        if (!stDate) {
+            setSubmitFeedback({ type: 'err', text: t('ghg.mobile.dateRequired') });
+            return false;
+        }
+        return true;
+    };
+
     const handleSubmitForm = async (e) => {
         e.preventDefault();
         if (!hasApi || !slug) return;
 
-        if (isStationaryCombustion && stManualPhase === 'edit') {
+        if (isWorkbookScope1 && stManualPhase === 'edit') {
             setSubmitFeedback(null);
-            if (!validateStationaryManual()) return;
+            if (isStationaryCombustion) {
+                if (!validateStationaryManual()) return;
+            } else if (!validateMobileManual()) {
+                return;
+            }
             setStManualPhase('review');
             return;
         }
@@ -428,6 +538,21 @@ export default function GHGCategoryDetail() {
                     notes: notes.trim() || undefined,
                     dataEntryChannel: 'FORM',
                 };
+            } else if (isMobileCombustion) {
+                if (!validateMobileManual()) {
+                    setSubmitting(false);
+                    return;
+                }
+                payload = {
+                    vehicleType: mcVehicleType.trim(),
+                    fuelUsed: stFuelUsed.trim(),
+                    fuelUsedQuantity: amount,
+                    fuelUsedUnit: stFuelUnit,
+                    facility: mcFacility.trim(),
+                    dateOfTransaction: stDate,
+                    notes: notes.trim() || undefined,
+                    dataEntryChannel: 'FORM',
+                };
             } else {
                 payload = {
                     activityType: activityType.trim(),
@@ -451,6 +576,11 @@ export default function GHGCategoryDetail() {
                 navigate('/', {
                     replace: false,
                     state: { fromSubmit: true, submitMessage: t('ghg.stationary.dashboardAfterManual') },
+                });
+            } else if (isMobileCombustion) {
+                navigate('/', {
+                    replace: false,
+                    state: { fromSubmit: true, submitMessage: t('ghg.mobile.dashboardAfterManual') },
                 });
             }
         } catch (err) {
@@ -551,11 +681,7 @@ export default function GHGCategoryDetail() {
                             </h2>
                             <p className="ghg-add-sub">{t('ghg.addMethodSub')}</p>
                             <div className="ghg-choice-grid">
-                                {[
-                                    { id: 'form', icon: 'fa-file-pen' },
-                                    { id: 'bulk', icon: 'fa-cloud-arrow-up' },
-                                    { id: 'ai', icon: 'fa-wand-magic-sparkles' },
-                                ].map((m) => (
+                                {addMethodChoices.map((m) => (
                                     <article key={m.id} className="ghg-choice-card">
                                         <div className="ghg-choice-card__icon-wrap" aria-hidden="true">
                                             <i className={`fas ${m.icon}`} />
@@ -586,12 +712,20 @@ export default function GHGCategoryDetail() {
                                     <h3 className="ghg-panel-title">{t('ghg.form.questionnaire')}</h3>
                                     {isStationaryCombustion ? (
                                         <p className="ghg-form-hint">{t('ghg.stationary.formIntro')}</p>
+                                    ) : isMobileCombustion ? (
+                                        <p className="ghg-form-hint">{t('ghg.mobile.formIntro')}</p>
                                     ) : (
                                         <p className="ghg-form-hint">{t('ghg.form.climatiqHint')}</p>
                                     )}
-                                    {isStationaryCombustion && stManualPhase === 'review' && (
+                                    {(isStationaryCombustion || isMobileCombustion) && stManualPhase === 'review' && (
                                         <div className="ghg-review-banner" role="status">
-                                            <p>{t('ghg.stationary.reviewBannerManual')}</p>
+                                            <p>
+                                                {t(
+                                                    isStationaryCombustion
+                                                        ? 'ghg.stationary.reviewBannerManual'
+                                                        : 'ghg.mobile.reviewBannerManual'
+                                                )}
+                                            </p>
                                         </div>
                                     )}
                                     {isStationaryCombustion ? (
@@ -716,6 +850,128 @@ export default function GHGCategoryDetail() {
                                                 />
                                             </div>
                                         </>
+                                    ) : isMobileCombustion ? (
+                                        <>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-mc-vehicle">{t('ghg.mobile.vehicleType')}</label>
+                                                <input
+                                                    id="ghg-mc-vehicle"
+                                                    list="ghg-mobile-vehicle-datalist"
+                                                    value={mcVehicleType}
+                                                    onChange={(ev) => setMcVehicleType(ev.target.value)}
+                                                    autoComplete="off"
+                                                    placeholder={t('ghg.mobile.vehiclePlaceholder')}
+                                                />
+                                                <p className="ghg-form-hint ghg-form-hint--tight">{t('ghg.mobile.vehiclePickHint')}</p>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-mc-facility">{t('ghg.mobile.facility')}</label>
+                                                <input
+                                                    id="ghg-mc-facility"
+                                                    list="ghg-mobile-facility-datalist"
+                                                    value={mcFacility}
+                                                    onChange={(ev) => setMcFacility(ev.target.value)}
+                                                    autoComplete="off"
+                                                    placeholder={t('ghg.mobile.facilityPlaceholder')}
+                                                />
+                                                <p className="ghg-form-hint ghg-form-hint--tight">{t('ghg.mobile.facilityPickHint')}</p>
+                                            </div>
+                                            <p className="ghg-form-hint ghg-form-hint--between-fields">
+                                                {t('ghg.mobile.vehicleOrFacilityRule')}
+                                            </p>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-mc-fuel-select">{t('ghg.mobile.fuelUsed')}</label>
+                                                <select
+                                                    id="ghg-mc-fuel-select"
+                                                    value={stFuelSelectKey}
+                                                    onChange={(ev) => {
+                                                        const v = ev.target.value;
+                                                        if (v === '__other__') {
+                                                            setStFuelSelectKey('__other__');
+                                                            setStFuelUsed('');
+                                                        } else {
+                                                            setStFuelSelectKey(v);
+                                                            setStFuelUsed(v);
+                                                        }
+                                                    }}
+                                                >
+                                                    {MOBILE_FUEL_SELECT_PRESETS.map((p) => (
+                                                        <option key={p.value} value={p.value}>
+                                                            {t(p.labelKey)}
+                                                        </option>
+                                                    ))}
+                                                    {mobileExtraPastFuels.length > 0 && (
+                                                        <optgroup label={t('ghg.mobile.fuelOptionGroupPast')}>
+                                                            {mobileExtraPastFuels.map((name) => (
+                                                                <option key={name} value={name}>
+                                                                    {name}
+                                                                </option>
+                                                            ))}
+                                                        </optgroup>
+                                                    )}
+                                                    <option value="__other__">{t('ghg.mobile.fuelOptionOther')}</option>
+                                                </select>
+                                                <p className="ghg-form-hint ghg-form-hint--tight">
+                                                    {t('ghg.mobile.fuelSelectHint')}
+                                                </p>
+                                                {stFuelSelectKey === '__other__' && (
+                                                    <textarea
+                                                        id="ghg-mc-fuel-custom"
+                                                        className="ghg-field-fuel-custom"
+                                                        rows={3}
+                                                        value={stFuelUsed}
+                                                        onChange={(ev) => setStFuelUsed(ev.target.value)}
+                                                        placeholder={t('ghg.mobile.fuelUsedPlaceholder')}
+                                                        aria-label={t('ghg.mobile.fuelCustomAria')}
+                                                    />
+                                                )}
+                                            </div>
+                                            <div className="ghg-field-row">
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-mc-amount">{t('ghg.mobile.fuelUsedQuantity')}</label>
+                                                    <input
+                                                        id="ghg-mc-amount"
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        value={activityAmount}
+                                                        onChange={(ev) => setActivityAmount(ev.target.value)}
+                                                    />
+                                                </div>
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-mc-unit">{t('ghg.mobile.fuelUsedUnit')}</label>
+                                                    <select
+                                                        id="ghg-mc-unit"
+                                                        value={stFuelUnit}
+                                                        onChange={(ev) => setStFuelUnit(ev.target.value)}
+                                                    >
+                                                        {MOBILE_TEMPLATE_UNITS.map((u) => (
+                                                            <option key={u} value={u}>
+                                                                {u}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-mc-date">{t('ghg.mobile.dateOfTransaction')}</label>
+                                                <input
+                                                    id="ghg-mc-date"
+                                                    type="date"
+                                                    value={stDate}
+                                                    onChange={(ev) => setStDate(ev.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-mc-notes">{t('ghg.form.notes')}</label>
+                                                <textarea
+                                                    id="ghg-mc-notes"
+                                                    rows={2}
+                                                    value={notes}
+                                                    onChange={(ev) => setNotes(ev.target.value)}
+                                                />
+                                            </div>
+                                        </>
                                     ) : (
                                         <>
                                             <div className="ghg-field">
@@ -805,7 +1061,7 @@ export default function GHGCategoryDetail() {
                                         </p>
                                     )}
                                     <div className="ghg-form-actions ghg-form-actions--split">
-                                        {isStationaryCombustion && stManualPhase === 'review' && (
+                                        {isWorkbookScope1 && stManualPhase === 'review' && (
                                             <button
                                                 type="button"
                                                 className="ghg-btn ghg-btn-secondary"
@@ -815,17 +1071,29 @@ export default function GHGCategoryDetail() {
                                                     setSubmitFeedback(null);
                                                 }}
                                             >
-                                                {t('ghg.stationary.backToEdit')}
+                                                {t(
+                                                    isStationaryCombustion
+                                                        ? 'ghg.stationary.backToEdit'
+                                                        : 'ghg.mobile.backToEdit'
+                                                )}
                                             </button>
                                         )}
                                         <button type="submit" className="ghg-btn ghg-btn-primary" disabled={submitting}>
                                             {submitting
                                                 ? t('ghg.form.submitting')
-                                                : !isStationaryCombustion
+                                                : !isWorkbookScope1
                                                   ? t('ghg.form.submit')
                                                   : stManualPhase === 'edit'
-                                                    ? t('ghg.stationary.continueToReview')
-                                                    : t('ghg.stationary.submitToInventory')}
+                                                    ? t(
+                                                          isStationaryCombustion
+                                                              ? 'ghg.stationary.continueToReview'
+                                                              : 'ghg.mobile.continueToReview'
+                                                      )
+                                                    : t(
+                                                          isStationaryCombustion
+                                                              ? 'ghg.stationary.submitToInventory'
+                                                              : 'ghg.mobile.submitToInventory'
+                                                      )}
                                         </button>
                                     </div>
                                 </div>
@@ -860,7 +1128,7 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'bulk' && hasApi && isStationaryCombustion && (
+                    {addStep === 'bulk' && hasApi && isWorkbookScope1 && (
                         <div className="ghg-method-workspace">
                             <button type="button" className="ghg-back-to-methods" onClick={() => setAddStep(null)}>
                                 <i className="fas fa-arrow-left" aria-hidden />
@@ -870,9 +1138,9 @@ export default function GHGCategoryDetail() {
                                 <h3 className="ghg-panel-title">{t('ghg.bulk.title')}</h3>
                                 {bulkStep === 'file' && (
                                     <>
-                                        <p className="ghg-placeholder-text">{t('ghg.stationary.bulkIntro')}</p>
+                                        <p className="ghg-placeholder-text">{t(`${wbBulk}.bulkIntro`)}</p>
                                         <ul className="ghg-bulk-list">
-                                            {STATIONARY_TEMPLATE_COLUMNS.map((col) => (
+                                            {wbTemplateColumns.map((col) => (
                                                 <li key={col}>
                                                     <code className="ghg-code">{col}</code>
                                                 </li>
@@ -882,13 +1150,13 @@ export default function GHGCategoryDetail() {
                                             <button
                                                 type="button"
                                                 className="ghg-btn ghg-btn-secondary"
-                                                onClick={handleDownloadStationaryTemplate}
+                                                onClick={handleDownloadWorkbookTemplate}
                                             >
-                                                {t('ghg.stationary.downloadTemplate')}
+                                                {t(`${wbBulk}.downloadTemplate`)}
                                             </button>
                                         </div>
                                         <div className="ghg-field ghg-field--bulk-file">
-                                            <label htmlFor="ghg-bulk-file">{t('ghg.stationary.selectFile')}</label>
+                                            <label htmlFor="ghg-bulk-file">{t(`${wbBulk}.selectFile`)}</label>
                                             <input
                                                 id="ghg-bulk-file"
                                                 type="file"
@@ -909,29 +1177,31 @@ export default function GHGCategoryDetail() {
                                                 disabled={!bulkFile || bulkUploading}
                                                 onClick={handleBulkPreviewFile}
                                             >
-                                                {bulkUploading
-                                                    ? t('ghg.stationary.bulkParsing')
-                                                    : t('ghg.stationary.bulkParseReview')}
+                                                {bulkUploading ? t(`${wbBulk}.bulkParsing`) : t(`${wbBulk}.bulkParseReview`)}
                                             </button>
                                         </div>
                                     </>
                                 )}
                                 {bulkStep === 'review' && (
                                     <>
-                                        <p className="ghg-form-hint">{t('ghg.stationary.bulkReviewIntro')}</p>
+                                        <p className="ghg-form-hint">{t(`${wbBulk}.bulkReviewIntro`)}</p>
                                         <div className="ghg-bulk-preview-wrap">
                                             <table className="ghg-bulk-preview-table">
                                                 <thead>
                                                     <tr>
                                                         <th>#</th>
-                                                        <th>{t('ghg.stationary.asset')}</th>
-                                                        <th>{t('ghg.stationary.fuelUsed')}</th>
-                                                        <th>{t('ghg.stationary.fuelUsedQuantity')}</th>
-                                                        <th>{t('ghg.stationary.fuelUsedUnit')}</th>
-                                                        <th>{t('ghg.stationary.facility')}</th>
-                                                        <th>{t('ghg.stationary.dateOfTransaction')}</th>
-                                                        <th>{t('ghg.stationary.bulkColStatus')}</th>
-                                                        <th>{t('ghg.stationary.bulkColMapped')}</th>
+                                                        <th>
+                                                            {isStationaryCombustion
+                                                                ? t('ghg.stationary.asset')
+                                                                : t('ghg.mobile.vehicleType')}
+                                                        </th>
+                                                        <th>{t(`${wbBulk}.fuelUsed`)}</th>
+                                                        <th>{t(`${wbBulk}.fuelUsedQuantity`)}</th>
+                                                        <th>{t(`${wbBulk}.fuelUsedUnit`)}</th>
+                                                        <th>{t(`${wbBulk}.facility`)}</th>
+                                                        <th>{t(`${wbBulk}.dateOfTransaction`)}</th>
+                                                        <th>{t(`${wbBulk}.bulkColStatus`)}</th>
+                                                        <th>{t(`${wbBulk}.bulkColMapped`)}</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -948,17 +1218,33 @@ export default function GHGCategoryDetail() {
                                                             <td>
                                                                 <input
                                                                     className="ghg-bulk-cell-input"
-                                                                    list="ghg-stationary-asset-datalist"
-                                                                    value={row.input.asset ?? ''}
+                                                                    list={
+                                                                        isStationaryCombustion
+                                                                            ? 'ghg-stationary-asset-datalist'
+                                                                            : 'ghg-mobile-vehicle-datalist'
+                                                                    }
+                                                                    value={
+                                                                        isStationaryCombustion
+                                                                            ? (row.input.asset ?? '')
+                                                                            : (row.input.vehicleType ?? '')
+                                                                    }
                                                                     onChange={(ev) =>
-                                                                        updateBulkRowInput(row.clientId, 'asset', ev.target.value)
+                                                                        updateBulkRowInput(
+                                                                            row.clientId,
+                                                                            isStationaryCombustion ? 'asset' : 'vehicleType',
+                                                                            ev.target.value
+                                                                        )
                                                                     }
                                                                 />
                                                             </td>
                                                             <td>
                                                                 <input
                                                                     className="ghg-bulk-cell-input"
-                                                                    list="ghg-stationary-fuel-datalist"
+                                                                    list={
+                                                                        isStationaryCombustion
+                                                                            ? 'ghg-stationary-fuel-datalist'
+                                                                            : 'ghg-mobile-fuel-datalist'
+                                                                    }
                                                                     value={row.input.fuelUsed ?? ''}
                                                                     onChange={(ev) =>
                                                                         updateBulkRowInput(row.clientId, 'fuelUsed', ev.target.value)
@@ -994,7 +1280,11 @@ export default function GHGCategoryDetail() {
                                                             <td>
                                                                 <input
                                                                     className="ghg-bulk-cell-input"
-                                                                    list="ghg-stationary-facility-datalist"
+                                                                    list={
+                                                                        isStationaryCombustion
+                                                                            ? 'ghg-stationary-facility-datalist'
+                                                                            : 'ghg-mobile-facility-datalist'
+                                                                    }
                                                                     value={row.input.facility ?? ''}
                                                                     onChange={(ev) =>
                                                                         updateBulkRowInput(row.clientId, 'facility', ev.target.value)
@@ -1017,10 +1307,10 @@ export default function GHGCategoryDetail() {
                                                             <td>
                                                                 <span className={`ghg-bulk-status ghg-bulk-status--${row.status}`}>
                                                                     {row.status === 'edited'
-                                                                        ? t('ghg.stationary.bulkStatusEdited')
+                                                                        ? t(`${wbBulk}.bulkStatusEdited`)
                                                                         : row.status === 'valid'
-                                                                          ? t('ghg.stationary.bulkStatusValid')
-                                                                          : t('ghg.stationary.bulkStatusInvalid')}
+                                                                          ? t(`${wbBulk}.bulkStatusValid`)
+                                                                          : t(`${wbBulk}.bulkStatusInvalid`)}
                                                                 </span>
                                                                 {row.errors?.length > 0 && (
                                                                     <p className="ghg-bulk-row-err">{row.errors.join(' ')}</p>
@@ -1042,7 +1332,7 @@ export default function GHGCategoryDetail() {
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <p className="ghg-form-hint ghg-form-hint--tight">{t('ghg.stationary.bulkEditedHint')}</p>
+                                        <p className="ghg-form-hint ghg-form-hint--tight">{t(`${wbBulk}.bulkEditedHint`)}</p>
                                         <div className="ghg-form-actions ghg-form-actions--split">
                                             <button
                                                 type="button"
@@ -1054,7 +1344,7 @@ export default function GHGCategoryDetail() {
                                                     setBulkFeedback(null);
                                                 }}
                                             >
-                                                {t('ghg.stationary.bulkBackToFile')}
+                                                {t(`${wbBulk}.bulkBackToFile`)}
                                             </button>
                                             <button
                                                 type="button"
@@ -1062,9 +1352,7 @@ export default function GHGCategoryDetail() {
                                                 disabled={bulkUploading || bulkReviewRows.length === 0}
                                                 onClick={handleBulkConfirmImport}
                                             >
-                                                {bulkUploading
-                                                    ? t('ghg.stationary.bulkConfirming')
-                                                    : t('ghg.stationary.bulkConfirmImport')}
+                                                {bulkUploading ? t(`${wbBulk}.bulkConfirming`) : t(`${wbBulk}.bulkConfirmImport`)}
                                             </button>
                                         </div>
                                     </>
@@ -1084,7 +1372,7 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'bulk' && hasApi && !isStationaryCombustion && (
+                    {addStep === 'bulk' && hasApi && !isWorkbookScope1 && (
                         <div className="ghg-method-workspace">
                             <button type="button" className="ghg-back-to-methods" onClick={() => setAddStep(null)}>
                                 <i className="fas fa-arrow-left" aria-hidden />
@@ -1103,7 +1391,7 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'ai' && (
+                    {addStep === 'ai' && isStationaryCombustion && (
                         <div className="ghg-method-workspace">
                             <button type="button" className="ghg-back-to-methods" onClick={() => { setAddStep(null); setAiStep('upload'); setAiFile(null); setAiExtracted(null); setAiFeedback(null); }}>
                                 <i className="fas fa-arrow-left" aria-hidden />
@@ -1434,26 +1722,55 @@ export default function GHGCategoryDetail() {
                     )}
                 </div>
             )}
-            {isStationaryCombustion && (
+            {(isStationaryCombustion || isMobileCombustion) && (
                 <>
-                    <datalist id="ghg-stationary-asset-datalist">
-                        {lookupAssets.map((a) => (
-                            <option key={a} value={a} />
-                        ))}
-                    </datalist>
-                    <datalist id="ghg-stationary-facility-datalist">
-                        {lookupFacilities.map((f) => (
-                            <option key={f} value={f} />
-                        ))}
-                    </datalist>
-                    <datalist id="ghg-stationary-fuel-datalist">
-                        {STATIONARY_FUEL_SELECT_PRESETS.map((p) => (
-                            <option key={p.value} value={p.value} label={t(p.labelKey)} />
-                        ))}
-                        {lookupPastActivityTypes.map((name) => (
-                            <option key={`past-${name}`} value={name} />
-                        ))}
-                    </datalist>
+                    {isStationaryCombustion && (
+                        <>
+                            <datalist id="ghg-stationary-asset-datalist">
+                                {lookupAssets.map((a) => (
+                                    <option key={a} value={a} />
+                                ))}
+                            </datalist>
+                            <datalist id="ghg-stationary-facility-datalist">
+                                {lookupFacilities.map((f) => (
+                                    <option key={f} value={f} />
+                                ))}
+                            </datalist>
+                            <datalist id="ghg-stationary-fuel-datalist">
+                                {STATIONARY_FUEL_SELECT_PRESETS.map((p) => (
+                                    <option key={p.value} value={p.value} label={t(p.labelKey)} />
+                                ))}
+                                {lookupPastActivityTypes.map((name) => (
+                                    <option key={`past-${name}`} value={name} />
+                                ))}
+                            </datalist>
+                        </>
+                    )}
+                    {isMobileCombustion && (
+                        <>
+                            <datalist id="ghg-mobile-vehicle-datalist">
+                                {MOBILE_VEHICLE_SELECT_PRESETS.map((p) => (
+                                    <option key={p.value} value={p.value} label={t(p.labelKey)} />
+                                ))}
+                                {lookupVehicleTypes.map((v) => (
+                                    <option key={`vt-${v}`} value={v} />
+                                ))}
+                            </datalist>
+                            <datalist id="ghg-mobile-facility-datalist">
+                                {lookupFacilities.map((f) => (
+                                    <option key={`m-f-${f}`} value={f} />
+                                ))}
+                            </datalist>
+                            <datalist id="ghg-mobile-fuel-datalist">
+                                {MOBILE_FUEL_SELECT_PRESETS.map((p) => (
+                                    <option key={p.value} value={p.value} label={t(p.labelKey)} />
+                                ))}
+                                {lookupPastActivityTypes.map((name) => (
+                                    <option key={`m-past-${name}`} value={name} />
+                                ))}
+                            </datalist>
+                        </>
+                    )}
                 </>
             )}
         </div>

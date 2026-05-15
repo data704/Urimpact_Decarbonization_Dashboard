@@ -231,3 +231,91 @@ export async function getStationaryCombustionLookupOptions(organizationId: strin
     pastActivityTypes: [...pastTypes].sort((a, b) => a.localeCompare(b)),
   };
 }
+
+function parseVehicleFromNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const m = notes.match(/Vehicle:\s*([^|]+)/i);
+  const s = m?.[1]?.trim();
+  return s || null;
+}
+
+/**
+ * Suggestions for mobile-combustion: facilities from onboarding + past rows;
+ * vehicle types from "Vehicle:" segments in stored notes for this category.
+ */
+export async function getMobileCombustionLookupOptions(organizationId: string | null | undefined): Promise<{
+  facilities: string[];
+  vehicleTypes: string[];
+  pastActivityTypes: string[];
+}> {
+  if (!organizationId) {
+    return { facilities: [], vehicleTypes: [], pastActivityTypes: [] };
+  }
+
+  const facilities = new Set<string>();
+  const vehicleTypes = new Set<string>();
+
+  const org = await prisma.organization.findUnique({
+    where: { id: organizationId },
+    select: { onboardingFacilities: true },
+  });
+
+  const rawFacilities = org?.onboardingFacilities;
+  if (Array.isArray(rawFacilities)) {
+    for (const row of rawFacilities as OnboardingFacilityRow[]) {
+      const n = row?.name?.trim();
+      if (n) facilities.add(n);
+    }
+  }
+
+  const [siteGroups, noteRows, activityGroups] = await Promise.all([
+    prisma.emission.groupBy({
+      by: ['siteName'],
+      where: {
+        organizationId,
+        ghgCategorySlug: 'mobile-combustion',
+        siteName: { not: null },
+      },
+    }),
+    prisma.emission.findMany({
+      where: {
+        organizationId,
+        ghgCategorySlug: 'mobile-combustion',
+      },
+      select: { notes: true },
+      take: 800,
+      orderBy: { calculatedAt: 'desc' },
+    }),
+    prisma.emission.groupBy({
+      by: ['activityType'],
+      where: {
+        organizationId,
+        ghgCategorySlug: 'mobile-combustion',
+      },
+    }),
+  ]);
+
+  for (const g of siteGroups) {
+    const n = g.siteName?.trim();
+    if (n) facilities.add(n);
+  }
+
+  for (const r of noteRows) {
+    const v = parseVehicleFromNotes(r.notes);
+    if (v) vehicleTypes.add(v);
+    const f = parseFacilityFromNotes(r.notes);
+    if (f) facilities.add(f);
+  }
+
+  const pastTypes = new Set<string>();
+  for (const g of activityGroups) {
+    const t = g.activityType?.trim();
+    if (t) pastTypes.add(t);
+  }
+
+  return {
+    facilities: [...facilities].sort((a, b) => a.localeCompare(b)),
+    vehicleTypes: [...vehicleTypes].sort((a, b) => a.localeCompare(b)),
+    pastActivityTypes: [...pastTypes].sort((a, b) => a.localeCompare(b)),
+  };
+}

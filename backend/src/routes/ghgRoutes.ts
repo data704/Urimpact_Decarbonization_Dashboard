@@ -16,6 +16,10 @@ import {
   postStationaryCombustionBulkConfirm,
   postStationaryCombustionAiExtract,
   postStationaryCombustionAiConfirm,
+  getMobileCombustionTemplate,
+  getMobileCombustionLookupOptions,
+  postMobileCombustionBulkPreview,
+  postMobileCombustionBulkConfirm,
 } from '../controllers/ghgController.js';
 import { uploadGhgBulkMemory, uploadReceiptMemory } from '../middleware/upload.js';
 
@@ -35,6 +39,16 @@ router.post(
   postStationaryCombustionBulkPreview
 );
 router.post('/scope-1/categories/stationary-combustion/bulk/confirm', postStationaryCombustionBulkConfirm);
+
+/** Mobile combustion — template download + bulk preview / confirm (Scope 1 only) */
+router.get('/scope-1/categories/mobile-combustion/template', getMobileCombustionTemplate);
+router.get('/scope-1/categories/mobile-combustion/lookup-options', getMobileCombustionLookupOptions);
+router.post(
+  '/scope-1/categories/mobile-combustion/bulk/preview',
+  uploadGhgBulkMemory.single('file'),
+  postMobileCombustionBulkPreview
+);
+router.post('/scope-1/categories/mobile-combustion/bulk/confirm', postMobileCombustionBulkConfirm);
 
 /** AI receipt extraction — upload image/PDF, get structured data; then confirm to persist */
 router.post(

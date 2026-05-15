@@ -602,6 +602,97 @@ export async function getStationaryCombustionLookupOptions() {
 }
 
 /**
+ * Download Excel template for Scope 1 — mobile combustion (sheet "Mobile Combustion").
+ */
+export async function downloadMobileCombustionTemplate() {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/mobile-combustion/template`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 240) || 'Template download failed');
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'mobile-combustion-template.xlsx';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Mobile combustion bulk preview. Form field name: `file`.
+ * @returns { rows, summary }
+ */
+export async function previewMobileCombustionBulk(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/mobile-combustion/bulk/preview`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Preview failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm mobile combustion bulk rows.
+ * Body: { rows: Array<{ vehicleType, fuelUsed, fuelUsedQuantity, fuelUsedUnit, facility, dateOfTransaction, notes?, excelRow? }> }
+ */
+export async function confirmMobileCombustionBulk(rows) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/mobile-combustion/bulk/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * @returns {{ facilities: string[], vehicleTypes: string[], pastActivityTypes: string[] }}
+ */
+export async function getMobileCombustionLookupOptions() {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/mobile-combustion/lookup-options`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Lookup failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  const data = json?.data ?? json;
+  return {
+    facilities: Array.isArray(data?.facilities) ? data.facilities : [],
+    vehicleTypes: Array.isArray(data?.vehicleTypes) ? data.vehicleTypes : [],
+    pastActivityTypes: Array.isArray(data?.pastActivityTypes) ? data.pastActivityTypes : [],
+  };
+}
+
+/**
  * AI receipt extraction — upload receipt image/PDF, get structured stationary combustion data.
  * @returns { asset, fuelUsed, fuelUsedQuantity, fuelUsedUnit, facility, dateOfTransaction, notes, confidence }
  */
