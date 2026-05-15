@@ -22,7 +22,7 @@ const COMPLIANCE_FRAMEWORKS = [
 
 const AI_RECS = [
     { title: 'Prioritize Scope 3 Cat. 1 data collection', desc: 'Assign procurement team to gather supplier emissions data. Est. 3 weeks.' },
-    { title: 'Complete biodiversity site assessment', desc: 'Engage environmental consultant for Plant A & B. Budget: ~$8,000.' },
+    { title: 'Complete biodiversity site assessment', desc: 'Engage environmental consultant for Plant A & B. Budget: ~SAR 30,000.' },
     { title: 'Automate OHS incident reporting', desc: 'Connect existing EHS system via API to close recurring gap.' },
 ];
 
