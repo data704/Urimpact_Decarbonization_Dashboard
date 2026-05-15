@@ -1503,8 +1503,48 @@ section.dashboard-analytics-details {
     border-color: var(--up-teal-mid, #c8edea);
 }
 
+.app-platform .dash-export-btn,
+.dashboard-content--v2 .dash-export-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    min-height: 36px;
+    background: var(--up-teal-dark, #1a9a8f);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(26, 154, 143, 0.2);
+    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.app-platform .dash-export-btn:hover,
+.dashboard-content--v2 .dash-export-btn:hover {
+    background: #158a80;
+    box-shadow: 0 2px 8px rgba(26, 154, 143, 0.28);
+}
+
+.app-platform .dash-export-btn:active,
+.dashboard-content--v2 .dash-export-btn:active {
+    transform: translateY(1px);
+}
+
+.app-platform .dash-export-btn:focus-visible,
+.dashboard-content--v2 .dash-export-btn:focus-visible {
+    outline: 2px solid var(--up-teal, #2bbfb3);
+    outline-offset: 2px;
+}
+
 .dash-export-btn i {
-    margin-right: 6px;
+    font-size: 11px;
+    opacity: 0.95;
 }
 
 .dashboard-kpi-icon--compliance {
