@@ -1,59 +1,122 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { fetchOrganizationMe } from '../../api/client.js';
+import { ISIC_SECTORS } from '../../data/isicRev4GHGSectors.js';
 import './Settings.css';
 
-const COMPANY_PROFILE = [
-    ['Company Name', 'Acme Industries Pvt. Ltd.'],
+const FALLBACK_PROFILE = [
+    ['Company Name', 'Demo'],
     ['Industry', 'Manufacturing'],
-    ['CIN No.', 'U27100MH2018PTC308XXX'],
-    ['GST ID', '27AABCN1234F1Z5'],
-    ['Website', 'www.acmeindustries.com'],
+    ['CR ID', 'CR-00000000'],
+    ['Website', 'www.demo.com'],
     ['Reporting Framework', 'GHG Protocol + GRI Standards'],
-    ['Base Year', '2020'],
-    ['Primary Contact', 'Arjun Sharma – CSO'],
+    ['Base Year', '2026'],
+    ['Primary Contact', 'Ahmad – CSO'],
 ];
 
 const FACILITIES = [
-    { name: 'Plant A', location: 'Mumbai', type: 'Manufacturing', emissions: '18,200 tCO₂e' },
-    { name: 'Plant B', location: 'Pune', type: 'Manufacturing', emissions: '14,100 tCO₂e' },
-    { name: 'Head Office', location: 'Mumbai', type: 'Commercial', emissions: '2,400 tCO₂e' },
-    { name: 'Warehouse', location: 'Chennai', type: 'Logistics', emissions: '3,800 tCO₂e' },
+    { name: 'Plant A', location: 'Mumbai', type: 'Manufacturing', emissions: '18,200 tCO\u2082e' },
+    { name: 'Plant B', location: 'Pune', type: 'Manufacturing', emissions: '14,100 tCO\u2082e' },
+    { name: 'Head Office', location: 'Mumbai', type: 'Commercial', emissions: '2,400 tCO\u2082e' },
+    { name: 'Warehouse', location: 'Chennai', type: 'Logistics', emissions: '3,800 tCO\u2082e' },
 ];
 
-const MODULES = [
-    'GHG Reporting',
-    'ESG Management',
-    'Gap Analysis',
-    'Decarbonisation',
-    'Supply Chain Management',
-    'Business Sustainability',
-];
+/** Build the company profile rows from onboarding organization data */
+function buildProfileFromOrg(org) {
+    const draft = org?.onboardingDraft || {};
+
+    const companyName = org?.companyName || draft.legalName || 'Demo';
+    const crId = draft.commercialRegistrationNumber || 'CR-00000000';
+    const website = companyName && companyName !== 'Demo'
+        ? `www.${companyName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`
+        : 'www.demo.com';
+
+    // Resolve industry from ISIC sector code
+    let industry = 'Manufacturing';
+    if (draft.sectorIsicCode) {
+        const sector = ISIC_SECTORS.find((s) => s.code === draft.sectorIsicCode);
+        if (sector) industry = sector.label || sector.name || industry;
+    }
+
+    const contactName = draft.pocFullName || 'Ahmad';
+    const contactDesignation = draft.pocDesignation || 'CSO';
+
+    return [
+        ['Company Name', companyName],
+        ['Industry', industry],
+        ['CR ID', crId],
+        ['Website', website],
+        ['Reporting Framework', 'GHG Protocol + GRI Standards'],
+        ['Base Year', '2026'],
+        ['Primary Contact', `${contactName} – ${contactDesignation}`],
+    ];
+}
 
 function Settings() {
     const { user } = useAuth();
     const { t, i18n } = useTranslation();
     const [notification, setNotification] = useState(null);
-    const [moduleStates, setModuleStates] = useState(
-        () => Object.fromEntries(MODULES.map((m) => [m, true]))
-    );
-    const [profileData, setProfileData] = useState(COMPANY_PROFILE);
+    const [profileData, setProfileData] = useState(FALLBACK_PROFILE);
+    const [facilitiesData, setFacilitiesData] = useState(FACILITIES);
+    const [editing, setEditing] = useState(false);
+    const [editForm, setEditForm] = useState({});
 
+    // Fetch onboarding data from the backend and populate the profile
     useEffect(() => {
-        if (user?.company != null && user.company !== '') {
-            setProfileData((prev) =>
-                prev.map(([k, v]) => (k === 'Company Name' ? [k, user.company] : [k, v]))
-            );
-        }
-    }, [user?.company]);
+        let cancelled = false;
+        (async () => {
+            try {
+                const data = await fetchOrganizationMe();
+                const org = data.organization || data;
+                if (!cancelled) {
+                    const profile = buildProfileFromOrg(org);
+                    setProfileData(profile);
+
+                    // Populate facilities from onboarding if available
+                    const draft = org?.onboardingDraft || {};
+                    if (Array.isArray(draft.facilities) && draft.facilities.length > 0) {
+                        setFacilitiesData(
+                            draft.facilities.map((f) => ({
+                                name: f.name || 'Unnamed',
+                                location: f.location || '—',
+                                type: (f.facilityType || 'Other').replace(/_/g, ' '),
+                                emissions: '—',
+                            }))
+                        );
+                    }
+                }
+            } catch (_) {
+                // If API fails, keep fallback data but still apply user.company if available
+                if (!cancelled && user?.company) {
+                    setProfileData((prev) =>
+                        prev.map(([k, v]) => (k === 'Company Name' ? [k, user.company] : [k, v]))
+                    );
+                }
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [user?.organizationId, user?.company]);
 
     const showNotification = (message, type = 'success') => {
         setNotification({ message, type });
         setTimeout(() => setNotification(null), 3000);
     };
 
-    const toggleModule = (mod) => {
-        setModuleStates((prev) => ({ ...prev, [mod]: !prev[mod] }));
+    const startEditing = () => {
+        setEditForm(Object.fromEntries(profileData));
+        setEditing(true);
+    };
+
+    const saveEditing = () => {
+        setProfileData(Object.entries(editForm));
+        setEditing(false);
+        showNotification('Profile updated successfully');
+    };
+
+    const cancelEditing = () => {
+        setEditing(false);
+        setEditForm({});
     };
 
     return (
@@ -89,20 +152,55 @@ function Settings() {
                 {/* Company Profile */}
                 <div className="cm-card">
                     <div className="cm-card-title">Company Profile</div>
-                    {profileData.map(([key, val]) => (
-                        <div key={key} className="cm-profile-row">
-                            <span className="cm-profile-key">{key}</span>
-                            <span className="cm-profile-val">{val}</span>
-                        </div>
-                    ))}
-                    <button
-                        type="button"
-                        className="cm-btn cm-btn--outline cm-btn--sm"
-                        style={{ marginTop: 14 }}
-                        onClick={() => showNotification('Profile edit coming soon')}
-                    >
-                        Edit Profile
-                    </button>
+                    {editing ? (
+                        <>
+                            {Object.entries(editForm).map(([key, val]) => (
+                                <div key={key} className="cm-profile-row">
+                                    <span className="cm-profile-key">{key}</span>
+                                    <input
+                                        className="cm-profile-input"
+                                        value={val}
+                                        onChange={(e) =>
+                                            setEditForm((prev) => ({ ...prev, [key]: e.target.value }))
+                                        }
+                                    />
+                                </div>
+                            ))}
+                            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
+                                <button
+                                    type="button"
+                                    className="cm-btn cm-btn--primary cm-btn--sm"
+                                    onClick={saveEditing}
+                                >
+                                    Save
+                                </button>
+                                <button
+                                    type="button"
+                                    className="cm-btn cm-btn--outline cm-btn--sm"
+                                    onClick={cancelEditing}
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {profileData.map(([key, val]) => (
+                                <div key={key} className="cm-profile-row">
+                                    <span className="cm-profile-key">{key}</span>
+                                    <span className="cm-profile-val">{val}</span>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                className="cm-btn cm-btn--outline cm-btn--sm"
+                                style={{ marginTop: 14 }}
+                                onClick={startEditing}
+                            >
+                                Edit Profile
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 {/* Right column: Facilities + Modules */}
@@ -110,7 +208,7 @@ function Settings() {
                     {/* Facilities */}
                     <div className="cm-card" style={{ marginBottom: 14 }}>
                         <div className="cm-card-title">Facilities</div>
-                        {FACILITIES.map((f) => (
+                        {facilitiesData.map((f) => (
                             <div key={f.name} className="cm-facility-row">
                                 <div className="cm-facility-avatar">{f.name[0]}</div>
                                 <div className="cm-facility-info">
@@ -127,17 +225,9 @@ function Settings() {
                     {/* Modules Enabled */}
                     <div className="cm-card">
                         <div className="cm-card-title">Modules Enabled</div>
-                        {MODULES.map((mod) => (
+                        {['GHG Reporting', 'ESG Management', 'Gap Analysis', 'Decarbonisation', 'Supply Chain Management', 'Business Sustainability'].map((mod) => (
                             <div key={mod} className="cm-module-row">
                                 <div className="cm-module-name">{mod}</div>
-                                <label className="cm-toggle">
-                                    <input
-                                        type="checkbox"
-                                        checked={moduleStates[mod]}
-                                        onChange={() => toggleModule(mod)}
-                                    />
-                                    <span className="cm-toggle-slider" />
-                                </label>
                             </div>
                         ))}
                     </div>

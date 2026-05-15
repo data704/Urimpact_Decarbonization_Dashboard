@@ -7,7 +7,7 @@ const GAP_ITEMS = [
     { id: 1, title: 'Scope 3 – Purchased Goods & Services data missing', desc: 'Category 1 has no entries for 2024. Required for GHG Protocol compliance.', severity: 'high', framework: 'GHG Protocol' },
     { id: 2, title: 'GRI 304 – Biodiversity assessment incomplete', desc: 'Only 2 of 8 disclosure items completed. Site impact study pending.', severity: 'high', framework: 'GRI Standards' },
     { id: 3, title: 'ESG – Social risk assessment not started', desc: 'GRI 403 Occupational Health & Safety section has 0% completion.', severity: 'high', framework: 'GRI Standards' },
-    { id: 4, title: 'Water recycling metrics below target', desc: 'Current 42% vs 60% target. Plant B has no water recycling data.', severity: 'medium', framework: 'BRSR' },
+    { id: 4, title: 'Water recycling metrics below target', desc: 'Current 42% vs 60% target. Plant B has no water recycling data.', severity: 'medium', framework: 'IFRS S1' },
     { id: 5, title: 'OHS incident reporting gap', desc: 'Q3 and Q4 incident data not submitted for Warehouse – Chennai.', severity: 'medium', framework: 'GRI Standards' },
     { id: 6, title: 'Energy intensity ratio not calculated', desc: 'Missing revenue denominator for GRI 302-3 disclosure.', severity: 'low', framework: 'GRI Standards' },
 ];
@@ -15,8 +15,8 @@ const GAP_ITEMS = [
 const COMPLIANCE_FRAMEWORKS = [
     { name: 'GHG Protocol', pct: 89 },
     { name: 'GRI Standards', pct: 78 },
-    { name: 'BRSR', pct: 71 },
-    { name: 'TCFD', pct: 62 },
+    { name: 'IFRS S1', pct: 72 },
+    { name: 'IFRS S2', pct: 62 },
     { name: 'CDP', pct: 55 },
 ];
 

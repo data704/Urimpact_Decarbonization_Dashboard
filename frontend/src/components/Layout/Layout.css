@@ -820,12 +820,20 @@
     height: 15px;
 }
 
-.header-page-title {
-    margin: 0;
-    font-size: 1.125rem;
-    font-weight: 700;
-    color: #0f172a;
-    letter-spacing: -0.02em;
+/* Page title lives in page content (.up-pt); topbar uses breadcrumb only */
+.app-platform .header-page-title {
+    display: none !important;
+}
+
+.app-platform .header .search-box {
+    width: 200px;
+    max-width: 28vw;
+    flex-shrink: 1;
+}
+
+.app-platform .header-right {
+    gap: 10px;
+    flex-shrink: 0;
 }
 
 .header-left {

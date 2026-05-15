@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import './SupplyChain.css';
 
 const DUMMY_SUPPLIERS = [
-    { name: 'Tata Steel', cat: 'Raw Materials', tier: 'Tier 1', score: 82, emissions: '12,400', risk: 'Low' },
-    { name: 'DHL Express', cat: 'Logistics', tier: 'Tier 1', score: 74, emissions: '4,800', risk: 'Medium' },
-    { name: 'Reliance Petro.', cat: 'Fuel', tier: 'Tier 1', score: 61, emissions: '8,200', risk: 'High' },
-    { name: 'Kirloskar Electric', cat: 'Equipment', tier: 'Tier 2', score: 88, emissions: '2,100', risk: 'Low' },
-    { name: 'Local Packaging', cat: 'Packaging', tier: 'Tier 2', score: 42, emissions: '1,400', risk: 'High' },
+    { name: 'SABIC', cat: 'Raw Materials', tier: 'Tier 1', score: 82, emissions: '12,400', risk: 'Low' },
+    { name: 'Saudi Logistics', cat: 'Logistics', tier: 'Tier 1', score: 74, emissions: '4,800', risk: 'Medium' },
+    { name: 'Saudi Aramco', cat: 'Fuel', tier: 'Tier 1', score: 61, emissions: '8,200', risk: 'High' },
+    { name: 'Saudi Electricity Co.', cat: 'Equipment', tier: 'Tier 2', score: 88, emissions: '2,100', risk: 'Low' },
+    { name: 'Maaden', cat: 'Packaging', tier: 'Tier 2', score: 42, emissions: '1,400', risk: 'High' },
 ];
 
 const KPI_DATA = [

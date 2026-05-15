@@ -2,25 +2,25 @@ import { useTranslation } from 'react-i18next';
 import './BSM.css';
 
 const KPI_DATA = [
-    { label: 'BRSR Completion', value: '84%', bg: '#EAF7F6', color: '#1A9A8F' },
-    { label: 'TCFD Completion', value: '62%', bg: '#E8F4FB', color: '#2980B9' },
+    { label: 'IFRS S1 Completion', value: '72%', bg: '#EAF7F6', color: '#1A9A8F' },
+    { label: 'IFRS S2 Completion', value: '62%', bg: '#E8F4FB', color: '#2980B9' },
     { label: 'CDP Score', value: 'B-', bg: '#E8F8EE', color: '#27AE60' },
     { label: 'GRI Index', value: '76%', bg: '#FEF6E4', color: '#E67E22' },
 ];
 
 const FRAMEWORKS = [
-    { label: 'BRSR', desc: 'Business Responsibility & Sustainability', pct: 84, color: '#1A9A8F' },
-    { label: 'TCFD', desc: 'Task Force on Climate Disclosures', pct: 62, color: '#2980B9' },
+    { label: 'IFRS S1', desc: 'General Sustainability-related Disclosures', pct: 72, color: '#1A9A8F' },
+    { label: 'IFRS S2', desc: 'Climate-related Disclosures', pct: 62, color: '#2980B9' },
     { label: 'GRI Standards', desc: 'Global Reporting Initiative', pct: 78, color: '#27AE60' },
     { label: 'CDP', desc: 'Carbon Disclosure Project', pct: 55, color: '#8E44AD' },
     { label: 'SASB', desc: 'Sustainability Accounting Standards', pct: 48, color: '#E67E22' },
 ];
 
 const DISCLOSURES = [
-    { label: 'BRSR Annual Report', date: 'Mar 31, 2025', cls: 'bsm-badge--red' },
-    { label: 'TCFD Climate Report', date: 'Apr 15, 2025', cls: 'bsm-badge--amber' },
-    { label: 'CDP Response', date: 'Aug 01, 2025', cls: 'bsm-badge--blue' },
-    { label: 'GRI Index Publication', date: 'Sep 30, 2025', cls: 'bsm-badge--gray' },
+    { label: 'IFRS S1 Report', date: 'Mar 31, 2026', cls: 'bsm-badge--red' },
+    { label: 'IFRS S2 Climate Report', date: 'Apr 15, 2026', cls: 'bsm-badge--amber' },
+    { label: 'CDP Response', date: 'Aug 01, 2026', cls: 'bsm-badge--blue' },
+    { label: 'GRI Index Publication', date: 'Sep 30, 2026', cls: 'bsm-badge--gray' },
 ];
 
 export default function BSM() {

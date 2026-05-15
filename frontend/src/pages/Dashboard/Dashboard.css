@@ -970,16 +970,30 @@
 
 /* ========== Dashboard v2 (mock-aligned) ========== */
 .dashboard-content--v2 {
-    padding: 28px 28px 40px;
+    padding: 0 0 40px;
     max-width: 1600px;
     margin: 0 auto;
 }
 
-.dashboard-content--v2 .page-header h1 {
-    font-size: 1.5rem;
-    font-weight: 800;
-    color: #0f172a;
-    letter-spacing: -0.03em;
+/* Hero header — follow platform-v2 .up-ph / .up-pt (no duplicate oversized title) */
+.dashboard-content--v2 .page-header.up-ph {
+    align-items: center;
+    margin-bottom: 22px;
+    padding-top: 4px;
+}
+
+.dashboard-content--v2 .page-header .up-pt {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--up-text, #1a2e2b);
+    letter-spacing: normal;
+    margin: 0 0 3px;
+}
+
+.dashboard-content--v2 .page-header .up-ps {
+    margin: 0;
+    font-size: 12px;
+    color: var(--up-text-sub, #6b8a85);
 }
 
 .dashboard-filters-details {
@@ -1481,15 +1495,18 @@ section.dashboard-analytics-details {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
 }
 
 .dash-period-chip {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 7px 13px;
-    background: #fff;
+    gap: 7px;
+    height: 34px;
+    padding: 0 13px;
+    background: var(--up-card, #fff);
     border: 1px solid var(--up-border, #e4edeb);
     border-radius: 8px;
     font-size: 12px;
@@ -1497,10 +1514,17 @@ section.dashboard-analytics-details {
     color: var(--up-text, #1a2e2b);
     cursor: pointer;
     font-family: inherit;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dash-period-chip i {
+    font-size: 11px;
+    color: var(--up-text-sub, #6b8a85);
 }
 
 .dash-period-chip:hover {
     border-color: var(--up-teal-mid, #c8edea);
+    background: var(--up-teal-bg, #eaf7f6);
 }
 
 .app-platform .dash-export-btn,
@@ -1508,9 +1532,9 @@ section.dashboard-analytics-details {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 8px 16px;
-    min-height: 36px;
+    gap: 7px;
+    height: 34px;
+    padding: 0 14px;
     background: var(--up-teal-dark, #1a9a8f);
     color: #fff;
     border: none;
@@ -1518,22 +1542,20 @@ section.dashboard-analytics-details {
     font-family: inherit;
     font-size: 12px;
     font-weight: 600;
-    line-height: 1.2;
+    line-height: 1;
     cursor: pointer;
     white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(26, 154, 143, 0.2);
-    transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    transition: background 0.15s ease;
 }
 
 .app-platform .dash-export-btn:hover,
 .dashboard-content--v2 .dash-export-btn:hover {
     background: #158a80;
-    box-shadow: 0 2px 8px rgba(26, 154, 143, 0.28);
 }
 
 .app-platform .dash-export-btn:active,
 .dashboard-content--v2 .dash-export-btn:active {
-    transform: translateY(1px);
+    background: #127a72;
 }
 
 .app-platform .dash-export-btn:focus-visible,
@@ -1544,7 +1566,6 @@ section.dashboard-analytics-details {
 
 .dash-export-btn i {
     font-size: 11px;
-    opacity: 0.95;
 }
 
 .dashboard-kpi-icon--compliance {

@@ -13,7 +13,7 @@ const COURSES = [
     { title: 'GRI Standards – Environmental', cat: 'ESG Reporting', dur: '6h', level: 'Intermediate', pct: 65, color: '#27AE60', bg: '#E8F8EE' },
     { title: 'Net Zero Strategy & Decarb.', cat: 'Strategy', dur: '5h', level: 'Advanced', pct: 30, color: '#2980B9', bg: '#E8F4FB' },
     { title: 'Supply Chain Sustainability', cat: 'Supply Chain', dur: '3h', level: 'Beginner', pct: 0, color: '#E67E22', bg: '#FEF6E4' },
-    { title: 'TCFD Reporting Framework', cat: 'Compliance', dur: '4h', level: 'Intermediate', pct: 0, color: '#8E44AD', bg: '#F4E8FB' },
+    { title: 'IFRS S1 & S2 Reporting Framework', cat: 'Compliance', dur: '4h', level: 'Intermediate', pct: 0, color: '#8E44AD', bg: '#F4E8FB' },
     { title: 'Carbon Markets & Offsetting', cat: 'Finance', dur: '2h 30m', level: 'Advanced', pct: 0, color: '#E74C3C', bg: '#FDEAEA' },
 ];
 

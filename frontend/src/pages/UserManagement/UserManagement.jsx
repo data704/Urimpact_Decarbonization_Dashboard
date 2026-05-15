@@ -15,31 +15,24 @@ const ROLE_OPTIONS = [
 const PLAN_DISPLAY = {
     ENTERPRISE: {
         planKey: 'planEnterprise',
-        billingKey: 'billingAnnual',
+        billingKey: 'billingMonthly',
         amountValueKey: 'amountEnterpriseValue',
         supportKey: 'supportDedicated',
         descKey: 'planDescEnterprise',
     },
-    PREMIUM: {
-        planKey: 'planPremium',
-        billingKey: 'billingAnnual',
-        amountValueKey: 'amountPremiumValue',
-        supportKey: 'supportPriority',
-        descKey: 'planDescPremium',
-    },
-    STANDARD: {
-        planKey: 'planStandard',
+    PROFESSIONAL: {
+        planKey: 'planProfessional',
         billingKey: 'billingMonthly',
-        amountValueKey: 'amountStandardValue',
-        supportKey: 'supportEmail',
-        descKey: 'planDescStandard',
+        amountValueKey: 'amountProfessionalValue',
+        supportKey: 'supportPriority',
+        descKey: 'planDescProfessional',
     },
-    FREE: {
-        planKey: 'planFree',
-        billingKey: 'billingNone',
-        amountValueKey: 'amountFreeValue',
-        supportKey: 'supportCommunity',
-        descKey: 'planDescFree',
+    STARTER: {
+        planKey: 'planStarter',
+        billingKey: 'billingMonthly',
+        amountValueKey: 'amountStarterValue',
+        supportKey: 'supportEmail',
+        descKey: 'planDescStarter',
     },
 };
 
@@ -227,8 +220,8 @@ function UserManagement() {
     const rolesUser = rolesUserId ? users.find((x) => x.id === rolesUserId) : null;
 
     const subscriptionMeta = useMemo(() => {
-        const planCode = String(currentUser?.subscriptionPlan || 'STANDARD').toUpperCase();
-        const display = PLAN_DISPLAY[planCode] || PLAN_DISPLAY.STANDARD;
+        const planCode = String(currentUser?.subscriptionPlan || 'STARTER').toUpperCase();
+        const display = PLAN_DISPLAY[planCode] || PLAN_DISPLAY.STARTER;
         const max = organizationLimit?.maxUsers ?? 3;
         const active = organizationLimit?.userCount ?? users.filter((u) => u.isActive).length;
         const renewal = new Date();

@@ -117,9 +117,10 @@ function Header({ onMenuToggle }) {
                     <span className="tb-breadcrumb-sep" aria-hidden>
                         ›
                     </span>
-                    <span className="tb-breadcrumb-cur">{pageTitle}</span>
+                    <span className="tb-breadcrumb-cur" aria-current="page">
+                        {pageTitle}
+                    </span>
                 </nav>
-                <h1 className="header-page-title">{pageTitle}</h1>
                 <div className="search-box header-search-desktop">
                     <i className="fas fa-search"></i>
                     <input type="search" placeholder={t('common.searchPlaceholder')} />

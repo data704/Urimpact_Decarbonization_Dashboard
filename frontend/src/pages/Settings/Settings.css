@@ -50,6 +50,12 @@
 .cm-profile-row:last-of-type { border-bottom: none; }
 .cm-profile-key { font-size: 12px; color: #6B8A85; width: 160px; flex-shrink: 0; }
 .cm-profile-val { font-size: 12px; font-weight: 500; color: #1A2E2B; }
+.cm-profile-input {
+    font-size: 12px; font-weight: 500; color: #1A2E2B; flex: 1;
+    border: 1px solid #E4EDEB; border-radius: 6px; padding: 5px 8px;
+    font-family: inherit; outline: none; transition: border-color .15s;
+}
+.cm-profile-input:focus { border-color: #1A9A8F; }
 
 /* Facilities */
 .cm-facility-row {

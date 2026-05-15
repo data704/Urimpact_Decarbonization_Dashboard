@@ -335,8 +335,8 @@
     color: var(--up-teal-dark);
 }
 
-.app-platform .header-page-title {
-    display: none;
+.app-platform .header .header-page-title {
+    display: none !important;
 }
 
 .app-platform .search-box {
@@ -504,10 +504,10 @@
 /* ── Page utilities (dashboard & inner pages) ── */
 .app-platform .up-ph {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     margin-bottom: 20px;
-    gap: 14px;
+    gap: 16px;
     flex-wrap: wrap;
 }
 
