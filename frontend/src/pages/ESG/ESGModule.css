@@ -174,6 +174,20 @@
 }
 .esg-radio-label input { accent-color: #1a9a8f; }
 
+/* Checkbox group */
+.esg-checkbox-group { display: flex; flex-direction: column; gap: 8px; }
+
+/* File upload */
+.esg-file-upload {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.esg-file-input { display: none; }
+.esg-file-name {
+    font-size: 12.5px; color: #1a2e2b; font-weight: 500;
+    padding: 4px 10px; background: #f5f8f7; border-radius: 6px;
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .esg-gri3-questions { max-width: 800px; }
 .esg-gri3-question-list {
     list-style: none; margin: 0; padding: 0;

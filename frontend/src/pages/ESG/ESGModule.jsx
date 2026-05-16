@@ -3,7 +3,11 @@ import { useTranslation } from 'react-i18next';
 import ESGGri2OrganizationalForm from './ESGGri2OrganizationalForm.jsx';
 import ESGGri3MaterialTopicsForm from './ESGGri3MaterialTopicsForm.jsx';
 import ESGEnvDisclosureForm from './ESGEnvDisclosureForm.jsx';
+import ESGSocialForm from './ESGSocialForm.jsx';
+import ESGGovernanceForm from './ESGGovernanceForm.jsx';
 import { ENV_FORM_KEYS } from './esgEnvironmentConfig.js';
+import { SOCIAL_FORM_KEYS } from './esgSocialConfig.js';
+import { GOV_FORM_KEYS } from './esgGovernanceConfig.js';
 import './ESGModule.css';
 
 const ESG_KPIS = [
@@ -29,12 +33,14 @@ const ENV_CARDS = [
 ];
 
 const SOCIAL_CARDS = [
-    { gri: 'GRI 401', name: 'Employment', pct: 95 },
-    { gri: 'GRI 403', name: 'Occupational Health & Safety', pct: 88 },
-    { gri: 'GRI 404', name: 'Training and Education', pct: 76 },
-    { gri: 'GRI 405', name: 'Diversity and Equal Opportunity', pct: 82 },
-    { gri: 'GRI 406', name: 'Non-Discrimination', pct: 100 },
-    { gri: 'GRI 408', name: 'Child Labor', pct: 100 },
+    { gri: 'GRI 401', name: 'Employment', pct: 95, formKey: 'gri401' },
+    { gri: 'GRI 402', name: 'Labor / Management Relations', pct: 70, formKey: 'gri402' },
+    { gri: 'GRI 403', name: 'Occupational Health & Safety', pct: 88, formKey: 'gri403' },
+    { gri: 'GRI 404', name: 'Training and Education', pct: 76, formKey: 'gri404' },
+    { gri: 'GRI 405', name: 'Diversity and Equal Opportunity', pct: 82, formKey: 'gri405' },
+    { gri: 'GRI 406', name: 'Non-Discrimination', pct: 100, formKey: 'gri406' },
+    { gri: 'GRI 407', name: 'Freedom of Association & Collective Bargaining', pct: 90, formKey: 'gri407' },
+    { gri: 'GRI 408', name: 'Child Labor', pct: 100, formKey: 'gri408' },
     { gri: 'GRI 409', name: 'Forced Labor', pct: 100 },
     { gri: 'GRI 413', name: 'Local Communities', pct: 65 },
     { gri: 'GRI 414', name: 'Supplier Social Assessment', pct: 58 },
@@ -44,11 +50,13 @@ const SOCIAL_CARDS = [
 ];
 
 const GOV_CARDS = [
-    { gri: 'GRI 201', name: 'Economic Performance', pct: 91 },
-    { gri: 'GRI 202', name: 'Market Presence', pct: 84 },
-    { gri: 'GRI 204', name: 'Procurement Practices', pct: 72 },
-    { gri: 'GRI 205', name: 'Anti-Corruption', pct: 100 },
-    { gri: 'GRI 206', name: 'Anti-Competitive Behaviour', pct: 100 },
+    { gri: 'GRI 201', name: 'Economic Performance', pct: 91, formKey: 'gri201' },
+    { gri: 'GRI 202', name: 'Market Presence', pct: 84, formKey: 'gri202' },
+    { gri: 'GRI 203', name: 'Indirect Economic Impacts', pct: 60, formKey: 'gri203' },
+    { gri: 'GRI 204', name: 'Procurement Practices', pct: 72, formKey: 'gri204' },
+    { gri: 'GRI 205', name: 'Anti-Corruption', pct: 100, formKey: 'gri205' },
+    { gri: 'GRI 206', name: 'Anti-Competitive Behaviour', pct: 100, formKey: 'gri206' },
+    { gri: 'GRI 207', name: 'Tax', pct: 78, formKey: 'gri207' },
 ];
 
 const TABS = [
@@ -126,6 +134,8 @@ export default function ESGModule() {
     const [tab, setTab] = useState('gen');
     const [genView, setGenView] = useState('overview');
     const [envView, setEnvView] = useState(null);
+    const [socView, setSocView] = useState(null);
+    const [govView, setGovView] = useState(null);
 
     return (
         <div className="esg-page">
@@ -167,6 +177,8 @@ export default function ESGModule() {
                             setTab(t2.key);
                             if (t2.key === 'gen') setGenView('overview');
                             if (t2.key === 'env') setEnvView(null);
+                            if (t2.key === 'soc') setSocView(null);
+                            if (t2.key === 'gov') setGovView(null);
                         }}
                     >
                         {t2.label}
@@ -286,7 +298,11 @@ export default function ESGModule() {
                 </div>
             )}
 
-            {tab === 'soc' && (
+            {tab === 'soc' && socView && SOCIAL_FORM_KEYS.has(socView) && (
+                <ESGSocialForm formKey={socView} onBack={() => setSocView(null)} />
+            )}
+
+            {tab === 'soc' && !socView && (
                 <div className="esg-grid-3">
                     {SOCIAL_CARDS.map((c) => (
                         <ESGCard
@@ -296,12 +312,18 @@ export default function ESGModule() {
                             pct={c.pct}
                             griStyle={{ bg: '#E8F4FB', color: '#2980B9' }}
                             iconStyle={{ background: '#E8F4FB', color: '#2980B9' }}
+                            clickable={Boolean(c.formKey)}
+                            onClick={c.formKey ? () => setSocView(c.formKey) : undefined}
                         />
                     ))}
                 </div>
             )}
 
-            {tab === 'gov' && (
+            {tab === 'gov' && govView && GOV_FORM_KEYS.has(govView) && (
+                <ESGGovernanceForm formKey={govView} onBack={() => setGovView(null)} />
+            )}
+
+            {tab === 'gov' && !govView && (
                 <div className="esg-grid-3">
                     {GOV_CARDS.map((c) => (
                         <ESGCard
@@ -311,6 +333,8 @@ export default function ESGModule() {
                             pct={c.pct}
                             griStyle={{ bg: '#F4E8FB', color: '#8E44AD' }}
                             iconStyle={{ background: '#F4E8FB', color: '#8E44AD' }}
+                            clickable={Boolean(c.formKey)}
+                            onClick={c.formKey ? () => setGovView(c.formKey) : undefined}
                         />
                     ))}
                 </div>
