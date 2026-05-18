@@ -19,7 +19,11 @@ import { authLimiter } from '../middleware/rateLimit.js';
 const router = Router();
 
 // Public routes (with rate limiting)
-router.post('/register', authLimiter, register);
+// TEMPORARILY DISABLED — registration closed; only pre-seeded users can log in
+// router.post('/register', authLimiter, register);
+router.post('/register', (_req, res) => {
+  res.status(403).json({ error: 'Registration is currently closed.' });
+});
 router.post('/login', authLimiter, login);
 router.post('/login/verify', authLimiter, verifyLogin);
 router.post('/refresh', authLimiter, refresh);

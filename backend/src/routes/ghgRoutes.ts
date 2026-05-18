@@ -16,6 +16,8 @@ import {
   postStationaryCombustionBulkConfirm,
   postStationaryCombustionAiExtract,
   postStationaryCombustionAiConfirm,
+  postMobileCombustionAiExtract,
+  postMobileCombustionAiConfirm,
   getMobileCombustionTemplate,
   getMobileCombustionLookupOptions,
   postMobileCombustionBulkPreview,
@@ -57,6 +59,14 @@ router.post(
   postStationaryCombustionAiExtract
 );
 router.post('/scope-1/categories/stationary-combustion/ai/confirm', postStationaryCombustionAiConfirm);
+
+/** AI receipt extraction — mobile combustion: upload image/PDF, get structured data; then confirm to persist */
+router.post(
+  '/scope-1/categories/mobile-combustion/ai/extract',
+  uploadReceiptMemory.single('file'),
+  postMobileCombustionAiExtract
+);
+router.post('/scope-1/categories/mobile-combustion/ai/confirm', postMobileCombustionAiConfirm);
 
 /** One emission row per request — Scope 1 category form */
 router.post('/scope-1/categories/:categorySlug/form', postScope1CategoryForm);

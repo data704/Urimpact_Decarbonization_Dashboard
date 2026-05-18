@@ -1,4 +1,4 @@
-import { PrismaClient, UserRole, DocumentType, DocumentStatus, EmissionScope, EmissionCategory } from '@prisma/client';
+import { PrismaClient, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -8,63 +8,66 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 async function main() {
-  console.log('🌱 Starting database seed...');
+  console.log('Starting database seed...');
 
-  // Create Super Admin user
-  const superAdminPassword = await hashPassword('SuperAdmin123!');
-  const superAdmin = await prisma.user.upsert({
-    where: { email: 'superadmin@urimpact.com' },
-    update: {},
-    create: {
-      email: 'superadmin@urimpact.com',
-      password: superAdminPassword,
-      firstName: 'Super',
-      lastName: 'Admin',
-      company: 'URIMPACT',
-      role: UserRole.SUPER_ADMIN,
-      isActive: true,
-      emailVerified: true,
-    },
-  });
-  console.log(`✅ Super Admin created: ${superAdmin.email}`);
-
-  // Create Admin user
-  const adminPassword = await hashPassword('Admin123!');
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@urimpact.com' },
-    update: {},
-    create: {
-      email: 'admin@urimpact.com',
-      password: adminPassword,
-      firstName: 'Admin',
-      lastName: 'User',
-      company: 'URIMPACT',
-      role: UserRole.ADMINISTRATOR,
-      isActive: true,
-      emailVerified: true,
-    },
-  });
-  console.log(`✅ Admin created: ${admin.email}`);
-
-  // Create Demo user
-  const demoPassword = await hashPassword('Demo123!');
-  const demoUser = await prisma.user.upsert({
-    where: { email: 'demo@urimpact.com' },
-    update: {},
-    create: {
-      email: 'demo@urimpact.com',
-      password: demoPassword,
+  const accounts = [
+    {
+      email: 'demo@urimpact.sa',
+      password: 'Demo@2026',
       firstName: 'Demo',
       lastName: 'User',
-      company: 'Demo Company LLC',
-      role: UserRole.DATA_CONTRIBUTOR,
-      isActive: true,
-      emailVerified: true,
+      company: 'URIMPACT Demo',
     },
-  });
-  console.log(`✅ Demo User created: ${demoUser.email}`);
+    {
+      email: 'komal@urimpact.sa',
+      password: 'Komal@121102',
+      firstName: 'Komal',
+      lastName: 'Kaushik',
+      company: 'URIMPACT',
+    },
+    {
+      email: 'b.aldelewy@urimpact.sa',
+      password: 'Admin@123',
+      firstName: 'B',
+      lastName: 'Aldelewy',
+      company: 'URIMPACT',
+    },
+    {
+      email: 'data@urimpact.sa',
+      password: 'Admin@1234',
+      firstName: 'Data',
+      lastName: 'User',
+      company: 'URIMPACT',
+    },
+  ];
 
-  // Create sample emission factors
+  for (const acct of accounts) {
+    const hashedPassword = await hashPassword(acct.password);
+
+    // Create organization for this user
+    const org = await prisma.organization.create({
+      data: { name: acct.company },
+    });
+
+    const user = await prisma.user.upsert({
+      where: { email: acct.email },
+      update: {},
+      create: {
+        email: acct.email,
+        password: hashedPassword,
+        firstName: acct.firstName,
+        lastName: acct.lastName,
+        company: acct.company,
+        organizationId: org.id,
+        role: UserRole.ADMINISTRATOR,
+        isActive: true,
+        emailVerified: true,
+      },
+    });
+    console.log(`User created: ${user.email} (org: ${org.name})`);
+  }
+
+  // Keep emission factors for the platform
   const emissionFactors = [
     {
       activityId: 'electricity-grid-ae-du',
@@ -173,221 +176,19 @@ async function main() {
       create: factor,
     });
   }
-  console.log(`✅ ${emissionFactors.length} emission factors created`);
+  console.log(`${emissionFactors.length} emission factors created`);
 
-  // Create sample documents for demo user
-  const documents = [
-    {
-      userId: demoUser.id,
-      fileName: 'dewa_bill_january_2024.pdf',
-      fileType: 'application/pdf',
-      fileSize: 245000,
-      filePath: 'sample_dewa_bill.pdf',
-      documentType: DocumentType.UTILITY_BILL,
-      status: DocumentStatus.COMPLETED,
-      extractedData: {
-        provider: 'DEWA',
-        region: 'AE-DU',
-        consumption: 45230,
-        consumptionUnit: 'kWh',
-        amount: 15500,
-        currency: 'AED',
-        billingPeriodStart: '2024-01-01',
-        billingPeriodEnd: '2024-01-31',
-      },
-      processedAt: new Date(),
-    },
-    {
-      userId: demoUser.id,
-      fileName: 'dewa_bill_february_2024.pdf',
-      fileType: 'application/pdf',
-      fileSize: 238000,
-      filePath: 'sample_dewa_bill_feb.pdf',
-      documentType: DocumentType.UTILITY_BILL,
-      status: DocumentStatus.COMPLETED,
-      extractedData: {
-        provider: 'DEWA',
-        region: 'AE-DU',
-        consumption: 42150,
-        consumptionUnit: 'kWh',
-        amount: 14200,
-        currency: 'AED',
-        billingPeriodStart: '2024-02-01',
-        billingPeriodEnd: '2024-02-29',
-      },
-      processedAt: new Date(),
-    },
-    {
-      userId: demoUser.id,
-      fileName: 'fuel_receipt_march_2024.jpg',
-      fileType: 'image/jpeg',
-      fileSize: 125000,
-      filePath: 'sample_fuel_receipt.jpg',
-      documentType: DocumentType.FUEL_RECEIPT,
-      status: DocumentStatus.COMPLETED,
-      extractedData: {
-        fuelType: 'diesel',
-        quantity: 150,
-        quantityUnit: 'L',
-        amount: 450,
-        currency: 'AED',
-        documentDate: '2024-03-15',
-      },
-      processedAt: new Date(),
-    },
-  ];
-
-  for (const doc of documents) {
-    await prisma.document.create({ data: doc });
-  }
-  console.log(`✅ ${documents.length} sample documents created`);
-
-  // Create sample emissions for demo user
-  const emissions = [
-    {
-      userId: demoUser.id,
-      scope: EmissionScope.SCOPE_2,
-      category: EmissionCategory.ELECTRICITY,
-      activityType: 'electricity',
-      activityAmount: 45230,
-      activityUnit: 'kWh',
-      region: 'AE-DU',
-      co2e: 18092,
-      co2: 17187,
-      ch4: 0.45,
-      n2o: 0.045,
-      emissionFactor: 0.4,
-      emissionFactorUnit: 'kg/kWh',
-      dataSource: 'Emissions API',
-      dataYear: 2024,
-      billingPeriodStart: new Date('2024-01-01'),
-      billingPeriodEnd: new Date('2024-01-31'),
-      calculatedAt: new Date('2024-02-01'),
-    },
-    {
-      userId: demoUser.id,
-      scope: EmissionScope.SCOPE_2,
-      category: EmissionCategory.ELECTRICITY,
-      activityType: 'electricity',
-      activityAmount: 42150,
-      activityUnit: 'kWh',
-      region: 'AE-DU',
-      co2e: 16860,
-      co2: 16017,
-      ch4: 0.42,
-      n2o: 0.042,
-      emissionFactor: 0.4,
-      emissionFactorUnit: 'kg/kWh',
-      dataSource: 'Emissions API',
-      dataYear: 2024,
-      billingPeriodStart: new Date('2024-02-01'),
-      billingPeriodEnd: new Date('2024-02-29'),
-      calculatedAt: new Date('2024-03-01'),
-    },
-    {
-      userId: demoUser.id,
-      scope: EmissionScope.SCOPE_1,
-      category: EmissionCategory.FUEL_COMBUSTION,
-      activityType: 'diesel',
-      activityAmount: 150,
-      activityUnit: 'L',
-      region: 'AE',
-      co2e: 405,
-      co2: 402,
-      ch4: 0.015,
-      n2o: 0.015,
-      emissionFactor: 2.7,
-      emissionFactorUnit: 'kg/L',
-      dataSource: 'DEFRA',
-      dataYear: 2024,
-      calculatedAt: new Date('2024-03-15'),
-    },
-    {
-      userId: demoUser.id,
-      scope: EmissionScope.SCOPE_2,
-      category: EmissionCategory.ELECTRICITY,
-      activityType: 'electricity',
-      activityAmount: 48500,
-      activityUnit: 'kWh',
-      region: 'AE-DU',
-      co2e: 19400,
-      co2: 18430,
-      ch4: 0.49,
-      n2o: 0.049,
-      emissionFactor: 0.4,
-      emissionFactorUnit: 'kg/kWh',
-      dataSource: 'Emissions API',
-      dataYear: 2024,
-      billingPeriodStart: new Date('2024-03-01'),
-      billingPeriodEnd: new Date('2024-03-31'),
-      calculatedAt: new Date('2024-04-01'),
-    },
-    {
-      userId: demoUser.id,
-      scope: EmissionScope.SCOPE_1,
-      category: EmissionCategory.FUEL_COMBUSTION,
-      activityType: 'diesel',
-      activityAmount: 200,
-      activityUnit: 'L',
-      region: 'AE',
-      co2e: 540,
-      co2: 536,
-      ch4: 0.02,
-      n2o: 0.02,
-      emissionFactor: 2.7,
-      emissionFactorUnit: 'kg/L',
-      dataSource: 'DEFRA',
-      dataYear: 2024,
-      calculatedAt: new Date('2024-04-10'),
-    },
-  ];
-
-  for (const emission of emissions) {
-    await prisma.emission.create({ data: emission });
-  }
-  console.log(`✅ ${emissions.length} sample emissions created`);
-
-  // Create sample audit logs
-  const auditLogs = [
-    {
-      userId: demoUser.id,
-      action: 'USER_LOGIN',
-      resource: 'user',
-      resourceId: demoUser.id,
-      details: { email: demoUser.email },
-      ipAddress: '192.168.1.1',
-    },
-    {
-      userId: demoUser.id,
-      action: 'DOCUMENT_UPLOADED',
-      resource: 'document',
-      details: { fileName: 'dewa_bill_january_2024.pdf' },
-      ipAddress: '192.168.1.1',
-    },
-    {
-      userId: demoUser.id,
-      action: 'EMISSION_CALCULATED',
-      resource: 'emission',
-      details: { activityType: 'electricity', co2e: 18092 },
-      ipAddress: '192.168.1.1',
-    },
-  ];
-
-  for (const log of auditLogs) {
-    await prisma.auditLog.create({ data: log });
-  }
-  console.log(`✅ ${auditLogs.length} audit logs created`);
-
-  console.log('\n🎉 Database seed completed successfully!');
-  console.log('\n📋 Test Accounts:');
-  console.log('   Super Admin: superadmin@urimpact.com / SuperAdmin123!');
-  console.log('   Admin:       admin@urimpact.com / Admin123!');
-  console.log('   Demo User:   demo@urimpact.com / Demo123!');
+  console.log('\nDatabase seed completed!');
+  console.log('\nAccounts:');
+  console.log('   demo@urimpact.sa / Demo@2026');
+  console.log('   komal@urimpact.sa / Komal@121102');
+  console.log('   b.aldelewy@urimpact.sa / Admin@123');
+  console.log('   data@urimpact.sa / Admin@1234');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error('Seed failed:', e);
     process.exit(1);
   })
   .finally(async () => {

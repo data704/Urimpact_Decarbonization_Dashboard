@@ -38,7 +38,7 @@ import {
   buildMobileBulkPreview,
 } from '../services/ghgMobileCombustionBulkService.js';
 import { logUserAction, AuditActions } from '../services/auditService.js';
-import { extractReceiptData } from '../services/receiptExtractionService.js';
+import { extractReceiptData, extractMobileReceiptData } from '../services/receiptExtractionService.js';
 import { logger } from '../utils/logger.js';
 import { canAccessDashboard, canUpload } from '../utils/rolePermissions.js';
 
@@ -745,6 +745,109 @@ export async function postStationaryCombustionAiConfirm(req: AuthRequest, res: R
       sendError(res, error.message, 500);
     } else {
       sendError(res, 'AI confirm failed', 500);
+    }
+  }
+}
+
+/** AI receipt extraction — upload image/PDF, get structured mobile combustion data. */
+export async function postMobileCombustionAiExtract(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file). Accepted: PDF, JPG, PNG.', 400);
+      return;
+    }
+
+    const extracted = await extractMobileReceiptData(file.buffer, file.mimetype, file.originalname);
+    sendSuccess(res, extracted, 'Receipt extracted', 200);
+  } catch (error) {
+    logger.error('AI mobile receipt extraction error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI extraction failed', 500);
+    }
+  }
+}
+
+/** Confirm AI-extracted mobile combustion data — validate, calculate via Climatiq, persist. */
+export async function postMobileCombustionAiConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const validation = validate(mobileCombustionTemplateFormSchema, {
+      ...req.body,
+      dataEntryChannel: 'AI_EXTRACT',
+    });
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    let body: GhgCategoryFormBody;
+    try {
+      body = mapMobileTemplateToGhgBody(
+        {
+          vehicleType: validation.data!.vehicleType ?? '',
+          fuelUsed: validation.data!.fuelUsed ?? '',
+          fuelUsedQuantity: validation.data!.fuelUsedQuantity!,
+          fuelUsedUnit: validation.data!.fuelUsedUnit ?? '',
+          facility: validation.data!.facility ?? '',
+          dateOfTransaction: validation.data!.dateOfTransaction,
+          notes: validation.data!.notes,
+        },
+        'AI_EXTRACT'
+      ) as GhgCategoryFormBody;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const emission = await submitGhgCategoryFormEntry({
+      userId: req.user.userId,
+      organizationId: req.user.organizationId,
+      scope: 'SCOPE_1',
+      categorySlug: 'mobile-combustion',
+      body,
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_CALCULATED,
+      'emission',
+      emission.id,
+      {
+        ghgCategorySlug: 'mobile-combustion',
+        scope: 'SCOPE_1',
+        channel: 'AI_EXTRACT',
+      },
+      req
+    );
+
+    sendSuccess(res, emission, 'AI-extracted emission saved', 201);
+  } catch (error) {
+    logger.error('AI mobile confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI mobile confirm failed', 500);
     }
   }
 }

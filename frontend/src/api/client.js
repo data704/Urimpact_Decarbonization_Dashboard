@@ -736,6 +736,49 @@ export async function aiConfirmReceipt(data) {
 }
 
 /**
+ * AI receipt extraction — upload receipt image/PDF, get structured mobile combustion data.
+ * @returns { vehicleType, fuelUsed, fuelUsedQuantity, fuelUsedUnit, facility, dateOfTransaction, notes, confidence }
+ */
+export async function aiExtractMobileReceipt(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/mobile-combustion/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm AI-extracted mobile combustion receipt data — validate, calculate via Climatiq, persist.
+ * Body: { vehicleType, fuelUsed, fuelUsedQuantity, fuelUsedUnit, facility, dateOfTransaction, notes? }
+ * @returns emission object
+ */
+export async function aiConfirmMobileReceipt(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/mobile-combustion/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
  * Fetch user's emissions list with optional filters. Requires auth.
  * Query: { scope?, category?, ghgCategorySlug?, region?, startDate?, endDate?, page?, limit? }
  * Returns { data: emissions[], pagination: { page, limit, total, totalPages } }.

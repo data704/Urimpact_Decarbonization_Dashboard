@@ -1141,7 +1141,7 @@
     font-size: 0.75rem;
 }
 
-/* ── AI receipt extraction ── */
+/* ── AI receipt extraction — v2 redesign ── */
 .ghg-ai-upload {
     display: flex;
     flex-direction: column;
@@ -1149,9 +1149,10 @@
     gap: 1rem;
 }
 .ghg-ai-desc {
-    color: #64748b;
+    color: #6b8a85;
     text-align: center;
     max-width: 480px;
+    font-size: 12px;
 }
 .ghg-dropzone {
     display: flex;
@@ -1159,22 +1160,23 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border: 2px dashed #cbd5e1;
+    border: 2px dashed #e4edeb;
     border-radius: 12px;
     padding: 2rem 2.5rem;
     cursor: pointer;
-    color: #64748b;
-    transition: border-color 0.2s, background 0.2s;
+    color: #6b8a85;
+    transition: border-color 0.18s, background 0.18s;
     width: 100%;
-    max-width: 420px;
+    background: #f5f8f7;
+    font-size: 13px;
 }
 .ghg-dropzone:hover {
-    border-color: #2563eb;
-    background: #eff6ff;
+    border-color: #2bbfb3;
+    background: #eaf7f6;
 }
 .ghg-dropzone-icon {
     font-size: 2rem;
-    color: #2563eb;
+    color: #1a9a8f;
 }
 
 .ghg-ai-loading {
@@ -1183,11 +1185,11 @@
     align-items: center;
     gap: 1rem;
     padding: 2rem;
-    color: #475569;
+    color: #1a2e2b;
 }
 .ghg-ai-spinner {
     font-size: 2rem;
-    color: #2563eb;
+    color: #1a9a8f;
 }
 
 .ghg-ai-review {
@@ -1202,17 +1204,20 @@
     display: inline-block;
     width: fit-content;
 }
-.ghg-ai-confidence--high { background: #dcfce7; color: #166534; }
-.ghg-ai-confidence--medium { background: #fef9c3; color: #854d0e; }
-.ghg-ai-confidence--low { background: #fee2e2; color: #991b1b; }
+.ghg-ai-confidence--high { background: #e8f8ee; color: #1e8a47; }
+.ghg-ai-confidence--medium { background: #fef6e4; color: #b7770a; }
+.ghg-ai-confidence--low { background: #fdeaea; color: #c0392b; }
 .ghg-ai-review-hint {
-    color: #64748b;
-    font-size: 0.9rem;
+    color: #6b8a85;
+    font-size: 12px;
+    background: #fef6e4;
+    border-radius: 8px;
+    padding: 10px 12px;
+    line-height: 1.5;
 }
 .ghg-ai-actions {
     display: flex;
-    gap: 0.75rem;
-    justify-content: flex-end;
+    gap: 10px;
     flex-wrap: wrap;
 }
 
@@ -1225,8 +1230,623 @@
 }
 .ghg-ai-result {
     font-size: 1.1rem;
-    color: #1e293b;
+    color: #1a2e2b;
 }
+
+/* ── v2 Method cards (mc) ── */
+.ghg-choice-card {
+    background: #fff;
+    border: 2px solid #e4edeb;
+    border-radius: 16px;
+    padding: 26px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.18s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 13px;
+}
+.ghg-choice-card:hover,
+.ghg-choice-card.on {
+    border-color: #1a9a8f;
+    box-shadow: 0 6px 24px rgba(43,191,179,0.12);
+}
+.ghg-choice-card.on {
+    background: #eaf7f6;
+}
+
+.ghg-choice-card__icon-wrap {
+    width: 62px;
+    height: 62px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    border: none;
+    flex-shrink: 0;
+}
+.ghg-choice-card__icon-wrap i {
+    font-size: 1.6rem;
+}
+.ghg-choice-card__icon-wrap--form {
+    background: #eaf7f6;
+    color: #1a9a8f;
+}
+.ghg-choice-card__icon-wrap--bulk {
+    background: #e8f4fb;
+    color: #2980b9;
+}
+.ghg-choice-card__icon-wrap--ai {
+    background: linear-gradient(135deg, #eaf7f6, #f4e8fb);
+    color: #1a9a8f;
+}
+
+.ghg-choice-card__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a2e2b;
+    margin: 0;
+}
+.ghg-choice-card__desc {
+    font-size: 12px;
+    color: #6b8a85;
+    line-height: 1.5;
+    flex: 1;
+    margin: 0;
+}
+.ghg-choice-card__start {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: #1a9a8f;
+    color: #fff;
+    transition: background 0.15s;
+    font-family: inherit;
+    margin-top: auto;
+    width: auto;
+}
+.ghg-choice-card__start:hover {
+    background: #158a80;
+}
+
+/* ── v2 two-column layout ── */
+.ghg-v2-layout {
+    display: grid;
+    grid-template-columns: 1fr 370px;
+    gap: 20px;
+    align-items: start;
+}
+@media (max-width: 960px) {
+    .ghg-v2-layout {
+        grid-template-columns: 1fr;
+    }
+}
+.ghg-v2-layout--bulk {
+    grid-template-columns: 1fr 300px;
+}
+@media (max-width: 960px) {
+    .ghg-v2-layout--bulk {
+        grid-template-columns: 1fr;
+    }
+}
+.ghg-v2-layout--ai {
+    grid-template-columns: 1fr 1fr;
+}
+@media (max-width: 960px) {
+    .ghg-v2-layout--ai {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── v2 card (white box) ── */
+.ghg-v2-card {
+    background: #fff;
+    border: 1px solid #e4edeb;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 14px;
+}
+.ghg-v2-card:last-child {
+    margin-bottom: 0;
+}
+.ghg-v2-card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a2e2b;
+    margin: 0 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* ── v2 sticky sidebar ── */
+.ghg-v2-sidebar {
+    position: sticky;
+    top: 80px;
+}
+
+/* ── v2 form fields ── */
+.ghg-v2-fg {
+    margin-bottom: 14px;
+}
+.ghg-v2-fl {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a2e2b;
+    margin-bottom: 5px;
+    display: block;
+}
+.ghg-v2-fl .ghg-v2-req {
+    color: #e74c3c;
+}
+.ghg-v2-fi,
+.ghg-v2-fsel,
+.ghg-v2-fta {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1.5px solid #e4edeb;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12.5px;
+    color: #1a2e2b;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.15s;
+    box-sizing: border-box;
+}
+.ghg-v2-fi:focus,
+.ghg-v2-fsel:focus,
+.ghg-v2-fta:focus {
+    border-color: #2bbfb3;
+}
+.ghg-v2-fta {
+    resize: vertical;
+    min-height: 80px;
+}
+.ghg-v2-fsel {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239BB5B0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+}
+.ghg-v2-fhint {
+    font-size: 11px;
+    color: #9bb5b0;
+    margin-top: 4px;
+}
+.ghg-v2-frow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+@media (max-width: 520px) {
+    .ghg-v2-frow {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ── v2 buttons ── */
+.ghg-v2-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.15s;
+}
+.ghg-v2-btn-p {
+    background: #1a9a8f;
+    color: #fff;
+}
+.ghg-v2-btn-p:hover {
+    background: #158a80;
+}
+.ghg-v2-btn-p:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.ghg-v2-btn-o {
+    background: #fff;
+    color: #1a2e2b;
+    border: 1px solid #e4edeb;
+}
+.ghg-v2-btn-o:hover {
+    border-color: #2bbfb3;
+    color: #1a9a8f;
+}
+.ghg-v2-btn-g {
+    background: transparent;
+    color: #6b8a85;
+    border: 1px solid #e4edeb;
+}
+.ghg-v2-btn-g:hover {
+    border-color: #c8edea;
+}
+
+/* ── v2 emission preview box ── */
+.ghg-v2-emission-box {
+    background: #eaf7f6;
+    border-radius: 10px;
+    padding: 18px;
+    text-align: center;
+    margin-bottom: 14px;
+}
+.ghg-v2-emission-label {
+    font-size: 11px;
+    color: #6b8a85;
+    margin-bottom: 4px;
+}
+.ghg-v2-emission-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: #1a9a8f;
+}
+.ghg-v2-emission-unit {
+    font-size: 13px;
+    color: #6b8a85;
+}
+
+/* ── v2 key-value row ── */
+.ghg-v2-kv-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid #e4edeb;
+    font-size: 12px;
+}
+.ghg-v2-kv-row:last-child {
+    border-bottom: none;
+}
+.ghg-v2-kv-label {
+    color: #6b8a85;
+}
+.ghg-v2-kv-value {
+    font-weight: 600;
+    color: #1a2e2b;
+}
+
+/* ── v2 verified banner ── */
+.ghg-v2-verified {
+    margin-top: 14px;
+    padding: 12px;
+    background: #e8f8ee;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #1e8a47;
+}
+
+/* ── v2 upload zone ── */
+.ghg-v2-upload-zone {
+    border: 2px dashed #e4edeb;
+    border-radius: 12px;
+    padding: 36px 22px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.18s;
+    background: #f5f8f7;
+}
+.ghg-v2-upload-zone:hover {
+    border-color: #2bbfb3;
+    background: #eaf7f6;
+}
+.ghg-v2-upload-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: #eaf7f6;
+    color: #1a9a8f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 12px;
+    font-size: 1.25rem;
+}
+.ghg-v2-upload-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #1a2e2b;
+}
+.ghg-v2-upload-sub {
+    font-size: 12px;
+    color: #6b8a85;
+}
+
+/* ── v2 template download row ── */
+.ghg-v2-template-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px;
+    background: #f5f8f7;
+    border-radius: 10px;
+}
+.ghg-v2-template-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: #eaf7f6;
+    color: #1a9a8f;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.1rem;
+}
+.ghg-v2-template-info {
+    flex: 1;
+    min-width: 0;
+}
+.ghg-v2-template-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a2e2b;
+}
+.ghg-v2-template-desc {
+    font-size: 11.5px;
+    color: #6b8a85;
+}
+
+/* ── v2 validation status bar ── */
+.ghg-v2-status-bar {
+    padding: 11px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.ghg-v2-status-bar--ok {
+    background: #e8f8ee;
+    color: #1e8a47;
+}
+.ghg-v2-status-bar--warn {
+    background: #fef6e4;
+    color: #b7770a;
+}
+.ghg-v2-status-bar--err {
+    background: #fdeaea;
+    color: #c0392b;
+}
+
+/* ── v2 progress bar ── */
+.ghg-v2-progress-wrap {
+    flex: 1;
+    background: #f5f8f7;
+    border-radius: 8px;
+    padding: 12px;
+}
+.ghg-v2-progress-label {
+    font-size: 11.5px;
+    color: #6b8a85;
+    margin-bottom: 4px;
+}
+.ghg-v2-progress-track {
+    height: 7px;
+    background: #e4edeb;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.ghg-v2-progress-fill {
+    height: 100%;
+    background: #1a9a8f;
+    border-radius: 10px;
+    transition: width 0.3s;
+}
+.ghg-v2-progress-text {
+    font-size: 11px;
+    color: #9bb5b0;
+    margin-top: 3px;
+}
+
+/* ── v2 AI stepper ── */
+.ghg-v2-steps {
+    display: flex;
+    align-items: center;
+    margin-bottom: 26px;
+}
+.ghg-v2-step-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11.5px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.ghg-v2-step-circle--done {
+    background: #2bbfb3;
+    color: #fff;
+}
+.ghg-v2-step-circle--on {
+    background: #1a9a8f;
+    color: #fff;
+}
+.ghg-v2-step-circle--off {
+    background: #e4edeb;
+    color: #9bb5b0;
+}
+.ghg-v2-step-label {
+    font-size: 11.5px;
+    font-weight: 500;
+    margin-left: 7px;
+    white-space: nowrap;
+}
+.ghg-v2-step-label--on {
+    color: #1a9a8f;
+    font-weight: 600;
+}
+.ghg-v2-step-label--off {
+    color: #9bb5b0;
+}
+.ghg-v2-step-connector {
+    flex: 1;
+    height: 2px;
+    background: #e4edeb;
+    margin: 0 10px;
+}
+.ghg-v2-step-connector--done {
+    background: #2bbfb3;
+}
+
+/* ── v2 AI panel (gradient) ── */
+.ghg-v2-aip {
+    background: linear-gradient(135deg, #eaf7f6, #f0fafa);
+    border: 1.5px solid #c8edea;
+    border-radius: 12px;
+    padding: 14px;
+}
+.ghg-v2-ai-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #1a9a8f;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-bottom: 10px;
+}
+.ghg-v2-conf-bar {
+    height: 8px;
+    background: #e4edeb;
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 7px 0;
+}
+.ghg-v2-conf-fill {
+    height: 100%;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #2bbfb3, #1a9a8f);
+}
+
+/* ── v2 AI file uploaded state ── */
+.ghg-v2-file-uploaded {
+    border: 2px solid #c8edea;
+    border-radius: 12px;
+    background: #eaf7f6;
+    padding: 26px;
+    text-align: center;
+    margin-bottom: 14px;
+}
+.ghg-v2-file-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: #1a9a8f;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+    font-size: 1.25rem;
+}
+.ghg-v2-file-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a2e2b;
+}
+.ghg-v2-file-status {
+    font-size: 11.5px;
+    color: #6b8a85;
+}
+
+/* ── v2 AI field with confidence ── */
+.ghg-v2-field-conf {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.ghg-v2-conf-tag {
+    font-size: 10.5px;
+    font-weight: 600;
+}
+.ghg-v2-conf-tag--high { color: #27ae60; }
+.ghg-v2-conf-tag--medium { color: #f39c12; }
+.ghg-v2-conf-tag--low { color: #e74c3c; }
+
+.ghg-v2-fi--warn {
+    border-color: #f39c12;
+    background: #fffdf5;
+}
+
+/* ── v2 page header ── */
+.ghg-v2-page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+.ghg-v2-page-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a2e2b;
+    margin: 0 0 3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ghg-v2-page-sub {
+    font-size: 12px;
+    color: #6b8a85;
+    margin: 0;
+}
+
+/* ── v2 AI title badge ── */
+.ghg-v2-ai-title-badge {
+    background: linear-gradient(90deg, #1a9a8f, #2980b9);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* ── v2 supporting docs upload ── */
+.ghg-v2-doc-upload {
+    border: 2px dashed #e4edeb;
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.18s;
+    background: #f5f8f7;
+}
+.ghg-v2-doc-upload:hover {
+    border-color: #2bbfb3;
+    background: #eaf7f6;
+}
+
+/* ── v2 button row ── */
+.ghg-v2-btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+}
+.ghg-v2-btn-row .ghg-v2-btn-g { flex: 1; justify-content: center; }
+.ghg-v2-btn-row .ghg-v2-btn-p { flex: 2; justify-content: center; }
 
 /* ── GHG v2 summary bar ── */
 .ghg-summary-bar {

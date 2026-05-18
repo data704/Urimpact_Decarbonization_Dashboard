@@ -169,7 +169,8 @@ function Login() {
                         </div>
                     </div>
 
-                    <div className="auth-tabs">
+                    {/* TEMPORARILY HIDDEN — registration closed; only pre-seeded users can log in */}
+                    {/* <div className="auth-tabs">
                         <button
                             type="button"
                             className={`tab-btn ${activeTab === 'signin' ? 'active' : ''}`}
@@ -191,7 +192,7 @@ function Login() {
                         >
                             {t('login.signUpTab')}
                         </button>
-                    </div>
+                    </div> */}
 
                     {signUpDone && activeTab === 'signin' && (
                         <div className="error-alert" style={{ borderColor: '#10b981', background: '#ecfdf5', color: '#065f46' }}>

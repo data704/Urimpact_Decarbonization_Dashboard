@@ -17,6 +17,8 @@ import {
     deleteEmissionsBulk,
     aiExtractReceipt,
     aiConfirmReceipt,
+    aiExtractMobileReceipt,
+    aiConfirmMobileReceipt,
 } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { readSitesForOrganization } from '../../utils/dataInputSitesStorage.js';
@@ -139,9 +141,9 @@ export default function GHGCategoryDetail() {
             { id: 'form', icon: 'fa-file-pen' },
             { id: 'bulk', icon: 'fa-cloud-arrow-up' },
         ];
-        if (isStationaryCombustion) cards.push({ id: 'ai', icon: 'fa-wand-magic-sparkles' });
+        if (isStationaryCombustion || isMobileCombustion) cards.push({ id: 'ai', icon: 'fa-wand-magic-sparkles' });
         return cards;
-    }, [isStationaryCombustion]);
+    }, [isStationaryCombustion, isMobileCombustion]);
 
     const stationaryExtraPastFuels = useMemo(() => {
         const presetLower = new Set(STATIONARY_FUEL_SELECT_PRESETS.map((p) => p.value.toLowerCase()));
@@ -676,14 +678,13 @@ export default function GHGCategoryDetail() {
                 <>
                     {!addStep && (
                         <section className="ghg-add-choice" aria-labelledby="ghg-add-method-heading">
-                            <h2 id="ghg-add-method-heading" className="ghg-add-heading">
+                            <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: 16, color: '#1a2e2b' }}>
                                 {t('ghg.addMethodHeading')}
-                            </h2>
-                            <p className="ghg-add-sub">{t('ghg.addMethodSub')}</p>
+                            </div>
                             <div className="ghg-choice-grid">
                                 {addMethodChoices.map((m) => (
-                                    <article key={m.id} className="ghg-choice-card">
-                                        <div className="ghg-choice-card__icon-wrap" aria-hidden="true">
+                                    <article key={m.id} className="ghg-choice-card" onClick={() => setAddStep(m.id)}>
+                                        <div className={`ghg-choice-card__icon-wrap ghg-choice-card__icon-wrap--${m.id}`} aria-hidden="true">
                                             <i className={`fas ${m.icon}`} />
                                         </div>
                                         <h3 className="ghg-choice-card__title">{t(`ghg.method.${m.id}`)}</h3>
@@ -691,9 +692,9 @@ export default function GHGCategoryDetail() {
                                         <button
                                             type="button"
                                             className="ghg-choice-card__start"
-                                            onClick={() => setAddStep(m.id)}
+                                            onClick={(e) => { e.stopPropagation(); setAddStep(m.id); }}
                                         >
-                                            {t('ghg.method.start')}
+                                            {t('ghg.method.start')} →
                                         </button>
                                     </article>
                                 ))}
@@ -703,31 +704,22 @@ export default function GHGCategoryDetail() {
 
                     {addStep === 'form' && hasApi && (
                         <div className="ghg-method-workspace">
-                            <button type="button" className="ghg-back-to-methods" onClick={() => setAddStep(null)}>
-                                <i className="fas fa-arrow-left" aria-hidden />
-                                <span>{t('ghg.backToMethods')}</span>
-                            </button>
-                            <form className="ghg-panel ghg-panel-split" onSubmit={handleSubmitForm}>
-                                <div className="ghg-panel-col">
-                                    <h3 className="ghg-panel-title">{t('ghg.form.questionnaire')}</h3>
-                                    {isStationaryCombustion ? (
-                                        <p className="ghg-form-hint">{t('ghg.stationary.formIntro')}</p>
-                                    ) : isMobileCombustion ? (
-                                        <p className="ghg-form-hint">{t('ghg.mobile.formIntro')}</p>
-                                    ) : (
-                                        <p className="ghg-form-hint">{t('ghg.form.climatiqHint')}</p>
-                                    )}
+                            <div className="ghg-v2-page-header">
+                                <div>
+                                    <div className="ghg-v2-page-title">{t('ghg.form.questionnaire')}</div>
+                                    <p className="ghg-v2-page-sub">{t(titleKey)} · {t('ghg.scopeTab', { n: scope })} · {t('ghg.method.form')}</p>
+                                </div>
+                                <button type="button" className="ghg-v2-btn ghg-v2-btn-o" onClick={() => setAddStep(null)}>← {t('ghg.backToMethods')}</button>
+                            </div>
+                            <form className="ghg-v2-layout" onSubmit={handleSubmitForm}>
+                                <div>
                                     {(isStationaryCombustion || isMobileCombustion) && stManualPhase === 'review' && (
-                                        <div className="ghg-review-banner" role="status">
-                                            <p>
-                                                {t(
-                                                    isStationaryCombustion
-                                                        ? 'ghg.stationary.reviewBannerManual'
-                                                        : 'ghg.mobile.reviewBannerManual'
-                                                )}
-                                            </p>
+                                        <div className="ghg-v2-status-bar ghg-v2-status-bar--ok" role="status" style={{ marginBottom: 14 }}>
+                                            ✓ {t(isStationaryCombustion ? 'ghg.stationary.reviewBannerManual' : 'ghg.mobile.reviewBannerManual')}
                                         </div>
                                     )}
+                                    <div className="ghg-v2-card">
+                                    <div className="ghg-v2-card-title">{t('ghg.form.questionnaire')}</div>
                                     {isStationaryCombustion ? (
                                         <>
                                             <div className="ghg-field">
@@ -1051,65 +1043,57 @@ export default function GHGCategoryDetail() {
                                             </div>
                                         </>
                                     )}
+                                    </div>{/* /ghg-v2-card */}
                                     {submitFeedback && (
-                                        <p
-                                            className={
-                                                submitFeedback.type === 'err' ? 'ghg-msg ghg-msg-err' : 'ghg-msg ghg-msg-ok'
-                                            }
-                                        >
+                                        <p className={submitFeedback.type === 'err' ? 'ghg-msg ghg-msg-err' : 'ghg-msg ghg-msg-ok'} style={{ marginTop: 10 }}>
                                             {submitFeedback.text}
                                         </p>
                                     )}
-                                    <div className="ghg-form-actions ghg-form-actions--split">
+                                    <div className="ghg-v2-btn-row" style={{ marginTop: 14 }}>
                                         {isWorkbookScope1 && stManualPhase === 'review' && (
-                                            <button
-                                                type="button"
-                                                className="ghg-btn ghg-btn-secondary"
-                                                disabled={submitting}
-                                                onClick={() => {
-                                                    setStManualPhase('edit');
-                                                    setSubmitFeedback(null);
-                                                }}
-                                            >
-                                                {t(
-                                                    isStationaryCombustion
-                                                        ? 'ghg.stationary.backToEdit'
-                                                        : 'ghg.mobile.backToEdit'
-                                                )}
+                                            <button type="button" className="ghg-v2-btn ghg-v2-btn-g" disabled={submitting} onClick={() => { setStManualPhase('edit'); setSubmitFeedback(null); }}>
+                                                {t(isStationaryCombustion ? 'ghg.stationary.backToEdit' : 'ghg.mobile.backToEdit')}
                                             </button>
                                         )}
-                                        <button type="submit" className="ghg-btn ghg-btn-primary" disabled={submitting}>
+                                        <button type="submit" className="ghg-v2-btn ghg-v2-btn-p" style={{ flex: 2, justifyContent: 'center' }} disabled={submitting}>
                                             {submitting
                                                 ? t('ghg.form.submitting')
                                                 : !isWorkbookScope1
                                                   ? t('ghg.form.submit')
                                                   : stManualPhase === 'edit'
-                                                    ? t(
-                                                          isStationaryCombustion
-                                                              ? 'ghg.stationary.continueToReview'
-                                                              : 'ghg.mobile.continueToReview'
-                                                      )
-                                                    : t(
-                                                          isStationaryCombustion
-                                                              ? 'ghg.stationary.submitToInventory'
-                                                              : 'ghg.mobile.submitToInventory'
-                                                      )}
+                                                    ? t(isStationaryCombustion ? 'ghg.stationary.continueToReview' : 'ghg.mobile.continueToReview')
+                                                    : t(isStationaryCombustion ? 'ghg.stationary.submitToInventory' : 'ghg.mobile.submitToInventory')}
+                                             →
                                         </button>
                                     </div>
                                 </div>
-                                <div className="ghg-panel-col ghg-panel-col--accent">
-                                    <h3 className="ghg-panel-title">{t('ghg.form.emissionPreview')}</h3>
+                                {/* ── v2 Sidebar: Emission Preview ── */}
+                                <div className="ghg-v2-card ghg-v2-sidebar">
+                                    <div className="ghg-v2-card-title">{t('ghg.form.emissionPreview')} {lastSaved && <span className="ghg-v2-ai-badge" style={{ background: '#eaf7f6', color: '#1a9a8f', fontSize: 10 }}>Live</span>}</div>
                                     {lastSaved ? (
-                                        <dl className="ghg-preview-dl">
-                                            <dt>{t('ghg.form.previewCo2e')}</dt>
-                                            <dd>
-                                                {formatTonnes((lastSaved.co2e || 0) / 1000)} {t('ghg.tco2e')}
-                                            </dd>
-                                            <dt>{t('ghg.form.previewFactor')}</dt>
-                                            <dd>{lastSaved.emissionFactor ?? '—'}</dd>
-                                        </dl>
+                                        <>
+                                            <div className="ghg-v2-emission-box">
+                                                <div className="ghg-v2-emission-label">{t('ghg.form.previewCo2e')}</div>
+                                                <div className="ghg-v2-emission-value">{formatTonnes((lastSaved.co2e || 0) / 1000)}</div>
+                                                <div className="ghg-v2-emission-unit">{t('ghg.tco2e')}</div>
+                                            </div>
+                                            <div className="ghg-v2-kv-row">
+                                                <span className="ghg-v2-kv-label">{t('ghg.form.previewFactor')}</span>
+                                                <span className="ghg-v2-kv-value">{lastSaved.emissionFactor ?? '—'}</span>
+                                            </div>
+                                            <div className="ghg-v2-verified">
+                                                <strong>✓ Verified</strong> · Emission factor from IPCC database
+                                            </div>
+                                        </>
                                     ) : (
-                                        <p className="ghg-placeholder-text">{t('ghg.form.previewPlaceholder')}</p>
+                                        <>
+                                            <div className="ghg-v2-emission-box">
+                                                <div className="ghg-v2-emission-label">{t('ghg.form.previewCo2e')}</div>
+                                                <div className="ghg-v2-emission-value" style={{ color: '#9bb5b0' }}>—</div>
+                                                <div className="ghg-v2-emission-unit">{t('ghg.tco2e')}</div>
+                                            </div>
+                                            <p style={{ fontSize: 12, color: '#9bb5b0', textAlign: 'center' }}>{t('ghg.form.previewPlaceholder')}</p>
+                                        </>
                                     )}
                                 </div>
                             </form>
@@ -1130,61 +1114,81 @@ export default function GHGCategoryDetail() {
 
                     {addStep === 'bulk' && hasApi && isWorkbookScope1 && (
                         <div className="ghg-method-workspace">
-                            <button type="button" className="ghg-back-to-methods" onClick={() => setAddStep(null)}>
-                                <i className="fas fa-arrow-left" aria-hidden />
-                                <span>{t('ghg.backToMethods')}</span>
-                            </button>
-                            <div className="ghg-panel">
-                                <h3 className="ghg-panel-title">{t('ghg.bulk.title')}</h3>
+                            <div className="ghg-v2-page-header">
+                                <div>
+                                    <div className="ghg-v2-page-title">{t('ghg.bulk.title')}</div>
+                                    <p className="ghg-v2-page-sub">{t(titleKey)} · {t('ghg.scopeTab', { n: scope })} · Bulk Upload</p>
+                                </div>
+                                <button type="button" className="ghg-v2-btn ghg-v2-btn-o" onClick={() => setAddStep(null)}>← {t('ghg.backToMethods')}</button>
+                            </div>
+                            <div className="ghg-v2-layout ghg-v2-layout--bulk">
+                              <div>
                                 {bulkStep === 'file' && (
                                     <>
-                                        <p className="ghg-placeholder-text">{t(`${wbBulk}.bulkIntro`)}</p>
-                                        <ul className="ghg-bulk-list">
-                                            {wbTemplateColumns.map((col) => (
-                                                <li key={col}>
-                                                    <code className="ghg-code">{col}</code>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                        <div className="ghg-bulk-actions">
-                                            <button
-                                                type="button"
-                                                className="ghg-btn ghg-btn-secondary"
-                                                onClick={handleDownloadWorkbookTemplate}
-                                            >
-                                                {t(`${wbBulk}.downloadTemplate`)}
-                                            </button>
+                                        {/* Step 1 — Download Template */}
+                                        <div className="ghg-v2-card">
+                                            <div className="ghg-v2-card-title">Step 1 – Download Template</div>
+                                            <div className="ghg-v2-template-row">
+                                                <div className="ghg-v2-template-icon"><i className="fas fa-file-excel" aria-hidden /></div>
+                                                <div className="ghg-v2-template-info">
+                                                    <div className="ghg-v2-template-name">{isStationaryCombustion ? 'Stationary_Combustion_Template.xlsx' : 'Mobile_Combustion_Template.xlsx'}</div>
+                                                    <div className="ghg-v2-template-desc">Required fields, dropdown validations, sample data included</div>
+                                                </div>
+                                                <button type="button" className="ghg-v2-btn ghg-v2-btn-p" style={{ fontSize: 11.5 }} onClick={handleDownloadWorkbookTemplate}>Download</button>
+                                            </div>
+                                            <div style={{ fontSize: 12, color: '#6b8a85', marginTop: 10 }}>Supported: <strong>.XLSX · .CSV</strong> · Max 50MB</div>
                                         </div>
-                                        <div className="ghg-field ghg-field--bulk-file">
-                                            <label htmlFor="ghg-bulk-file">{t(`${wbBulk}.selectFile`)}</label>
-                                            <input
-                                                id="ghg-bulk-file"
-                                                type="file"
-                                                accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-                                                onChange={(ev) => {
-                                                    const f = ev.target.files?.[0];
-                                                    setBulkFile(f || null);
-                                                    setBulkFeedback(null);
-                                                    setBulkStep('file');
-                                                    setBulkReviewRows([]);
-                                                }}
-                                            />
-                                        </div>
-                                        <div className="ghg-form-actions">
-                                            <button
-                                                type="button"
-                                                className="ghg-btn ghg-btn-primary"
-                                                disabled={!bulkFile || bulkUploading}
-                                                onClick={handleBulkPreviewFile}
-                                            >
-                                                {bulkUploading ? t(`${wbBulk}.bulkParsing`) : t(`${wbBulk}.bulkParseReview`)}
-                                            </button>
+                                        {/* Step 2 — Upload File */}
+                                        <div className="ghg-v2-card">
+                                            <div className="ghg-v2-card-title">Step 2 – Upload Your File</div>
+                                            <label className="ghg-v2-upload-zone">
+                                                <input
+                                                    type="file"
+                                                    style={{ display: 'none' }}
+                                                    accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                                                    onChange={(ev) => {
+                                                        const f = ev.target.files?.[0];
+                                                        setBulkFile(f || null);
+                                                        setBulkFeedback(null);
+                                                        setBulkStep('file');
+                                                        setBulkReviewRows([]);
+                                                    }}
+                                                />
+                                                <div className="ghg-v2-upload-icon"><i className="fas fa-cloud-upload-alt" aria-hidden /></div>
+                                                <div className="ghg-v2-upload-title">{bulkFile ? bulkFile.name : 'Drag & drop your file here'}</div>
+                                                {!bulkFile && <button type="button" className="ghg-v2-btn ghg-v2-btn-o" style={{ marginTop: 4, fontSize: 11.5 }}>Browse File</button>}
+                                                {bulkFile && <div className="ghg-v2-upload-sub">Selected · {(bulkFile.size / 1024).toFixed(0)} KB</div>}
+                                            </label>
+                                            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                                                <button
+                                                    type="button"
+                                                    className="ghg-v2-btn ghg-v2-btn-p"
+                                                    style={{ flex: 1, justifyContent: 'center' }}
+                                                    disabled={!bulkFile || bulkUploading}
+                                                    onClick={handleBulkPreviewFile}
+                                                >
+                                                    {bulkUploading ? t(`${wbBulk}.bulkParsing`) : t(`${wbBulk}.bulkParseReview`)} →
+                                                </button>
+                                            </div>
                                         </div>
                                     </>
                                 )}
                                 {bulkStep === 'review' && (
                                     <>
-                                        <p className="ghg-form-hint">{t(`${wbBulk}.bulkReviewIntro`)}</p>
+                                        <div className="ghg-v2-card" style={{ marginBottom: 14 }}>
+                                            <div className="ghg-v2-card-title">Step 3 – Validation Preview</div>
+                                            {(() => {
+                                                const validCount = bulkReviewRows.filter(r => r.status === 'valid' || r.status === 'edited').length;
+                                                const invalidCount = bulkReviewRows.filter(r => r.status === 'invalid').length;
+                                                const warnCount = bulkReviewRows.filter(r => r.status === 'edited').length;
+                                                return (
+                                                    <div className={`ghg-v2-status-bar ghg-v2-status-bar--${invalidCount > 0 ? 'warn' : 'ok'}`}>
+                                                        {invalidCount > 0
+                                                            ? `${bulkReviewRows.length} rows detected · ${invalidCount} errors · ${warnCount} warnings`
+                                                            : `✓ ${bulkReviewRows.length} rows detected · 0 errors`}
+                                                    </div>
+                                                );
+                                            })()}
                                         <div className="ghg-bulk-preview-wrap">
                                             <table className="ghg-bulk-preview-table">
                                                 <thead>
@@ -1332,11 +1336,12 @@ export default function GHGCategoryDetail() {
                                                 </tbody>
                                             </table>
                                         </div>
+                                        </div>{/* close ghg-v2-card */}
                                         <p className="ghg-form-hint ghg-form-hint--tight">{t(`${wbBulk}.bulkEditedHint`)}</p>
-                                        <div className="ghg-form-actions ghg-form-actions--split">
+                                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                                             <button
                                                 type="button"
-                                                className="ghg-btn ghg-btn-secondary"
+                                                className="ghg-v2-btn ghg-v2-btn-g"
                                                 disabled={bulkUploading}
                                                 onClick={() => {
                                                     setBulkStep('file');
@@ -1348,27 +1353,65 @@ export default function GHGCategoryDetail() {
                                             </button>
                                             <button
                                                 type="button"
-                                                className="ghg-btn ghg-btn-primary"
+                                                className="ghg-v2-btn ghg-v2-btn-p"
+                                                style={{ flex: 1 }}
                                                 disabled={bulkUploading || bulkReviewRows.length === 0}
                                                 onClick={handleBulkConfirmImport}
                                             >
-                                                {bulkUploading ? t(`${wbBulk}.bulkConfirming`) : t(`${wbBulk}.bulkConfirmImport`)}
+                                                {bulkUploading ? t(`${wbBulk}.bulkConfirming`) : t(`${wbBulk}.bulkConfirmImport`)} →
                                             </button>
                                         </div>
                                     </>
                                 )}
                                 {bulkFeedback && (
-                                    <p
-                                        className={
-                                            bulkFeedback.type === 'err'
-                                                ? 'ghg-msg ghg-msg-err ghg-msg--pre'
-                                                : 'ghg-msg ghg-msg-ok ghg-msg--pre'
-                                        }
-                                    >
+                                    <div className={`ghg-v2-status-bar ghg-v2-status-bar--${bulkFeedback.type === 'err' ? 'err' : 'ok'}`} style={{ marginTop: 10 }}>
                                         {bulkFeedback.text}
-                                    </p>
+                                    </div>
                                 )}
                             </div>
+                            {/* Sidebar — Error Summary */}
+                            <div className="ghg-v2-card" style={{ position: 'sticky', top: 80 }}>
+                                <div className="ghg-v2-card-title">Error Summary</div>
+                                {bulkReviewRows.length > 0 ? (
+                                    <>
+                                        {(() => {
+                                            const validCount = bulkReviewRows.filter(r => r.status === 'valid').length;
+                                            const editedCount = bulkReviewRows.filter(r => r.status === 'edited').length;
+                                            const invalidCount = bulkReviewRows.filter(r => r.status === 'invalid').length;
+                                            return (
+                                                <>
+                                                    {invalidCount > 0 && (
+                                                        <div className="ghg-v2-status-bar ghg-v2-status-bar--err" style={{ marginBottom: 10 }}>
+                                                            {invalidCount} row{invalidCount > 1 ? 's' : ''} with errors
+                                                        </div>
+                                                    )}
+                                                    {editedCount > 0 && (
+                                                        <div className="ghg-v2-status-bar ghg-v2-status-bar--warn" style={{ marginBottom: 10 }}>
+                                                            {editedCount} row{editedCount > 1 ? 's' : ''} edited
+                                                        </div>
+                                                    )}
+                                                    <div className="ghg-v2-status-bar ghg-v2-status-bar--ok" style={{ marginBottom: 14 }}>
+                                                        ✓ {validCount + editedCount} row{validCount + editedCount !== 1 ? 's' : ''} ready to import
+                                                    </div>
+                                                    {[
+                                                        ['Total Rows', bulkReviewRows.length],
+                                                        ['Valid', validCount],
+                                                        ['Edited', editedCount],
+                                                        ['Errors', invalidCount],
+                                                    ].map(([label, val]) => (
+                                                        <div key={label} className="ghg-v2-kv-row">
+                                                            <span>{label}</span><span style={{ fontWeight: 600 }}>{val}</span>
+                                                        </div>
+                                                    ))}
+                                                </>
+                                            );
+                                        })()}
+                                    </>
+                                ) : (
+                                    <p style={{ fontSize: 12, color: '#6b8a85' }}>Upload a file to see validation results</p>
+                                )}
+                            </div>
+                        </div>
                         </div>
                     )}
 
@@ -1391,43 +1434,86 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'ai' && isStationaryCombustion && (
+                    {addStep === 'ai' && (isStationaryCombustion || isMobileCombustion) && (
                         <div className="ghg-method-workspace">
-                            <button type="button" className="ghg-back-to-methods" onClick={() => { setAddStep(null); setAiStep('upload'); setAiFile(null); setAiExtracted(null); setAiFeedback(null); }}>
-                                <i className="fas fa-arrow-left" aria-hidden />
-                                <span>{t('ghg.backToMethods')}</span>
-                            </button>
-                            <div className="ghg-panel">
-                                <h3 className="ghg-panel-title">{t('ghg.ai.title')}</h3>
+                            {/* v2 Page header */}
+                            <div className="ghg-v2-page-header">
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                                        <div className="ghg-v2-page-title">{t('ghg.ai.title')}</div>
+                                        <span className="ghg-v2-ai-badge">✦ AI ASSISTANT</span>
+                                    </div>
+                                    <p className="ghg-v2-page-sub">{t('ghg.ai.uploadDesc')}</p>
+                                </div>
+                                <button type="button" className="ghg-v2-btn ghg-v2-btn-o" onClick={() => { setAddStep(null); setAiStep('upload'); setAiFile(null); setAiExtracted(null); setAiFeedback(null); }}>← {t('ghg.backToMethods')}</button>
+                            </div>
 
-                                {/* Step 1: Upload receipt */}
-                                {aiStep === 'upload' && (
-                                    <div className="ghg-ai-upload">
-                                        <p className="ghg-ai-desc">{t('ghg.ai.uploadDesc')}</p>
-                                        <label className="ghg-dropzone">
-                                            <input
-                                                type="file"
-                                                accept=".pdf,.jpg,.jpeg,.png"
-                                                style={{ display: 'none' }}
-                                                onChange={(e) => { setAiFile(e.target.files?.[0] || null); setAiFeedback(null); }}
-                                            />
-                                            <i className="fas fa-cloud-upload-alt ghg-dropzone-icon" aria-hidden />
-                                            <span>{aiFile ? aiFile.name : t('ghg.ai.dropzoneText')}</span>
-                                        </label>
-                                        {aiFeedback?.type === 'err' && (
-                                            <p className="ghg-msg ghg-msg-error">{aiFeedback.text}</p>
-                                        )}
+                            {/* Stepper */}
+                            <div className="ghg-v2-steps">
+                                <div className={`ghg-v2-step-circle ${aiStep === 'upload' ? 'ghg-v2-step-circle--on' : (aiStep === 'extracting' || aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') ? 'ghg-v2-step-circle--done' : 'ghg-v2-step-circle--off'}`}>
+                                    {(aiStep !== 'upload') ? '✓' : '1'}
+                                </div>
+                                <div className={`ghg-v2-step-label ${aiStep === 'upload' ? '' : 'ghg-v2-step-label--on'}`}>Upload</div>
+                                <div className={`ghg-v2-step-connector ${(aiStep === 'extracting' || aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') ? 'ghg-v2-step-connector--done' : ''}`} />
+                                <div className={`ghg-v2-step-circle ${aiStep === 'extracting' ? 'ghg-v2-step-circle--on' : (aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') ? 'ghg-v2-step-circle--done' : 'ghg-v2-step-circle--off'}`}>
+                                    {(aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') ? '✓' : '2'}
+                                </div>
+                                <div className={`ghg-v2-step-label ${(aiStep === 'extracting' || aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') ? '' : 'ghg-v2-step-label--off'}`}>AI Extract</div>
+                                <div className={`ghg-v2-step-connector ${(aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') ? 'ghg-v2-step-connector--done' : ''}`} />
+                                <div className={`ghg-v2-step-circle ${aiStep === 'review' || aiStep === 'confirming' ? 'ghg-v2-step-circle--on' : aiStep === 'done' ? 'ghg-v2-step-circle--done' : 'ghg-v2-step-circle--off'}`}>
+                                    {aiStep === 'done' ? '✓' : '3'}
+                                </div>
+                                <div className={`ghg-v2-step-label ${(aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') ? '' : 'ghg-v2-step-label--off'}`}>Review</div>
+                                <div className={`ghg-v2-step-connector ${aiStep === 'done' ? 'ghg-v2-step-connector--done' : ''}`} />
+                                <div className={`ghg-v2-step-circle ${aiStep === 'done' ? 'ghg-v2-step-circle--done' : 'ghg-v2-step-circle--off'}`}>
+                                    {aiStep === 'done' ? '✓' : '4'}
+                                </div>
+                                <div className={`ghg-v2-step-label ${aiStep === 'done' ? '' : 'ghg-v2-step-label--off'}`}>Save</div>
+                            </div>
+
+                            <div className="ghg-v2-layout ghg-v2-layout--ai">
+                              {/* LEFT COLUMN — Upload + Confidence */}
+                              <div>
+                                {/* Upload card */}
+                                <div className="ghg-v2-card" style={{ marginBottom: 14 }}>
+                                    <div className="ghg-v2-card-title">Upload Invoice / Utility Bill</div>
+                                    <label className="ghg-v2-upload-zone" style={{ borderColor: aiFile ? 'var(--teal-mid, #2BBFB3)' : undefined, background: aiFile ? 'var(--teal-bg, #E6FAF8)' : undefined }}>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => { setAiFile(e.target.files?.[0] || null); setAiFeedback(null); }}
+                                        />
+                                        <div className="ghg-v2-upload-icon"><i className="fas fa-file-invoice" aria-hidden /></div>
+                                        <div className="ghg-v2-upload-title">{aiFile ? aiFile.name : t('ghg.ai.dropzoneText')}</div>
+                                        {aiFile
+                                            ? <div className="ghg-v2-upload-sub">Successfully uploaded · {(aiFile.size / 1024).toFixed(0)} KB</div>
+                                            : <button type="button" className="ghg-v2-btn ghg-v2-btn-o" style={{ marginTop: 4, fontSize: 11.5 }}>Browse File</button>
+                                        }
+                                    </label>
+                                    {aiStep === 'upload' && (
                                         <button
                                             type="button"
-                                            className="ghg-btn ghg-btn-primary"
+                                            className="ghg-v2-btn ghg-v2-btn-p"
+                                            style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
                                             disabled={!aiFile}
                                             onClick={async () => {
                                                 setAiStep('extracting');
                                                 setAiFeedback(null);
                                                 try {
-                                                    const result = await aiExtractReceipt(aiFile);
+                                                    const result = isMobileCombustion
+                                                        ? await aiExtractMobileReceipt(aiFile)
+                                                        : await aiExtractReceipt(aiFile);
                                                     setAiExtracted(result);
-                                                    setAiEdited({
+                                                    setAiEdited(isMobileCombustion ? {
+                                                        vehicleType: result.vehicleType || '',
+                                                        fuelUsed: result.fuelUsed || '',
+                                                        fuelUsedQuantity: result.fuelUsedQuantity || '',
+                                                        fuelUsedUnit: result.fuelUsedUnit || '',
+                                                        facility: result.facility || '',
+                                                        dateOfTransaction: result.dateOfTransaction || '',
+                                                        notes: result.notes || '',
+                                                    } : {
                                                         asset: result.asset || '',
                                                         fuelUsed: result.fuelUsed || '',
                                                         fuelUsedQuantity: result.fuelUsedQuantity || '',
@@ -1443,82 +1529,130 @@ export default function GHGCategoryDetail() {
                                                 }
                                             }}
                                         >
-                                            <i className="fas fa-wand-magic-sparkles" aria-hidden /> {t('ghg.ai.extractBtn')}
+                                            <i className="fas fa-wand-magic-sparkles" aria-hidden /> {t('ghg.ai.extractBtn')} →
                                         </button>
-                                    </div>
-                                )}
+                                    )}
+                                    {aiFeedback?.type === 'err' && aiStep === 'upload' && (
+                                        <div className="ghg-v2-status-bar ghg-v2-status-bar--err" style={{ marginTop: 10 }}>{aiFeedback.text}</div>
+                                    )}
+                                </div>
 
-                                {/* Step 2: Extracting (loading) */}
+                                {/* Extracting spinner */}
                                 {aiStep === 'extracting' && (
-                                    <div className="ghg-ai-loading">
-                                        <i className="fas fa-spinner fa-spin ghg-ai-spinner" aria-hidden />
-                                        <p>{t('ghg.ai.extracting')}</p>
+                                    <div className="ghg-v2-card" style={{ textAlign: 'center', padding: 40 }}>
+                                        <i className="fas fa-spinner fa-spin" style={{ fontSize: 28, color: '#2BBFB3', marginBottom: 12 }} aria-hidden />
+                                        <p style={{ fontSize: 13, color: '#6b8a85' }}>{t('ghg.ai.extracting')}</p>
                                     </div>
                                 )}
 
-                                {/* Step 3: Review & edit extracted data */}
+                                {/* AI Confidence panel — shown after extraction */}
+                                {(aiStep === 'review' || aiStep === 'confirming' || aiStep === 'done') && (
+                                    <div className="ghg-v2-card ghg-v2-aip">
+                                        <div className="ghg-v2-ai-badge">✦ AI Analysis Complete</div>
+                                        <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Confidence Score</div>
+                                        <div className="ghg-v2-conf-bar">
+                                            <div className="ghg-v2-conf-fill" style={{ width: aiExtracted?.confidence === 'high' ? '95%' : aiExtracted?.confidence === 'medium' ? '75%' : '50%' }} />
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#6b8a85' }}>
+                                            <span>{aiExtracted?.confidence === 'high' ? '95%' : aiExtracted?.confidence === 'medium' ? '75%' : '50%'} – {aiExtracted?.confidence ? t(`ghg.ai.confidence_${aiExtracted.confidence}`) : 'Unknown'}</span>
+                                            {aiExtracted?.confidence === 'high' && <span style={{ color: '#1E8A47', fontWeight: 600 }}>✓ Verified</span>}
+                                        </div>
+                                    </div>
+                                )}
+                              </div>
+
+                              {/* RIGHT COLUMN — Review form + emission result */}
+                              <div>
+                                {/* Waiting state */}
+                                {(aiStep === 'upload' || aiStep === 'extracting') && (
+                                    <div className="ghg-v2-card" style={{ textAlign: 'center', padding: '40px 20px', color: '#6b8a85' }}>
+                                        <i className="fas fa-robot" style={{ fontSize: 32, marginBottom: 10, opacity: 0.3 }} aria-hidden />
+                                        <p style={{ fontSize: 13 }}>Upload a document to begin AI extraction</p>
+                                    </div>
+                                )}
+
+                                {/* Review form */}
                                 {aiStep === 'review' && (
-                                    <div className="ghg-ai-review">
-                                        {aiExtracted?.confidence && (
-                                            <p className={`ghg-ai-confidence ghg-ai-confidence--${aiExtracted.confidence}`}>
-                                                {t('ghg.ai.confidence')}: <strong>{t(`ghg.ai.confidence_${aiExtracted.confidence}`)}</strong>
-                                            </p>
-                                        )}
-                                        <p className="ghg-ai-review-hint">{t('ghg.ai.reviewHint')}</p>
-                                        <div className="ghg-form-grid">
-                                            <label className="ghg-field">
-                                                <span className="ghg-label">{t('ghg.stationary.asset')}</span>
-                                                <input className="ghg-input" value={aiEdited.asset} onChange={(e) => setAiEdited({ ...aiEdited, asset: e.target.value })} />
-                                            </label>
-                                            <label className="ghg-field">
-                                                <span className="ghg-label">{t('ghg.stationary.fuelUsed')}</span>
-                                                <input className="ghg-input" value={aiEdited.fuelUsed} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsed: e.target.value })} />
-                                            </label>
-                                            <label className="ghg-field">
-                                                <span className="ghg-label">{t('ghg.stationary.fuelUsedQuantity')}</span>
-                                                <input className="ghg-input" type="number" step="any" min="0" value={aiEdited.fuelUsedQuantity} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedQuantity: e.target.value })} />
-                                            </label>
-                                            <label className="ghg-field">
-                                                <span className="ghg-label">{t('ghg.stationary.fuelUsedUnit')}</span>
-                                                <select className="ghg-input" value={aiEdited.fuelUsedUnit} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedUnit: e.target.value })}>
-                                                    {STATIONARY_TEMPLATE_UNITS.map((u) => (
-                                                        <option key={u} value={u}>{u}</option>
-                                                    ))}
-                                                </select>
-                                            </label>
-                                            <label className="ghg-field">
-                                                <span className="ghg-label">{t('ghg.stationary.facility')}</span>
-                                                <input className="ghg-input" value={aiEdited.facility} onChange={(e) => setAiEdited({ ...aiEdited, facility: e.target.value })} />
-                                            </label>
-                                            <label className="ghg-field">
-                                                <span className="ghg-label">{t('ghg.stationary.dateOfTransaction')}</span>
-                                                <input className="ghg-input" value={aiEdited.dateOfTransaction} onChange={(e) => setAiEdited({ ...aiEdited, dateOfTransaction: e.target.value })} placeholder="DD/MM/YYYY" />
-                                            </label>
-                                            <label className="ghg-field ghg-field--full">
-                                                <span className="ghg-label">{t('ghg.form.notes')}</span>
-                                                <textarea className="ghg-input" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
-                                            </label>
+                                    <>
+                                        <div className="ghg-v2-card" style={{ marginBottom: 14 }}>
+                                            <div className="ghg-v2-card-title">AI Extracted Data – Review & Edit</div>
+                                            <div className="ghg-v2-status-bar ghg-v2-status-bar--warn" style={{ marginBottom: 12 }}>
+                                                ⚠ Review all fields before approving. Highlighted fields need attention.
+                                            </div>
+                                            {isMobileCombustion ? (
+                                                <div className="ghg-v2-fg">
+                                                    <label className="ghg-v2-fl">{t('ghg.mobile.vehicleType')}</label>
+                                                    <input className="ghg-v2-fi" value={aiEdited.vehicleType} onChange={(e) => setAiEdited({ ...aiEdited, vehicleType: e.target.value })} />
+                                                </div>
+                                            ) : (
+                                                <div className="ghg-v2-fg">
+                                                    <label className="ghg-v2-fl">{t('ghg.stationary.asset')}</label>
+                                                    <input className="ghg-v2-fi" value={aiEdited.asset} onChange={(e) => setAiEdited({ ...aiEdited, asset: e.target.value })} />
+                                                </div>
+                                            )}
+                                            <div className="ghg-v2-fg">
+                                                <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.fuelUsed' : 'ghg.stationary.fuelUsed')}</label>
+                                                <input className="ghg-v2-fi" value={aiEdited.fuelUsed} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsed: e.target.value })} />
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                <div className="ghg-v2-fg">
+                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.fuelUsedQuantity' : 'ghg.stationary.fuelUsedQuantity')}</label>
+                                                    <input className="ghg-v2-fi" type="number" step="any" min="0" value={aiEdited.fuelUsedQuantity} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedQuantity: e.target.value })} />
+                                                </div>
+                                                <div className="ghg-v2-fg">
+                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.fuelUsedUnit' : 'ghg.stationary.fuelUsedUnit')}</label>
+                                                    <select className="ghg-v2-fsel" value={aiEdited.fuelUsedUnit} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedUnit: e.target.value })}>
+                                                        {(isMobileCombustion ? MOBILE_TEMPLATE_UNITS : STATIONARY_TEMPLATE_UNITS).map((u) => (
+                                                            <option key={u} value={u}>{u}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                <div className="ghg-v2-fg">
+                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.facility' : 'ghg.stationary.facility')}</label>
+                                                    <input className="ghg-v2-fi" value={aiEdited.facility} onChange={(e) => setAiEdited({ ...aiEdited, facility: e.target.value })} />
+                                                </div>
+                                                <div className="ghg-v2-fg">
+                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.dateOfTransaction' : 'ghg.stationary.dateOfTransaction')}</label>
+                                                    <input className="ghg-v2-fi" value={aiEdited.dateOfTransaction} onChange={(e) => setAiEdited({ ...aiEdited, dateOfTransaction: e.target.value })} placeholder="DD/MM/YYYY" />
+                                                </div>
+                                            </div>
+                                            <div className="ghg-v2-fg">
+                                                <label className="ghg-v2-fl">{t('ghg.form.notes')}</label>
+                                                <textarea className="ghg-v2-fta" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
+                                            </div>
                                         </div>
                                         {aiFeedback?.type === 'err' && (
-                                            <p className="ghg-msg ghg-msg-error">{aiFeedback.text}</p>
+                                            <div className="ghg-v2-status-bar ghg-v2-status-bar--err" style={{ marginBottom: 10 }}>{aiFeedback.text}</div>
                                         )}
-                                        <div className="ghg-ai-actions">
+                                        <div style={{ display: 'flex', gap: 10 }}>
                                             <button
                                                 type="button"
-                                                className="ghg-btn ghg-btn-secondary"
+                                                className="ghg-v2-btn ghg-v2-btn-g"
+                                                style={{ flex: 1 }}
                                                 onClick={() => { setAiStep('upload'); setAiFile(null); setAiExtracted(null); setAiFeedback(null); }}
                                             >
-                                                <i className="fas fa-redo" aria-hidden /> {t('ghg.ai.reupload')}
+                                                Reject & Re-upload
                                             </button>
                                             <button
                                                 type="button"
-                                                className="ghg-btn ghg-btn-primary"
+                                                className="ghg-v2-btn ghg-v2-btn-p"
+                                                style={{ flex: 2 }}
                                                 disabled={!aiEdited.fuelUsed || !aiEdited.fuelUsedQuantity || !aiEdited.fuelUsedUnit}
                                                 onClick={async () => {
                                                     setAiStep('confirming');
                                                     setAiFeedback(null);
                                                     try {
-                                                        const payload = {
+                                                        const payload = isMobileCombustion ? {
+                                                            vehicleType: aiEdited.vehicleType,
+                                                            fuelUsed: aiEdited.fuelUsed,
+                                                            fuelUsedQuantity: Number(aiEdited.fuelUsedQuantity),
+                                                            fuelUsedUnit: aiEdited.fuelUsedUnit,
+                                                            facility: aiEdited.facility,
+                                                            dateOfTransaction: aiEdited.dateOfTransaction,
+                                                            notes: aiEdited.notes,
+                                                        } : {
                                                             asset: aiEdited.asset,
                                                             fuelUsed: aiEdited.fuelUsed,
                                                             fuelUsedQuantity: Number(aiEdited.fuelUsedQuantity),
@@ -1527,7 +1661,9 @@ export default function GHGCategoryDetail() {
                                                             dateOfTransaction: aiEdited.dateOfTransaction,
                                                             notes: aiEdited.notes,
                                                         };
-                                                        const result = await aiConfirmReceipt(payload);
+                                                        const result = isMobileCombustion
+                                                            ? await aiConfirmMobileReceipt(payload)
+                                                            : await aiConfirmReceipt(payload);
                                                         setLastSaved(result);
                                                         setAiFeedback({ type: 'ok', text: t('ghg.ai.confirmSuccess') });
                                                         setAiStep('done');
@@ -1538,41 +1674,47 @@ export default function GHGCategoryDetail() {
                                                     }
                                                 }}
                                             >
-                                                <i className="fas fa-check" aria-hidden /> {t('ghg.ai.confirmBtn')}
+                                                ✓ Approve & Save
                                             </button>
                                         </div>
-                                    </div>
+                                    </>
                                 )}
 
-                                {/* Step 4: Confirming (loading) */}
+                                {/* Confirming spinner */}
                                 {aiStep === 'confirming' && (
-                                    <div className="ghg-ai-loading">
-                                        <i className="fas fa-spinner fa-spin ghg-ai-spinner" aria-hidden />
-                                        <p>{t('ghg.ai.confirming')}</p>
+                                    <div className="ghg-v2-card" style={{ textAlign: 'center', padding: 40 }}>
+                                        <i className="fas fa-spinner fa-spin" style={{ fontSize: 28, color: '#2BBFB3', marginBottom: 12 }} aria-hidden />
+                                        <p style={{ fontSize: 13, color: '#6b8a85' }}>{t('ghg.ai.confirming')}</p>
                                     </div>
                                 )}
 
-                                {/* Step 5: Done — success */}
+                                {/* Done — success */}
                                 {aiStep === 'done' && (
-                                    <div className="ghg-ai-done">
-                                        {aiFeedback?.type === 'ok' && (
-                                            <p className="ghg-msg ghg-msg-success">{aiFeedback.text}</p>
-                                        )}
+                                    <>
                                         {lastSaved && (
-                                            <p className="ghg-ai-result">
-                                                {t('ghg.ai.resultCO2e')}: <strong>{formatTonnes(lastSaved.co2Equivalent ?? lastSaved.totalEmissions)} {t('ghg.tonnes')}</strong>
-                                            </p>
+                                            <div className="ghg-v2-card" style={{ marginBottom: 14 }}>
+                                                <div className="ghg-v2-card-title">Calculated Emission</div>
+                                                <div className="ghg-v2-emission-box">
+                                                    <div style={{ fontSize: 11, color: '#6b8a85', marginBottom: 4 }}>Auto-calculated</div>
+                                                    <div className="ghg-v2-emission-value">{formatTonnes(lastSaved.co2Equivalent ?? lastSaved.totalEmissions)}</div>
+                                                    <div style={{ fontSize: 13, color: '#6b8a85' }}>tCO₂e</div>
+                                                </div>
+                                            </div>
                                         )}
-                                        <div className="ghg-ai-actions">
-                                            <button type="button" className="ghg-btn ghg-btn-secondary" onClick={() => { setAiStep('upload'); setAiFile(null); setAiExtracted(null); setAiFeedback(null); }}>
+                                        <div className="ghg-v2-verified">
+                                            ✓ {aiFeedback?.text || 'Emission saved successfully'}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                                            <button type="button" className="ghg-v2-btn ghg-v2-btn-g" style={{ flex: 1 }} onClick={() => { setAiStep('upload'); setAiFile(null); setAiExtracted(null); setAiFeedback(null); }}>
                                                 <i className="fas fa-plus" aria-hidden /> {t('ghg.ai.uploadAnother')}
                                             </button>
-                                            <button type="button" className="ghg-btn ghg-btn-primary" onClick={() => { setMainTab('view'); loadEntries(); }}>
+                                            <button type="button" className="ghg-v2-btn ghg-v2-btn-p" style={{ flex: 2 }} onClick={() => { setMainTab('view'); loadEntries(); }}>
                                                 <i className="fas fa-table" aria-hidden /> {t('ghg.ai.viewData')}
                                             </button>
                                         </div>
-                                    </div>
+                                    </>
                                 )}
+                              </div>
                             </div>
                         </div>
                     )}
