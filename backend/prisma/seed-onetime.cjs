@@ -28,7 +28,7 @@ async function main() {
     },
     {
       email: 'b.aldelewy@urimpact.sa',
-      password: 'Admin@123',
+      password: 'Ur2026@',
       firstName: 'B',
       lastName: 'Aldelewy',
       company: 'URIMPACT',
