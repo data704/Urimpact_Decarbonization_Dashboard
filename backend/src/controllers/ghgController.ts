@@ -12,6 +12,8 @@ import {
   stationaryBulkConfirmBodySchema,
   mobileCombustionTemplateFormSchema,
   mobileBulkConfirmBodySchema,
+  processEmissionsFormSchema,
+  fugitiveEmissionsFormSchema,
 } from '../utils/validators.js';
 import type { GhgCategoryFormBody } from '../utils/validators.js';
 import {
@@ -29,6 +31,8 @@ import {
   MOBILE_COMBUSTION_SHEET_NAME,
   mapMobileTemplateToGhgBody,
 } from '../constants/ghgMobileCombustionTemplate.js';
+import { mapProcessEmissionsToGhgBody } from '../constants/ghgProcessEmissionsTemplate.js';
+import { mapFugitiveEmissionsToGhgBody } from '../constants/ghgFugitiveEmissionsTemplate.js';
 import {
   parseStationaryCombustionBulkFile,
   buildStationaryBulkPreview,
@@ -38,7 +42,7 @@ import {
   buildMobileBulkPreview,
 } from '../services/ghgMobileCombustionBulkService.js';
 import { logUserAction, AuditActions } from '../services/auditService.js';
-import { extractReceiptData, extractMobileReceiptData } from '../services/receiptExtractionService.js';
+import { extractReceiptData, extractMobileReceiptData, extractProcessEmissionsData, extractFugitiveEmissionsData } from '../services/receiptExtractionService.js';
 import { logger } from '../utils/logger.js';
 import { canAccessDashboard, canUpload } from '../utils/rolePermissions.js';
 
@@ -108,6 +112,57 @@ async function postGhgCategoryForm(req: AuthRequest, res: Response, scope: Emiss
             fuelUsed: validation.data!.fuelUsed ?? '',
             fuelUsedQuantity: validation.data!.fuelUsedQuantity!,
             fuelUsedUnit: validation.data!.fuelUsedUnit ?? '',
+            facility: validation.data!.facility ?? '',
+            dateOfTransaction: validation.data!.dateOfTransaction,
+            notes: validation.data!.notes,
+          },
+          validation.data!.dataEntryChannel ?? 'FORM'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sendError(res, msg, 400);
+        return;
+      }
+      channel = validation.data!.dataEntryChannel ?? 'FORM';
+    } else if (slug === 'process-emissions') {
+      const validation = validate(processEmissionsFormSchema, req.body);
+      if (!validation.success) {
+        sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+        return;
+      }
+      try {
+        body = mapProcessEmissionsToGhgBody(
+          {
+            facility: validation.data!.facility,
+            processSector: validation.data!.processSector,
+            processType: validation.data!.processType,
+            materialProduct: validation.data!.materialProduct,
+            activityValue: validation.data!.activityValue,
+            unit: validation.data!.unit,
+            dateOfTransaction: validation.data!.dateOfTransaction,
+            notes: validation.data!.notes,
+          },
+          validation.data!.dataEntryChannel ?? 'FORM'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sendError(res, msg, 400);
+        return;
+      }
+      channel = validation.data!.dataEntryChannel ?? 'FORM';
+    } else if (slug === 'fugitive-emissions') {
+      const validation = validate(fugitiveEmissionsFormSchema, req.body);
+      if (!validation.success) {
+        sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+        return;
+      }
+      try {
+        body = mapFugitiveEmissionsToGhgBody(
+          {
+            equipmentType: validation.data!.equipmentType,
+            refrigerantUsed: validation.data!.refrigerantUsed ?? '',
+            fireSuppressantUsed: validation.data!.fireSuppressantUsed ?? '',
+            netInventoryKg: validation.data!.netInventoryKg,
             facility: validation.data!.facility ?? '',
             dateOfTransaction: validation.data!.dateOfTransaction,
             notes: validation.data!.notes,
@@ -848,6 +903,213 @@ export async function postMobileCombustionAiConfirm(req: AuthRequest, res: Respo
       sendError(res, error.message, 500);
     } else {
       sendError(res, 'AI mobile confirm failed', 500);
+    }
+  }
+}
+
+/** AI document extraction — upload image/PDF, get structured process emissions data. */
+export async function postProcessEmissionsAiExtract(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file). Accepted: PDF, JPG, PNG.', 400);
+      return;
+    }
+
+    const extracted = await extractProcessEmissionsData(file.buffer, file.mimetype, file.originalname);
+    sendSuccess(res, extracted, 'Process emissions data extracted', 200);
+  } catch (error) {
+    logger.error('AI process emissions extraction error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI extraction failed', 500);
+    }
+  }
+}
+
+/** Confirm AI-extracted process emissions data — validate, calculate via Climatiq, persist. */
+export async function postProcessEmissionsAiConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const validation = validate(processEmissionsFormSchema, {
+      ...req.body,
+      dataEntryChannel: 'AI_EXTRACT',
+    });
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    let body: GhgCategoryFormBody;
+    try {
+      body = mapProcessEmissionsToGhgBody(
+        {
+          facility: validation.data!.facility ?? '',
+          processSector: validation.data!.processSector ?? '',
+          processType: validation.data!.processType ?? '',
+          materialProduct: validation.data!.materialProduct ?? '',
+          activityValue: validation.data!.activityValue!,
+          unit: validation.data!.unit ?? '',
+          dateOfTransaction: validation.data!.dateOfTransaction,
+          notes: validation.data!.notes,
+        },
+        'AI_EXTRACT'
+      ) as GhgCategoryFormBody;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const emission = await submitGhgCategoryFormEntry({
+      userId: req.user.userId,
+      organizationId: req.user.organizationId,
+      scope: 'SCOPE_1',
+      categorySlug: 'process-emissions',
+      body,
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_CALCULATED,
+      'emission',
+      emission.id,
+      {
+        ghgCategorySlug: 'process-emissions',
+        scope: 'SCOPE_1',
+        channel: 'AI_EXTRACT',
+      },
+      req
+    );
+
+    sendSuccess(res, emission, 'AI-extracted process emission saved', 201);
+  } catch (error) {
+    logger.error('AI process confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI process confirm failed', 500);
+    }
+  }
+}
+
+/** AI document extraction — upload image/PDF, get structured fugitive emissions data. */
+export async function postFugitiveEmissionsAiExtract(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file). Accepted: PDF, JPG, PNG.', 400);
+      return;
+    }
+
+    const extracted = await extractFugitiveEmissionsData(file.buffer, file.mimetype, file.originalname);
+    sendSuccess(res, extracted, 'Fugitive emissions data extracted', 200);
+  } catch (error) {
+    logger.error('AI fugitive emissions extraction error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI extraction failed', 500);
+    }
+  }
+}
+
+/** Confirm AI-extracted fugitive emissions data — validate, calculate, persist. */
+export async function postFugitiveEmissionsAiConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const validation = validate(fugitiveEmissionsFormSchema, {
+      ...req.body,
+      dataEntryChannel: 'AI_EXTRACT',
+    });
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    let body: GhgCategoryFormBody;
+    try {
+      body = mapFugitiveEmissionsToGhgBody(
+        {
+          equipmentType: validation.data!.equipmentType,
+          refrigerantUsed: validation.data!.refrigerantUsed ?? '',
+          fireSuppressantUsed: validation.data!.fireSuppressantUsed ?? '',
+          netInventoryKg: validation.data!.netInventoryKg,
+          facility: validation.data!.facility ?? '',
+          dateOfTransaction: validation.data!.dateOfTransaction,
+          notes: validation.data!.notes,
+        },
+        'AI_EXTRACT'
+      ) as GhgCategoryFormBody;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const emission = await submitGhgCategoryFormEntry({
+      userId: req.user.userId,
+      organizationId: req.user.organizationId,
+      scope: 'SCOPE_1',
+      categorySlug: 'fugitive-emissions',
+      body,
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_CALCULATED,
+      'emission',
+      emission.id,
+      {
+        ghgCategorySlug: 'fugitive-emissions',
+        scope: 'SCOPE_1',
+        channel: 'AI_EXTRACT',
+      },
+      req
+    );
+
+    sendSuccess(res, emission, 'AI-extracted fugitive emission saved', 201);
+  } catch (error) {
+    logger.error('AI fugitive confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI fugitive confirm failed', 500);
     }
   }
 }

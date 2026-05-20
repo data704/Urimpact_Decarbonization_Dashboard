@@ -19,6 +19,10 @@ import {
     aiConfirmReceipt,
     aiExtractMobileReceipt,
     aiConfirmMobileReceipt,
+    aiExtractProcessEmissions,
+    aiConfirmProcessEmissions,
+    aiExtractFugitiveEmissions,
+    aiConfirmFugitiveEmissions,
 } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { readSitesForOrganization } from '../../utils/dataInputSitesStorage.js';
@@ -30,6 +34,8 @@ import {
     MOBILE_VEHICLE_SELECT_PRESETS,
     MOBILE_FUEL_SELECT_PRESETS,
 } from './mobileCombustionConfig.js';
+import { PROCESS_SECTORS, typesForProcessSector, defaultMaterialForProcessType, PROCESS_UNITS } from '../../data/scope1ProcessEmissions.js';
+import { EQUIPMENT_TYPES, REFRIGERANTS, FIRE_SUPPRESSANTS } from '../../data/scope1FugitiveEmissions.js';
 import './GHG.css';
 
 function formatTonnes(n) {
@@ -88,6 +94,22 @@ export default function GHGCategoryDetail() {
     const [stFuelUnit, setStFuelUnit] = useState('Litre');
     const [stDate, setStDate] = useState('');
 
+    /* ── Process emissions state ── */
+    const [peFacility, setPeFacility] = useState('');
+    const [peSector, setPeSector] = useState(PROCESS_SECTORS[0].value);
+    const [peType, setPeType] = useState(PROCESS_SECTORS[0].types[0].value);
+    const [peMaterial, setPeMaterial] = useState(defaultMaterialForProcessType(PROCESS_SECTORS[0].types[0].value));
+    const [peUnit, setPeUnit] = useState('tonnes');
+    const [peDate, setPeDate] = useState('');
+
+    /* ── Fugitive Emissions state ── */
+    const [feEquipment, setFeEquipment] = useState(EQUIPMENT_TYPES[0].value);
+    const [feRefrigerant, setFeRefrigerant] = useState('');
+    const [feSuppressant, setFeSuppressant] = useState('');
+    const [feNetKg, setFeNetKg] = useState('');
+    const [feFacility, setFeFacility] = useState('');
+    const [feDate, setFeDate] = useState('');
+
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkUploading, setBulkUploading] = useState(false);
     /** @type {{ type: 'ok' | 'err'; text: string } | null} */
@@ -130,7 +152,9 @@ export default function GHGCategoryDetail() {
     const demoTonnes = meta?.demoTonnes ?? null;
     const isStationaryCombustion = Boolean(slug === 'stationary-combustion' && scope === 1);
     const isMobileCombustion = Boolean(slug === 'mobile-combustion' && scope === 1);
-    const isWorkbookScope1 = isStationaryCombustion || isMobileCombustion;
+    const isProcessEmissions = Boolean(slug === 'process-emissions' && scope === 1);
+    const isFugitiveEmissions = Boolean(slug === 'fugitive-emissions' && scope === 1);
+    const isWorkbookScope1 = isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions;
 
     /** i18n + column list for Scope 1 workbook bulk (stationary vs mobile). */
     const wbBulk = isStationaryCombustion ? 'ghg.stationary' : 'ghg.mobile';
@@ -141,9 +165,9 @@ export default function GHGCategoryDetail() {
             { id: 'form', icon: 'fa-file-pen' },
             { id: 'bulk', icon: 'fa-cloud-arrow-up' },
         ];
-        if (isStationaryCombustion || isMobileCombustion) cards.push({ id: 'ai', icon: 'fa-wand-magic-sparkles' });
+        if (isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions) cards.push({ id: 'ai', icon: 'fa-wand-magic-sparkles' });
         return cards;
-    }, [isStationaryCombustion, isMobileCombustion]);
+    }, [isStationaryCombustion, isMobileCombustion, isProcessEmissions, isFugitiveEmissions]);
 
     const stationaryExtraPastFuels = useMemo(() => {
         const presetLower = new Set(STATIONARY_FUEL_SELECT_PRESETS.map((p) => p.value.toLowerCase()));
@@ -178,7 +202,7 @@ export default function GHGCategoryDetail() {
     }, [lookupPastActivityTypes]);
 
     useEffect(() => {
-        if (!isWorkbookScope1 || !hasApi || !getAuthToken()) return;
+        if (!(isStationaryCombustion || isMobileCombustion) || !hasApi || !getAuthToken()) return;
         let cancelled = false;
         const loader = isStationaryCombustion ? getStationaryCombustionLookupOptions : getMobileCombustionLookupOptions;
         loader()
@@ -499,6 +523,44 @@ export default function GHGCategoryDetail() {
         return true;
     };
 
+    const validateProcessManual = () => {
+        if (!peFacility.trim()) {
+            setSubmitFeedback({ type: 'err', text: 'Facility is required.' });
+            return false;
+        }
+        const amt = parseFloat(String(activityAmount).replace(',', '.'));
+        if (!Number.isFinite(amt) || amt <= 0) {
+            setSubmitFeedback({ type: 'err', text: t('ghg.form.invalidAmount') });
+            return false;
+        }
+        if (!peDate) {
+            setSubmitFeedback({ type: 'err', text: 'Date of transaction is required.' });
+            return false;
+        }
+        return true;
+    };
+
+    const validateFugitiveManual = () => {
+        if (!feEquipment.trim()) {
+            setSubmitFeedback({ type: 'err', text: 'Equipment Type is required.' });
+            return false;
+        }
+        if (!feRefrigerant && !feSuppressant) {
+            setSubmitFeedback({ type: 'err', text: 'Either Refrigerant Used or Fire Suppressant Used is required.' });
+            return false;
+        }
+        const amt = parseFloat(String(feNetKg).replace(',', '.'));
+        if (!Number.isFinite(amt) || amt <= 0) {
+            setSubmitFeedback({ type: 'err', text: 'Net Inventory (kg) must be a positive number.' });
+            return false;
+        }
+        if (!feDate) {
+            setSubmitFeedback({ type: 'err', text: 'Date of transaction is required.' });
+            return false;
+        }
+        return true;
+    };
+
     const handleSubmitForm = async (e) => {
         e.preventDefault();
         if (!hasApi || !slug) return;
@@ -507,6 +569,10 @@ export default function GHGCategoryDetail() {
             setSubmitFeedback(null);
             if (isStationaryCombustion) {
                 if (!validateStationaryManual()) return;
+            } else if (isProcessEmissions) {
+                if (!validateProcessManual()) return;
+            } else if (isFugitiveEmissions) {
+                if (!validateFugitiveManual()) return;
             } else if (!validateMobileManual()) {
                 return;
             }
@@ -555,6 +621,39 @@ export default function GHGCategoryDetail() {
                     notes: notes.trim() || undefined,
                     dataEntryChannel: 'FORM',
                 };
+            } else if (isProcessEmissions) {
+                if (!validateProcessManual()) {
+                    setSubmitting(false);
+                    return;
+                }
+                const sectorObj = PROCESS_SECTORS.find((s) => s.value === peSector);
+                const typeObj = sectorObj?.types.find((t2) => t2.value === peType);
+                payload = {
+                    facility: peFacility.trim(),
+                    processSector: sectorObj?.label || peSector,
+                    processType: typeObj?.value || peType,
+                    materialProduct: peMaterial.trim(),
+                    activityValue: amount,
+                    unit: peUnit,
+                    dateOfTransaction: peDate,
+                    notes: notes.trim() || undefined,
+                    dataEntryChannel: 'FORM',
+                };
+            } else if (isFugitiveEmissions) {
+                if (!validateFugitiveManual()) {
+                    setSubmitting(false);
+                    return;
+                }
+                payload = {
+                    equipmentType: feEquipment.trim(),
+                    refrigerantUsed: feRefrigerant,
+                    fireSuppressantUsed: feSuppressant,
+                    netInventoryKg: parseFloat(String(feNetKg).replace(',', '.')),
+                    facility: feFacility.trim(),
+                    dateOfTransaction: feDate,
+                    notes: notes.trim() || undefined,
+                    dataEntryChannel: 'FORM',
+                };
             } else {
                 payload = {
                     activityType: activityType.trim(),
@@ -583,6 +682,16 @@ export default function GHGCategoryDetail() {
                 navigate('/', {
                     replace: false,
                     state: { fromSubmit: true, submitMessage: t('ghg.mobile.dashboardAfterManual') },
+                });
+            } else if (isProcessEmissions) {
+                navigate('/', {
+                    replace: false,
+                    state: { fromSubmit: true, submitMessage: 'Process emission saved successfully.' },
+                });
+            } else if (isFugitiveEmissions) {
+                navigate('/', {
+                    replace: false,
+                    state: { fromSubmit: true, submitMessage: 'Fugitive emission saved successfully.' },
                 });
             }
         } catch (err) {
@@ -715,7 +824,7 @@ export default function GHGCategoryDetail() {
                                 <div>
                                     {(isStationaryCombustion || isMobileCombustion) && stManualPhase === 'review' && (
                                         <div className="ghg-v2-status-bar ghg-v2-status-bar--ok" role="status" style={{ marginBottom: 14 }}>
-                                            ✓ {t(isStationaryCombustion ? 'ghg.stationary.reviewBannerManual' : 'ghg.mobile.reviewBannerManual')}
+                                            ✓ {t(isStationaryCombustion ? 'ghg.stationary.reviewBannerManual' : isProcessEmissions ? 'Review your process emission data before submitting.' : isFugitiveEmissions ? 'Review your fugitive emission data before submitting.' : 'ghg.mobile.reviewBannerManual')}
                                         </div>
                                     )}
                                     <div className="ghg-v2-card">
@@ -964,6 +1073,189 @@ export default function GHGCategoryDetail() {
                                                 />
                                             </div>
                                         </>
+                                    ) : isProcessEmissions ? (
+                                        <>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-facility">Facility</label>
+                                                <input
+                                                    id="ghg-pe-facility"
+                                                    value={peFacility}
+                                                    onChange={(ev) => setPeFacility(ev.target.value)}
+                                                    placeholder="e.g. Plant A"
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-sector">Process Sector</label>
+                                                <select
+                                                    id="ghg-pe-sector"
+                                                    value={peSector}
+                                                    onChange={(ev) => {
+                                                        const v = ev.target.value;
+                                                        setPeSector(v);
+                                                        const types = typesForProcessSector(v);
+                                                        const first = types[0]?.value || '';
+                                                        setPeType(first);
+                                                        setPeMaterial(defaultMaterialForProcessType(first));
+                                                    }}
+                                                >
+                                                    {PROCESS_SECTORS.map((s) => (
+                                                        <option key={s.value} value={s.value}>{s.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-type">Process Type</label>
+                                                <select
+                                                    id="ghg-pe-type"
+                                                    value={peType}
+                                                    onChange={(ev) => {
+                                                        const v = ev.target.value;
+                                                        setPeType(v);
+                                                        setPeMaterial(defaultMaterialForProcessType(v));
+                                                    }}
+                                                >
+                                                    {typesForProcessSector(peSector).map((tp) => (
+                                                        <option key={tp.value} value={tp.value}>{tp.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-material">Material / Product</label>
+                                                <input
+                                                    id="ghg-pe-material"
+                                                    value={peMaterial}
+                                                    onChange={(ev) => setPeMaterial(ev.target.value)}
+                                                    placeholder="e.g. Clinker, NH₃, Steel"
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="ghg-field-row">
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-pe-amount">Activity Data (Value)</label>
+                                                    <input
+                                                        id="ghg-pe-amount"
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        value={activityAmount}
+                                                        onChange={(ev) => setActivityAmount(ev.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-pe-unit">Unit</label>
+                                                    <select
+                                                        id="ghg-pe-unit"
+                                                        value={peUnit}
+                                                        onChange={(ev) => setPeUnit(ev.target.value)}
+                                                    >
+                                                        {PROCESS_UNITS.map((u) => (
+                                                            <option key={u} value={u}>{u}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-date">Date of Transaction</label>
+                                                <input
+                                                    id="ghg-pe-date"
+                                                    type="date"
+                                                    value={peDate}
+                                                    onChange={(ev) => setPeDate(ev.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-notes">{t('ghg.form.notes')}</label>
+                                                <textarea
+                                                    id="ghg-pe-notes"
+                                                    rows={2}
+                                                    value={notes}
+                                                    onChange={(ev) => setNotes(ev.target.value)}
+                                                />
+                                            </div>
+                                        </>
+                                    ) : isFugitiveEmissions ? (
+                                        <>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-fe-equipment">Equipment Type</label>
+                                                <select
+                                                    id="ghg-fe-equipment"
+                                                    value={feEquipment}
+                                                    onChange={(ev) => setFeEquipment(ev.target.value)}
+                                                >
+                                                    {EQUIPMENT_TYPES.map((eq) => (
+                                                        <option key={eq.value} value={eq.value}>{eq.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-fe-refrigerant">Refrigerant Used</label>
+                                                <select
+                                                    id="ghg-fe-refrigerant"
+                                                    value={feRefrigerant}
+                                                    onChange={(ev) => { setFeRefrigerant(ev.target.value); if (ev.target.value) setFeSuppressant(''); }}
+                                                >
+                                                    <option value="">— None —</option>
+                                                    {REFRIGERANTS.map((r) => (
+                                                        <option key={r.value} value={r.value}>{r.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-fe-suppressant">Fire Suppressant Used</label>
+                                                <select
+                                                    id="ghg-fe-suppressant"
+                                                    value={feSuppressant}
+                                                    onChange={(ev) => { setFeSuppressant(ev.target.value); if (ev.target.value) setFeRefrigerant(''); }}
+                                                >
+                                                    <option value="">— None —</option>
+                                                    {FIRE_SUPPRESSANTS.map((s) => (
+                                                        <option key={s.value} value={s.value}>{s.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-fe-netkg">Net Inventory (kg)</label>
+                                                <input
+                                                    id="ghg-fe-netkg"
+                                                    type="text"
+                                                    inputMode="decimal"
+                                                    value={feNetKg}
+                                                    onChange={(ev) => setFeNetKg(ev.target.value)}
+                                                    placeholder="e.g. 10"
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-fe-facility">Facility</label>
+                                                <input
+                                                    id="ghg-fe-facility"
+                                                    value={feFacility}
+                                                    onChange={(ev) => setFeFacility(ev.target.value)}
+                                                    placeholder="e.g. HQ Building"
+                                                />
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-fe-date">Date of Transaction</label>
+                                                <input
+                                                    id="ghg-fe-date"
+                                                    type="date"
+                                                    value={feDate}
+                                                    onChange={(ev) => setFeDate(ev.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-fe-notes">{t('ghg.form.notes')}</label>
+                                                <textarea
+                                                    id="ghg-fe-notes"
+                                                    rows={2}
+                                                    value={notes}
+                                                    onChange={(ev) => setNotes(ev.target.value)}
+                                                />
+                                            </div>
+                                        </>
                                     ) : (
                                         <>
                                             <div className="ghg-field">
@@ -1123,60 +1415,59 @@ export default function GHGCategoryDetail() {
                             </div>
                             <div className="ghg-v2-layout ghg-v2-layout--bulk">
                               <div>
-                                {bulkStep === 'file' && (
-                                    <>
                                         {/* Step 1 — Download Template */}
                                         <div className="ghg-v2-card">
                                             <div className="ghg-v2-card-title">Step 1 – Download Template</div>
                                             <div className="ghg-v2-template-row">
                                                 <div className="ghg-v2-template-icon"><i className="fas fa-file-excel" aria-hidden /></div>
                                                 <div className="ghg-v2-template-info">
-                                                    <div className="ghg-v2-template-name">{isStationaryCombustion ? 'Stationary_Combustion_Template.xlsx' : 'Mobile_Combustion_Template.xlsx'}</div>
+                                                    <div className="ghg-v2-template-name">{isStationaryCombustion ? 'URImpact_Stationary_Combustion_Template.xlsx' : isProcessEmissions ? 'URImpact_Process_Based_Emissions_Template.xlsx' : isFugitiveEmissions ? 'URImpact_Fugitive_Emissions_Template.xlsx' : 'URImpact_Mobile_Combustion_Template.xlsx'}</div>
                                                     <div className="ghg-v2-template-desc">Required fields, dropdown validations, sample data included</div>
                                                 </div>
                                                 <button type="button" className="ghg-v2-btn ghg-v2-btn-p" style={{ fontSize: 11.5 }} onClick={handleDownloadWorkbookTemplate}>Download</button>
                                             </div>
-                                            <div style={{ fontSize: 12, color: '#6b8a85', marginTop: 10 }}>Supported: <strong>.XLSX · .CSV</strong> · Max 50MB</div>
+                                            <div style={{ fontSize: 12, color: '#6b8a85', marginTop: 10 }}>Supported: <strong>.XLSX</strong> · <strong>.CSV</strong> · <strong>.PDF</strong> · Max 50MB</div>
                                         </div>
                                         {/* Step 2 — Upload File */}
                                         <div className="ghg-v2-card">
                                             <div className="ghg-v2-card-title">Step 2 – Upload Your File</div>
-                                            <label className="ghg-v2-upload-zone">
-                                                <input
-                                                    type="file"
-                                                    style={{ display: 'none' }}
-                                                    accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-                                                    onChange={(ev) => {
-                                                        const f = ev.target.files?.[0];
-                                                        setBulkFile(f || null);
-                                                        setBulkFeedback(null);
+                                            <input
+                                                id="ghg-bulk-file-input"
+                                                type="file"
+                                                style={{ display: 'none' }}
+                                                accept=".csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                                                onChange={(ev) => {
+                                                    const f = ev.target.files?.[0];
+                                                    setBulkFile(f || null);
+                                                    setBulkFeedback(null);
+                                                    setBulkReviewRows([]);
+                                                    if (f) {
                                                         setBulkStep('file');
-                                                        setBulkReviewRows([]);
-                                                    }}
-                                                />
+                                                        setTimeout(() => {
+                                                            const btn = document.getElementById('ghg-bulk-auto-parse');
+                                                            if (btn) btn.click();
+                                                        }, 100);
+                                                    }
+                                                }}
+                                            />
+                                            <div
+                                                className="ghg-v2-upload-zone"
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => document.getElementById('ghg-bulk-file-input')?.click()}
+                                                onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') document.getElementById('ghg-bulk-file-input')?.click(); }}
+                                            >
                                                 <div className="ghg-v2-upload-icon"><i className="fas fa-cloud-upload-alt" aria-hidden /></div>
                                                 <div className="ghg-v2-upload-title">{bulkFile ? bulkFile.name : 'Drag & drop your file here'}</div>
-                                                {!bulkFile && <button type="button" className="ghg-v2-btn ghg-v2-btn-o" style={{ marginTop: 4, fontSize: 11.5 }}>Browse File</button>}
+                                                {!bulkFile && <div className="ghg-v2-btn ghg-v2-btn-o" style={{ marginTop: 8, fontSize: 11.5, display: 'inline-block' }}>Browse File</div>}
                                                 {bulkFile && <div className="ghg-v2-upload-sub">Selected · {(bulkFile.size / 1024).toFixed(0)} KB</div>}
-                                            </label>
-                                            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-                                                <button
-                                                    type="button"
-                                                    className="ghg-v2-btn ghg-v2-btn-p"
-                                                    style={{ flex: 1, justifyContent: 'center' }}
-                                                    disabled={!bulkFile || bulkUploading}
-                                                    onClick={handleBulkPreviewFile}
-                                                >
-                                                    {bulkUploading ? t(`${wbBulk}.bulkParsing`) : t(`${wbBulk}.bulkParseReview`)} →
-                                                </button>
                                             </div>
+                                            <button id="ghg-bulk-auto-parse" type="button" style={{ display: 'none' }} onClick={handleBulkPreviewFile} />
                                         </div>
-                                    </>
-                                )}
-                                {bulkStep === 'review' && (
-                                    <>
-                                        <div className="ghg-v2-card" style={{ marginBottom: 14 }}>
-                                            <div className="ghg-v2-card-title">Step 3 – Validation Preview</div>
+                                <div className="ghg-v2-card" style={{ marginBottom: 14 }}>
+                                    <div className="ghg-v2-card-title">Step 3 – Validation Preview</div>
+                                    {bulkStep === 'review' && bulkReviewRows.length > 0 ? (
+                                        <>
                                             {(() => {
                                                 const validCount = bulkReviewRows.filter(r => r.status === 'valid' || r.status === 'edited').length;
                                                 const invalidCount = bulkReviewRows.filter(r => r.status === 'invalid').length;
@@ -1184,184 +1475,75 @@ export default function GHGCategoryDetail() {
                                                 return (
                                                     <div className={`ghg-v2-status-bar ghg-v2-status-bar--${invalidCount > 0 ? 'warn' : 'ok'}`}>
                                                         {invalidCount > 0
-                                                            ? `${bulkReviewRows.length} rows detected · ${invalidCount} errors · ${warnCount} warnings`
+                                                            ? `✓ ${bulkReviewRows.length} rows detected · ${invalidCount} error${invalidCount > 1 ? 's' : ''} · ${warnCount} warning${warnCount !== 1 ? 's' : ''}`
                                                             : `✓ ${bulkReviewRows.length} rows detected · 0 errors`}
                                                     </div>
                                                 );
                                             })()}
-                                        <div className="ghg-bulk-preview-wrap">
-                                            <table className="ghg-bulk-preview-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th>#</th>
-                                                        <th>
-                                                            {isStationaryCombustion
-                                                                ? t('ghg.stationary.asset')
-                                                                : t('ghg.mobile.vehicleType')}
-                                                        </th>
-                                                        <th>{t(`${wbBulk}.fuelUsed`)}</th>
-                                                        <th>{t(`${wbBulk}.fuelUsedQuantity`)}</th>
-                                                        <th>{t(`${wbBulk}.fuelUsedUnit`)}</th>
-                                                        <th>{t(`${wbBulk}.facility`)}</th>
-                                                        <th>{t(`${wbBulk}.dateOfTransaction`)}</th>
-                                                        <th>{t(`${wbBulk}.bulkColStatus`)}</th>
-                                                        <th>{t(`${wbBulk}.bulkColMapped`)}</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {bulkReviewRows.map((row) => (
-                                                        <tr
-                                                            key={row.clientId}
-                                                            className={
-                                                                row.status === 'invalid'
-                                                                    ? 'ghg-bulk-preview-row ghg-bulk-preview-row--invalid'
-                                                                    : 'ghg-bulk-preview-row'
-                                                            }
-                                                        >
-                                                            <td>{row.excelRow}</td>
-                                                            <td>
-                                                                <input
-                                                                    className="ghg-bulk-cell-input"
-                                                                    list={
-                                                                        isStationaryCombustion
-                                                                            ? 'ghg-stationary-asset-datalist'
-                                                                            : 'ghg-mobile-vehicle-datalist'
-                                                                    }
-                                                                    value={
-                                                                        isStationaryCombustion
-                                                                            ? (row.input.asset ?? '')
-                                                                            : (row.input.vehicleType ?? '')
-                                                                    }
-                                                                    onChange={(ev) =>
-                                                                        updateBulkRowInput(
-                                                                            row.clientId,
-                                                                            isStationaryCombustion ? 'asset' : 'vehicleType',
-                                                                            ev.target.value
-                                                                        )
-                                                                    }
-                                                                />
-                                                            </td>
-                                                            <td>
-                                                                <input
-                                                                    className="ghg-bulk-cell-input"
-                                                                    list={
-                                                                        isStationaryCombustion
-                                                                            ? 'ghg-stationary-fuel-datalist'
-                                                                            : 'ghg-mobile-fuel-datalist'
-                                                                    }
-                                                                    value={row.input.fuelUsed ?? ''}
-                                                                    onChange={(ev) =>
-                                                                        updateBulkRowInput(row.clientId, 'fuelUsed', ev.target.value)
-                                                                    }
-                                                                />
-                                                            </td>
-                                                            <td>
-                                                                <input
-                                                                    className="ghg-bulk-cell-input ghg-bulk-cell-input--num"
-                                                                    value={row.input.fuelUsedQuantity ?? ''}
-                                                                    onChange={(ev) =>
-                                                                        updateBulkRowInput(
-                                                                            row.clientId,
-                                                                            'fuelUsedQuantity',
-                                                                            ev.target.value
-                                                                        )
-                                                                    }
-                                                                />
-                                                            </td>
-                                                            <td>
-                                                                <input
-                                                                    className="ghg-bulk-cell-input"
-                                                                    value={row.input.fuelUsedUnit ?? ''}
-                                                                    onChange={(ev) =>
-                                                                        updateBulkRowInput(
-                                                                            row.clientId,
-                                                                            'fuelUsedUnit',
-                                                                            ev.target.value
-                                                                        )
-                                                                    }
-                                                                />
-                                                            </td>
-                                                            <td>
-                                                                <input
-                                                                    className="ghg-bulk-cell-input"
-                                                                    list={
-                                                                        isStationaryCombustion
-                                                                            ? 'ghg-stationary-facility-datalist'
-                                                                            : 'ghg-mobile-facility-datalist'
-                                                                    }
-                                                                    value={row.input.facility ?? ''}
-                                                                    onChange={(ev) =>
-                                                                        updateBulkRowInput(row.clientId, 'facility', ev.target.value)
-                                                                    }
-                                                                />
-                                                            </td>
-                                                            <td>
-                                                                <input
-                                                                    className="ghg-bulk-cell-input"
-                                                                    value={row.input.dateOfTransaction ?? ''}
-                                                                    onChange={(ev) =>
-                                                                        updateBulkRowInput(
-                                                                            row.clientId,
-                                                                            'dateOfTransaction',
-                                                                            ev.target.value
-                                                                        )
-                                                                    }
-                                                                />
-                                                            </td>
-                                                            <td>
-                                                                <span className={`ghg-bulk-status ghg-bulk-status--${row.status}`}>
-                                                                    {row.status === 'edited'
-                                                                        ? t(`${wbBulk}.bulkStatusEdited`)
-                                                                        : row.status === 'valid'
-                                                                          ? t(`${wbBulk}.bulkStatusValid`)
-                                                                          : t(`${wbBulk}.bulkStatusInvalid`)}
-                                                                </span>
-                                                                {row.errors?.length > 0 && (
-                                                                    <p className="ghg-bulk-row-err">{row.errors.join(' ')}</p>
-                                                                )}
-                                                            </td>
-                                                            <td className="ghg-bulk-mapped-cell">
-                                                                {row.mappedPreview ? (
-                                                                    <span className="ghg-bulk-mapped">
-                                                                        {row.mappedPreview.activityType} ·{' '}
-                                                                        {formatTonnes(row.mappedPreview.activityAmount)}{' '}
-                                                                        {row.mappedPreview.activityUnit}
-                                                                    </span>
-                                                                ) : (
-                                                                    '—'
-                                                                )}
-                                                            </td>
+                                            <div className="ghg-bulk-preview-wrap">
+                                                <table className="ghg-bulk-preview-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Row</th>
+                                                            <th>Facility</th>
+                                                            <th>Fuel Type</th>
+                                                            <th>Qty</th>
+                                                            <th>Unit</th>
+                                                            <th>Status</th>
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                                    </thead>
+                                                    <tbody>
+                                                        {bulkReviewRows.map((row) => (
+                                                            <tr
+                                                                key={row.clientId}
+                                                                className={
+                                                                    row.status === 'invalid'
+                                                                        ? 'ghg-bulk-preview-row ghg-bulk-preview-row--invalid'
+                                                                        : row.status === 'edited'
+                                                                          ? 'ghg-bulk-preview-row ghg-bulk-preview-row--warn'
+                                                                          : 'ghg-bulk-preview-row'
+                                                                }
+                                                            >
+                                                                <td>{row.excelRow}</td>
+                                                                <td>{row.input.facility || row.input.asset || row.input.vehicleType || '—'}</td>
+                                                                <td>{row.input.fuelUsed ?? '—'}</td>
+                                                                <td>{row.input.fuelUsedQuantity != null ? formatTonnes(Number(row.input.fuelUsedQuantity)) : '—'}</td>
+                                                                <td>{row.input.fuelUsedUnit ?? '—'}</td>
+                                                                <td>
+                                                                    <span className={`ghg-bulk-status ghg-bulk-status--${row.status}`}>
+                                                                        {row.status === 'edited'
+                                                                            ? '● Warning'
+                                                                            : row.status === 'valid'
+                                                                              ? '● Valid'
+                                                                              : '● Error'}
+                                                                    </span>
+                                                                    {row.errors?.length > 0 && (
+                                                                        <p className="ghg-bulk-row-err">{row.errors.join(' ')}</p>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div style={{ padding: '28px 16px', textAlign: 'center', color: '#aab0b8', fontSize: 13 }}>
+                                            Upload a file in Step 2 to preview validated rows here.
                                         </div>
-                                        </div>{/* close ghg-v2-card */}
-                                        <p className="ghg-form-hint ghg-form-hint--tight">{t(`${wbBulk}.bulkEditedHint`)}</p>
-                                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                                            <button
-                                                type="button"
-                                                className="ghg-v2-btn ghg-v2-btn-g"
-                                                disabled={bulkUploading}
-                                                onClick={() => {
-                                                    setBulkStep('file');
-                                                    setBulkReviewRows([]);
-                                                    setBulkFeedback(null);
-                                                }}
-                                            >
-                                                {t(`${wbBulk}.bulkBackToFile`)}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="ghg-v2-btn ghg-v2-btn-p"
-                                                style={{ flex: 1 }}
-                                                disabled={bulkUploading || bulkReviewRows.length === 0}
-                                                onClick={handleBulkConfirmImport}
-                                            >
-                                                {bulkUploading ? t(`${wbBulk}.bulkConfirming`) : t(`${wbBulk}.bulkConfirmImport`)} →
-                                            </button>
-                                        </div>
-                                    </>
+                                    )}
+                                </div>
+                                {bulkStep === 'review' && bulkReviewRows.length > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                                        <button
+                                            type="button"
+                                            className="ghg-v2-btn ghg-v2-btn-p"
+                                            disabled={bulkUploading || bulkReviewRows.length === 0}
+                                            onClick={handleBulkConfirmImport}
+                                        >
+                                            {bulkUploading ? t(`${wbBulk}.bulkConfirming`) : 'Import Data'} →
+                                        </button>
+                                    </div>
                                 )}
                                 {bulkFeedback && (
                                     <div className={`ghg-v2-status-bar ghg-v2-status-bar--${bulkFeedback.type === 'err' ? 'err' : 'ok'}`} style={{ marginTop: 10 }}>
@@ -1396,7 +1578,7 @@ export default function GHGCategoryDetail() {
                                                     {[
                                                         ['Total Rows', bulkReviewRows.length],
                                                         ['Valid', validCount],
-                                                        ['Edited', editedCount],
+                                                        ['Warnings', editedCount],
                                                         ['Errors', invalidCount],
                                                     ].map(([label, val]) => (
                                                         <div key={label} className="ghg-v2-kv-row">
@@ -1434,7 +1616,7 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'ai' && (isStationaryCombustion || isMobileCombustion) && (
+                    {addStep === 'ai' && (isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions) && (
                         <div className="ghg-method-workspace">
                             {/* v2 Page header */}
                             <div className="ghg-v2-page-header">
@@ -1477,20 +1659,28 @@ export default function GHGCategoryDetail() {
                                 {/* Upload card */}
                                 <div className="ghg-v2-card" style={{ marginBottom: 14 }}>
                                     <div className="ghg-v2-card-title">Upload Invoice / Utility Bill</div>
-                                    <label className="ghg-v2-upload-zone" style={{ borderColor: aiFile ? 'var(--teal-mid, #2BBFB3)' : undefined, background: aiFile ? 'var(--teal-bg, #E6FAF8)' : undefined }}>
-                                        <input
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png"
-                                            style={{ display: 'none' }}
-                                            onChange={(e) => { setAiFile(e.target.files?.[0] || null); setAiFeedback(null); }}
-                                        />
+                                    <input
+                                        id="ghg-ai-file-input"
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => { setAiFile(e.target.files?.[0] || null); setAiFeedback(null); }}
+                                    />
+                                    <div
+                                        className="ghg-v2-upload-zone"
+                                        role="button"
+                                        tabIndex={0}
+                                        style={{ borderColor: aiFile ? 'var(--teal-mid, #2BBFB3)' : undefined, background: aiFile ? 'var(--teal-bg, #E6FAF8)' : undefined }}
+                                        onClick={() => document.getElementById('ghg-ai-file-input')?.click()}
+                                        onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') document.getElementById('ghg-ai-file-input')?.click(); }}
+                                    >
                                         <div className="ghg-v2-upload-icon"><i className="fas fa-file-invoice" aria-hidden /></div>
                                         <div className="ghg-v2-upload-title">{aiFile ? aiFile.name : t('ghg.ai.dropzoneText')}</div>
                                         {aiFile
                                             ? <div className="ghg-v2-upload-sub">Successfully uploaded · {(aiFile.size / 1024).toFixed(0)} KB</div>
-                                            : <button type="button" className="ghg-v2-btn ghg-v2-btn-o" style={{ marginTop: 4, fontSize: 11.5 }}>Browse File</button>
+                                            : <div className="ghg-v2-btn ghg-v2-btn-o" style={{ marginTop: 4, fontSize: 11.5, display: 'inline-block' }}>Browse File</div>
                                         }
-                                    </label>
+                                    </div>
                                     {aiStep === 'upload' && (
                                         <button
                                             type="button"
@@ -1501,11 +1691,32 @@ export default function GHGCategoryDetail() {
                                                 setAiStep('extracting');
                                                 setAiFeedback(null);
                                                 try {
-                                                    const result = isMobileCombustion
-                                                        ? await aiExtractMobileReceipt(aiFile)
-                                                        : await aiExtractReceipt(aiFile);
+                                                    const result = isFugitiveEmissions
+                                                        ? await aiExtractFugitiveEmissions(aiFile)
+                                                        : isProcessEmissions
+                                                            ? await aiExtractProcessEmissions(aiFile)
+                                                            : isMobileCombustion
+                                                                ? await aiExtractMobileReceipt(aiFile)
+                                                                : await aiExtractReceipt(aiFile);
                                                     setAiExtracted(result);
-                                                    setAiEdited(isMobileCombustion ? {
+                                                    setAiEdited(isFugitiveEmissions ? {
+                                                        equipmentType: result.equipmentType || '',
+                                                        refrigerantUsed: result.refrigerantUsed || '',
+                                                        fireSuppressantUsed: result.fireSuppressantUsed || '',
+                                                        netInventoryKg: result.netInventoryKg || '',
+                                                        facility: result.facility || '',
+                                                        dateOfTransaction: result.dateOfTransaction || '',
+                                                        notes: result.notes || '',
+                                                    } : isProcessEmissions ? {
+                                                        facility: result.facility || '',
+                                                        processSector: result.processSector || '',
+                                                        processType: result.processType || '',
+                                                        materialProduct: result.materialProduct || '',
+                                                        activityValue: result.activityValue || '',
+                                                        unit: result.unit || '',
+                                                        dateOfTransaction: result.dateOfTransaction || '',
+                                                        notes: result.notes || '',
+                                                    } : isMobileCombustion ? {
                                                         vehicleType: result.vehicleType || '',
                                                         fuelUsed: result.fuelUsed || '',
                                                         fuelUsedQuantity: result.fuelUsedQuantity || '',
@@ -1579,49 +1790,172 @@ export default function GHGCategoryDetail() {
                                             <div className="ghg-v2-status-bar ghg-v2-status-bar--warn" style={{ marginBottom: 12 }}>
                                                 ⚠ Review all fields before approving. Highlighted fields need attention.
                                             </div>
-                                            {isMobileCombustion ? (
-                                                <div className="ghg-v2-fg">
-                                                    <label className="ghg-v2-fl">{t('ghg.mobile.vehicleType')}</label>
-                                                    <input className="ghg-v2-fi" value={aiEdited.vehicleType} onChange={(e) => setAiEdited({ ...aiEdited, vehicleType: e.target.value })} />
-                                                </div>
+                                            {isFugitiveEmissions ? (
+                                                <>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Equipment Type</label>
+                                                        <select className="ghg-v2-fsel" value={aiEdited.equipmentType} onChange={(e) => setAiEdited({ ...aiEdited, equipmentType: e.target.value })}>
+                                                            <option value="">— Select —</option>
+                                                            {EQUIPMENT_TYPES.map((eq) => <option key={eq.value} value={eq.value}>{eq.label}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Refrigerant Used</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.refrigerantUsed} onChange={(e) => { setAiEdited({ ...aiEdited, refrigerantUsed: e.target.value, fireSuppressantUsed: e.target.value ? '' : aiEdited.fireSuppressantUsed }); }}>
+                                                                <option value="">— None —</option>
+                                                                {REFRIGERANTS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Fire Suppressant Used</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.fireSuppressantUsed} onChange={(e) => { setAiEdited({ ...aiEdited, fireSuppressantUsed: e.target.value, refrigerantUsed: e.target.value ? '' : aiEdited.refrigerantUsed }); }}>
+                                                                <option value="">— None —</option>
+                                                                {FIRE_SUPPRESSANTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Net Inventory (kg)</label>
+                                                            <input className="ghg-v2-fi" type="number" step="any" min="0" value={aiEdited.netInventoryKg} onChange={(e) => setAiEdited({ ...aiEdited, netInventoryKg: e.target.value })} />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Facility</label>
+                                                            <input className="ghg-v2-fi" value={aiEdited.facility} onChange={(e) => setAiEdited({ ...aiEdited, facility: e.target.value })} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Date of Transaction</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.dateOfTransaction} onChange={(e) => setAiEdited({ ...aiEdited, dateOfTransaction: e.target.value })} placeholder="DD/MM/YYYY" />
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.form.notes')}</label>
+                                                        <textarea className="ghg-v2-fta" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
+                                                    </div>
+                                                </>
+                                            ) : isProcessEmissions ? (
+                                                <>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Facility</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.facility} onChange={(e) => setAiEdited({ ...aiEdited, facility: e.target.value })} />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Process Sector</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.processSector} onChange={(e) => setAiEdited({ ...aiEdited, processSector: e.target.value })}>
+                                                                <option value="">— Select —</option>
+                                                                {PROCESS_SECTORS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Process Type</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.processType} onChange={(e) => setAiEdited({ ...aiEdited, processType: e.target.value })}>
+                                                                <option value="">— Select —</option>
+                                                                {typesForProcessSector(aiEdited.processSector).map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Material / Product</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.materialProduct} onChange={(e) => setAiEdited({ ...aiEdited, materialProduct: e.target.value })} />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Activity Value</label>
+                                                            <input className="ghg-v2-fi" type="number" step="any" min="0" value={aiEdited.activityValue} onChange={(e) => setAiEdited({ ...aiEdited, activityValue: e.target.value })} />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Unit</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.unit} onChange={(e) => setAiEdited({ ...aiEdited, unit: e.target.value })}>
+                                                                {PROCESS_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Date of Transaction</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.dateOfTransaction} onChange={(e) => setAiEdited({ ...aiEdited, dateOfTransaction: e.target.value })} placeholder="DD/MM/YYYY" />
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.form.notes')}</label>
+                                                        <textarea className="ghg-v2-fta" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
+                                                    </div>
+                                                </>
+                                            ) : isMobileCombustion ? (
+                                                <>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.mobile.vehicleType')}</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.vehicleType} onChange={(e) => setAiEdited({ ...aiEdited, vehicleType: e.target.value })} />
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.mobile.fuelUsed')}</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.fuelUsed} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsed: e.target.value })} />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.mobile.fuelUsedQuantity')}</label>
+                                                            <input className="ghg-v2-fi" type="number" step="any" min="0" value={aiEdited.fuelUsedQuantity} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedQuantity: e.target.value })} />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.mobile.fuelUsedUnit')}</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.fuelUsedUnit} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedUnit: e.target.value })}>
+                                                                {MOBILE_TEMPLATE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.mobile.facility')}</label>
+                                                            <input className="ghg-v2-fi" value={aiEdited.facility} onChange={(e) => setAiEdited({ ...aiEdited, facility: e.target.value })} />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.mobile.dateOfTransaction')}</label>
+                                                            <input className="ghg-v2-fi" value={aiEdited.dateOfTransaction} onChange={(e) => setAiEdited({ ...aiEdited, dateOfTransaction: e.target.value })} placeholder="DD/MM/YYYY" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.form.notes')}</label>
+                                                        <textarea className="ghg-v2-fta" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
+                                                    </div>
+                                                </>
                                             ) : (
-                                                <div className="ghg-v2-fg">
-                                                    <label className="ghg-v2-fl">{t('ghg.stationary.asset')}</label>
-                                                    <input className="ghg-v2-fi" value={aiEdited.asset} onChange={(e) => setAiEdited({ ...aiEdited, asset: e.target.value })} />
-                                                </div>
+                                                <>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.stationary.asset')}</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.asset} onChange={(e) => setAiEdited({ ...aiEdited, asset: e.target.value })} />
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.stationary.fuelUsed')}</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.fuelUsed} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsed: e.target.value })} />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.stationary.fuelUsedQuantity')}</label>
+                                                            <input className="ghg-v2-fi" type="number" step="any" min="0" value={aiEdited.fuelUsedQuantity} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedQuantity: e.target.value })} />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.stationary.fuelUsedUnit')}</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.fuelUsedUnit} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedUnit: e.target.value })}>
+                                                                {STATIONARY_TEMPLATE_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.stationary.facility')}</label>
+                                                            <input className="ghg-v2-fi" value={aiEdited.facility} onChange={(e) => setAiEdited({ ...aiEdited, facility: e.target.value })} />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">{t('ghg.stationary.dateOfTransaction')}</label>
+                                                            <input className="ghg-v2-fi" value={aiEdited.dateOfTransaction} onChange={(e) => setAiEdited({ ...aiEdited, dateOfTransaction: e.target.value })} placeholder="DD/MM/YYYY" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.form.notes')}</label>
+                                                        <textarea className="ghg-v2-fta" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
+                                                    </div>
+                                                </>
                                             )}
-                                            <div className="ghg-v2-fg">
-                                                <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.fuelUsed' : 'ghg.stationary.fuelUsed')}</label>
-                                                <input className="ghg-v2-fi" value={aiEdited.fuelUsed} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsed: e.target.value })} />
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                                <div className="ghg-v2-fg">
-                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.fuelUsedQuantity' : 'ghg.stationary.fuelUsedQuantity')}</label>
-                                                    <input className="ghg-v2-fi" type="number" step="any" min="0" value={aiEdited.fuelUsedQuantity} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedQuantity: e.target.value })} />
-                                                </div>
-                                                <div className="ghg-v2-fg">
-                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.fuelUsedUnit' : 'ghg.stationary.fuelUsedUnit')}</label>
-                                                    <select className="ghg-v2-fsel" value={aiEdited.fuelUsedUnit} onChange={(e) => setAiEdited({ ...aiEdited, fuelUsedUnit: e.target.value })}>
-                                                        {(isMobileCombustion ? MOBILE_TEMPLATE_UNITS : STATIONARY_TEMPLATE_UNITS).map((u) => (
-                                                            <option key={u} value={u}>{u}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                                                <div className="ghg-v2-fg">
-                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.facility' : 'ghg.stationary.facility')}</label>
-                                                    <input className="ghg-v2-fi" value={aiEdited.facility} onChange={(e) => setAiEdited({ ...aiEdited, facility: e.target.value })} />
-                                                </div>
-                                                <div className="ghg-v2-fg">
-                                                    <label className="ghg-v2-fl">{t(isMobileCombustion ? 'ghg.mobile.dateOfTransaction' : 'ghg.stationary.dateOfTransaction')}</label>
-                                                    <input className="ghg-v2-fi" value={aiEdited.dateOfTransaction} onChange={(e) => setAiEdited({ ...aiEdited, dateOfTransaction: e.target.value })} placeholder="DD/MM/YYYY" />
-                                                </div>
-                                            </div>
-                                            <div className="ghg-v2-fg">
-                                                <label className="ghg-v2-fl">{t('ghg.form.notes')}</label>
-                                                <textarea className="ghg-v2-fta" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
-                                            </div>
                                         </div>
                                         {aiFeedback?.type === 'err' && (
                                             <div className="ghg-v2-status-bar ghg-v2-status-bar--err" style={{ marginBottom: 10 }}>{aiFeedback.text}</div>
@@ -1639,12 +1973,33 @@ export default function GHGCategoryDetail() {
                                                 type="button"
                                                 className="ghg-v2-btn ghg-v2-btn-p"
                                                 style={{ flex: 2 }}
-                                                disabled={!aiEdited.fuelUsed || !aiEdited.fuelUsedQuantity || !aiEdited.fuelUsedUnit}
+                                                disabled={isFugitiveEmissions
+                                                    ? (!aiEdited.equipmentType || (!aiEdited.refrigerantUsed && !aiEdited.fireSuppressantUsed) || !aiEdited.netInventoryKg)
+                                                    : isProcessEmissions
+                                                        ? (!aiEdited.processSector || !aiEdited.processType || !aiEdited.activityValue || !aiEdited.unit)
+                                                        : (!aiEdited.fuelUsed || !aiEdited.fuelUsedQuantity || !aiEdited.fuelUsedUnit)}
                                                 onClick={async () => {
                                                     setAiStep('confirming');
                                                     setAiFeedback(null);
                                                     try {
-                                                        const payload = isMobileCombustion ? {
+                                                        const payload = isFugitiveEmissions ? {
+                                                            equipmentType: aiEdited.equipmentType,
+                                                            refrigerantUsed: aiEdited.refrigerantUsed,
+                                                            fireSuppressantUsed: aiEdited.fireSuppressantUsed,
+                                                            netInventoryKg: Number(aiEdited.netInventoryKg),
+                                                            facility: aiEdited.facility,
+                                                            dateOfTransaction: aiEdited.dateOfTransaction,
+                                                            notes: aiEdited.notes,
+                                                        } : isProcessEmissions ? {
+                                                            facility: aiEdited.facility,
+                                                            processSector: aiEdited.processSector,
+                                                            processType: aiEdited.processType,
+                                                            materialProduct: aiEdited.materialProduct,
+                                                            activityValue: Number(aiEdited.activityValue),
+                                                            unit: aiEdited.unit,
+                                                            dateOfTransaction: aiEdited.dateOfTransaction,
+                                                            notes: aiEdited.notes,
+                                                        } : isMobileCombustion ? {
                                                             vehicleType: aiEdited.vehicleType,
                                                             fuelUsed: aiEdited.fuelUsed,
                                                             fuelUsedQuantity: Number(aiEdited.fuelUsedQuantity),
@@ -1661,9 +2016,13 @@ export default function GHGCategoryDetail() {
                                                             dateOfTransaction: aiEdited.dateOfTransaction,
                                                             notes: aiEdited.notes,
                                                         };
-                                                        const result = isMobileCombustion
-                                                            ? await aiConfirmMobileReceipt(payload)
-                                                            : await aiConfirmReceipt(payload);
+                                                        const result = isFugitiveEmissions
+                                                            ? await aiConfirmFugitiveEmissions(payload)
+                                                            : isProcessEmissions
+                                                                ? await aiConfirmProcessEmissions(payload)
+                                                                : isMobileCombustion
+                                                                    ? await aiConfirmMobileReceipt(payload)
+                                                                    : await aiConfirmReceipt(payload);
                                                         setLastSaved(result);
                                                         setAiFeedback({ type: 'ok', text: t('ghg.ai.confirmSuccess') });
                                                         setAiStep('done');

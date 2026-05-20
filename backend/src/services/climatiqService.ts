@@ -49,6 +49,16 @@ const ACTIVITY_MAPPINGS: Record<string, string> = {
   // Water
   'water-supply': 'water-supply_type_mains-treatment_type_typical',
   'water-treatment': 'water-type_wastewater-treatment_type_typical',
+
+  // Process-based emissions (Scope 1)
+  'cement-clinker': 'cement_ite-type_clinker_production',
+  'steel-bf-bof': 'steel-type_bf_bof',
+  'steel-eaf': 'steel-type_eaf',
+  'ammonia-production': 'chemical-type_ammonia',
+  'nitric-acid-production': 'chemical-type_nitric_acid',
+  'oil-gas-refining': 'fuel_type_crude_oil-fuel_use_refining',
+  'oil-gas-flaring': 'fuel_type_natural_gas-fuel_use_flaring',
+  'glass-melting': 'glass-type_flat_glass',
 };
 
 // Unit mappings
@@ -316,6 +326,34 @@ const FALLBACK_EMISSION_FACTORS: Record<string, {
   'refrigerant-r410a': { factor: 2088, unit: 'kg/kg', source: 'IPCC AR5 - R410A GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
   'refrigerant-r134a': { factor: 1430, unit: 'kg/kg', source: 'IPCC AR5 - R134a GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
   'refrigerant-r32': { factor: 675, unit: 'kg/kg', source: 'IPCC AR5 - R32 GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+  'refrigerant-r125': { factor: 3500, unit: 'kg/kg', source: 'IPCC AR5 - R125 GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+  'refrigerant-r404a': { factor: 3922, unit: 'kg/kg', source: 'IPCC AR5 - R404A GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+  'refrigerant-r407c': { factor: 1774, unit: 'kg/kg', source: 'IPCC AR5 - R407C GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+  'refrigerant-r507a': { factor: 3985, unit: 'kg/kg', source: 'IPCC AR5 - R507A GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+  'refrigerant-r22': { factor: 1810, unit: 'kg/kg', source: 'IPCC AR5 - HCFC-22 GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+
+  // ============ FIRE SUPPRESSANTS (kg CO2e per kg) ============
+  'suppressant-sf6': { factor: 22800, unit: 'kg/kg', source: 'IPCC AR5 - SF6 GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+  'suppressant-co2': { factor: 1, unit: 'kg/kg', source: 'CO2 fire suppressant - direct', co2Ratio: 1, ch4Ratio: 0, n2oRatio: 0 },
+  'suppressant-hfc227ea': { factor: 3220, unit: 'kg/kg', source: 'IPCC AR5 - HFC-227ea (FM-200) GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+  'suppressant-novec1230': { factor: 1, unit: 'kg/kg', source: 'Novec 1230 - negligible GWP', co2Ratio: 0, ch4Ratio: 0, n2oRatio: 0 },
+
+  // ============ PROCESS-BASED EMISSIONS (kg CO2e per tonne of product) ============
+  'cement-clinker': { factor: 525, unit: 'kg/t', source: 'IPCC 2006 - Cement clinker (process CO2)', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
+  'cement-other': { factor: 525, unit: 'kg/t', source: 'IPCC 2006 - Cement (generic)', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
+  'steel-bf-bof': { factor: 1850, unit: 'kg/t', source: 'IPCC 2006 - Steel BF/BOF', co2Ratio: 0.98, ch4Ratio: 0.01, n2oRatio: 0.01 },
+  'steel-eaf': { factor: 580, unit: 'kg/t', source: 'IPCC 2006 - Steel EAF', co2Ratio: 0.98, ch4Ratio: 0.01, n2oRatio: 0.01 },
+  'metals-other': { factor: 1000, unit: 'kg/t', source: 'IPCC 2006 - Metals (generic)', co2Ratio: 0.98, ch4Ratio: 0.01, n2oRatio: 0.01 },
+  'ammonia-production': { factor: 1600, unit: 'kg/t', source: 'IPCC 2006 - Ammonia production', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
+  'nitric-acid-production': { factor: 1850, unit: 'kg/t', source: 'IPCC 2006 - Nitric acid (N2O)', co2Ratio: 0.05, ch4Ratio: 0.01, n2oRatio: 0.94 },
+  'chemicals-other': { factor: 1000, unit: 'kg/t', source: 'IPCC 2006 - Chemicals (generic)', co2Ratio: 0.95, ch4Ratio: 0.03, n2oRatio: 0.02 },
+  'oil-gas-refining': { factor: 290, unit: 'kg/t', source: 'IPCC 2006 - Oil refining', co2Ratio: 0.98, ch4Ratio: 0.01, n2oRatio: 0.01 },
+  'oil-gas-flaring': { factor: 2700, unit: 'kg/t', source: 'IPCC 2006 - Flaring', co2Ratio: 0.98, ch4Ratio: 0.015, n2oRatio: 0.005 },
+  'oil-gas-venting': { factor: 21000, unit: 'kg/t', source: 'IPCC 2006 - Venting (CH4 dominated)', co2Ratio: 0.05, ch4Ratio: 0.94, n2oRatio: 0.01 },
+  'oil-gas-other': { factor: 500, unit: 'kg/t', source: 'IPCC 2006 - Oil & Gas (generic)', co2Ratio: 0.95, ch4Ratio: 0.03, n2oRatio: 0.02 },
+  'glass-melting': { factor: 590, unit: 'kg/t', source: 'IPCC 2006 - Glass melting', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
+  'glass-other': { factor: 590, unit: 'kg/t', source: 'IPCC 2006 - Glass (generic)', co2Ratio: 0.99, ch4Ratio: 0.005, n2oRatio: 0.005 },
+  'process-other': { factor: 500, unit: 'kg/t', source: 'Generic process emissions (indicative)', co2Ratio: 0.95, ch4Ratio: 0.03, n2oRatio: 0.02 },
 };
 
 /**

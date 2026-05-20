@@ -18,6 +18,10 @@ import {
   postStationaryCombustionAiConfirm,
   postMobileCombustionAiExtract,
   postMobileCombustionAiConfirm,
+  postProcessEmissionsAiExtract,
+  postProcessEmissionsAiConfirm,
+  postFugitiveEmissionsAiExtract,
+  postFugitiveEmissionsAiConfirm,
   getMobileCombustionTemplate,
   getMobileCombustionLookupOptions,
   postMobileCombustionBulkPreview,
@@ -67,6 +71,22 @@ router.post(
   postMobileCombustionAiExtract
 );
 router.post('/scope-1/categories/mobile-combustion/ai/confirm', postMobileCombustionAiConfirm);
+
+/** AI document extraction — process emissions: upload image/PDF, get structured data; then confirm to persist */
+router.post(
+  '/scope-1/categories/process-emissions/ai/extract',
+  uploadReceiptMemory.single('file'),
+  postProcessEmissionsAiExtract
+);
+router.post('/scope-1/categories/process-emissions/ai/confirm', postProcessEmissionsAiConfirm);
+
+/** AI document extraction — fugitive emissions: upload image/PDF, get structured data; then confirm to persist */
+router.post(
+  '/scope-1/categories/fugitive-emissions/ai/extract',
+  uploadReceiptMemory.single('file'),
+  postFugitiveEmissionsAiExtract
+);
+router.post('/scope-1/categories/fugitive-emissions/ai/confirm', postFugitiveEmissionsAiConfirm);
 
 /** One emission row per request — Scope 1 category form */
 router.post('/scope-1/categories/:categorySlug/form', postScope1CategoryForm);

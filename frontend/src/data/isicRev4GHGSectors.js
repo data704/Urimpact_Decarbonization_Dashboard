@@ -110,9 +110,9 @@ export const ISIC_SECTORS = [
 
 export const REVENUE_CURRENCIES = ['AED', 'INR', 'EUR', 'USD', 'GBP', 'SAR'];
 
-/** Dial codes for primary phone — UAE listed first as typical default; remainder A–Z */
+/** Dial codes for primary phone — Saudi Arabia listed first as default; remainder A–Z */
 export const PHONE_COUNTRY_CODES = [
-    { code: '+971', label: 'UAE (+971)' },
+    { code: '+966', label: 'Saudi Arabia (+966)' },
     { code: '+61', label: 'Australia (+61)' },
     { code: '+973', label: 'Bahrain (+973)' },
     { code: '+880', label: 'Bangladesh (+880)' },
@@ -132,10 +132,10 @@ export const PHONE_COUNTRY_CODES = [
     { code: '+92', label: 'Pakistan (+92)' },
     { code: '+63', label: 'Philippines (+63)' },
     { code: '+974', label: 'Qatar (+974)' },
-    { code: '+966', label: 'Saudi Arabia (+966)' },
     { code: '+65', label: 'Singapore (+65)' },
     { code: '+27', label: 'South Africa (+27)' },
     { code: '+90', label: 'Turkey (+90)' },
+    { code: '+971', label: 'UAE (+971)' },
     { code: '+44', label: 'United Kingdom (+44)' },
     { code: '+1', label: 'United States (+1)' },
 ];

@@ -58,3 +58,28 @@ export function typesForProcessSector(sectorValue) {
     const s = PROCESS_SECTORS.find((x) => x.value === sectorValue);
     return s?.types ?? [];
 }
+
+/** Default material / product label for a given process type. */
+const DEFAULT_MATERIAL = {
+    CLINKER_PRODUCTION: 'Clinker',
+    CEMENT_OTHER: '',
+    STEEL_BF_BOF: 'Steel',
+    STEEL_EAF: 'Steel',
+    METALS_OTHER: '',
+    AMMONIA: 'NH\u2083',
+    NITRIC_ACID: 'Nitric acid',
+    CHEMICALS_OTHER: '',
+    REFINING: 'Crude oil',
+    FLARING: 'Natural gas',
+    VENTING: 'Natural gas',
+    OIL_GAS_OTHER: '',
+    GLASS_MELTING: 'Glass',
+    GLASS_OTHER: '',
+    OTHER_SPECIFY: '',
+};
+
+export function defaultMaterialForProcessType(typeValue) {
+    return DEFAULT_MATERIAL[typeValue] ?? '';
+}
+
+export const PROCESS_UNITS = ['tonnes', 'kg', 'Metric ton'];

@@ -779,6 +779,92 @@ export async function aiConfirmMobileReceipt(data) {
 }
 
 /**
+ * AI document extraction — upload document image/PDF, get structured process emissions data.
+ * @returns { facility, processSector, processType, materialProduct, activityValue, unit, dateOfTransaction, notes, confidence }
+ */
+export async function aiExtractProcessEmissions(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/process-emissions/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm AI-extracted process emissions data — validate, calculate via Climatiq, persist.
+ * Body: { facility, processSector, processType, materialProduct, activityValue, unit, dateOfTransaction, notes? }
+ * @returns emission object
+ */
+export async function aiConfirmProcessEmissions(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/process-emissions/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * AI document extraction — upload document image/PDF, get structured fugitive emissions data.
+ * @returns { equipmentType, refrigerantUsed, fireSuppressantUsed, netInventoryKg, facility, dateOfTransaction, notes, confidence }
+ */
+export async function aiExtractFugitiveEmissions(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/fugitive-emissions/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm AI-extracted fugitive emissions data — validate, calculate, persist.
+ * Body: { equipmentType, refrigerantUsed, fireSuppressantUsed, netInventoryKg, facility, dateOfTransaction, notes? }
+ * @returns emission object
+ */
+export async function aiConfirmFugitiveEmissions(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-1/categories/fugitive-emissions/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
  * Fetch user's emissions list with optional filters. Requires auth.
  * Query: { scope?, category?, ghgCategorySlug?, region?, startDate?, endDate?, page?, limit? }
  * Returns { data: emissions[], pagination: { page, limit, total, totalPages } }.

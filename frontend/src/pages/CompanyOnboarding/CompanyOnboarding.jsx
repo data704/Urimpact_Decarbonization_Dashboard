@@ -42,7 +42,7 @@ const emptyForm = () => ({
     pocDesignation: '',
     pocDepartment: '',
     pocEmail: '',
-    pocCountryCode: '+971',
+    pocCountryCode: '+966',
     pocPhone: '',
     legalName: '',
     commercialRegistrationNumber: '',

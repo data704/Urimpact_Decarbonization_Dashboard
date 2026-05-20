@@ -132,6 +132,49 @@ export const mobileCombustionTemplateFormSchema = z
 
 export type MobileCombustionTemplateFormBody = z.infer<typeof mobileCombustionTemplateFormSchema>;
 
+/**
+ * Strict body for Scope 1 — process-based emissions.
+ * Fields: facility, processSector, processType, materialProduct, activityValue, unit, dateOfTransaction.
+ */
+export const processEmissionsFormSchema = z
+  .object({
+    facility: z.string().min(1, 'Facility is required').max(500),
+    processSector: z.string().min(1, 'Process Sector is required').max(200),
+    processType: z.string().min(1, 'Process Type is required').max(200),
+    materialProduct: z.string().min(1, 'Material / Product is required').max(200),
+    activityValue: z.coerce.number().positive('Activity value must be positive'),
+    unit: z.string().min(1, 'Unit is required').max(120),
+    dateOfTransaction: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict();
+
+export type ProcessEmissionsFormBody = z.infer<typeof processEmissionsFormSchema>;
+
+/**
+ * Strict body for Scope 1 — fugitive emissions.
+ * Fields: equipmentType, refrigerantUsed, fireSuppressantUsed, netInventoryKg, facility, dateOfTransaction.
+ */
+export const fugitiveEmissionsFormSchema = z
+  .object({
+    equipmentType: z.string().min(1, 'Equipment Type is required').max(500),
+    refrigerantUsed: z.string().max(200).optional().default(''),
+    fireSuppressantUsed: z.string().max(200).optional().default(''),
+    netInventoryKg: z.coerce.number().positive('Net Inventory must be positive'),
+    facility: z.string().max(500).optional().default(''),
+    dateOfTransaction: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict()
+  .refine(
+    (d) => (d.refrigerantUsed || '').trim() !== '' || (d.fireSuppressantUsed || '').trim() !== '',
+    { message: 'Either Refrigerant Used or Fire Suppressant Used is required' }
+  );
+
+export type FugitiveEmissionsFormBody = z.infer<typeof fugitiveEmissionsFormSchema>;
+
 /** Confirmed bulk rows (after user review); `excelRow` is optional metadata for error messages. */
 export const stationaryBulkConfirmBodySchema = z
   .object({

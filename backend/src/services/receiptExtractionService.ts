@@ -252,3 +252,249 @@ export async function extractMobileReceiptData(
 
   return parsed;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Process-Based Emissions — document extraction
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+const PROCESS_EXTRACTION_PROMPT = `You are an expert at reading industrial process documents, invoices, production reports, and compliance filings for GHG (Greenhouse Gas) emissions reporting under the GHG Protocol Scope 1 — Process-Based Emissions category.
+
+The document may be in Arabic, English, or any other language. Extract the data regardless of language.
+
+Extract the following fields from the uploaded document. Return ONLY a valid JSON object (no markdown, no explanation) with these keys:
+
+{
+  "facility": "Name of the facility, plant, or production site",
+  "processSector": "One of: CEMENT, METALS, CHEMICALS, OIL_GAS, GLASS, OTHER",
+  "processType": "One of: CLINKER_PRODUCTION, CEMENT_OTHER, STEEL_BF_BOF, STEEL_EAF, METALS_OTHER, AMMONIA, NITRIC_ACID, CHEMICALS_OTHER, REFINING, FLARING, VENTING, OIL_GAS_OTHER, GLASS_MELTING, GLASS_OTHER, OTHER_SPECIFY",
+  "materialProduct": "Name of the material or product (e.g. Clinker, Steel, NH3, Crude oil, Glass). Translate to English if needed.",
+  "activityValue": 0,
+  "unit": "Unit of measurement (tonnes, kg, Metric ton)",
+  "dateOfTransaction": "Date in DD/MM/YYYY format",
+  "notes": "Any additional relevant information (invoice number, supplier name, batch number, production line, etc.)",
+  "confidence": "high | medium | low"
+}
+
+Rules:
+- processSector must be one of: CEMENT, METALS, CHEMICALS, OIL_GAS, GLASS, OTHER
+- processType must match the sector (e.g. CEMENT sector → CLINKER_PRODUCTION or CEMENT_OTHER)
+- activityValue must be a positive number representing mass/weight of material processed or produced
+- unit must be one of: tonnes, kg, Metric ton
+- dateOfTransaction must be in DD/MM/YYYY format
+- If a field cannot be determined, use empty string for text fields and 0 for numeric fields
+- Translate any Arabic/non-English text to English for the field values
+- Set confidence to "high" if all key fields (sector, type, quantity, unit, date) are clearly readable, "medium" if some are inferred, "low" if guessing
+- Return ONLY the JSON object, nothing else`;
+
+export type ProcessExtractionResult = {
+  facility: string;
+  processSector: string;
+  processType: string;
+  materialProduct: string;
+  activityValue: number;
+  unit: string;
+  dateOfTransaction: string;
+  notes: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+export async function extractProcessEmissionsData(
+  fileBuffer: Buffer,
+  mimeType: string,
+  originalName: string
+): Promise<ProcessExtractionResult> {
+  if (!config.anthropic.apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not configured. Set it in your .env file.');
+  }
+
+  const client = new Anthropic({ apiKey: config.anthropic.apiKey });
+  const source = bufferToBase64MediaType(fileBuffer, mimeType);
+
+  logger.info(`AI process emissions extraction starting for "${originalName}" (${mimeType}, ${(fileBuffer.length / 1024).toFixed(0)} KB)`);
+
+  const isPdf = mimeType === 'application/pdf';
+
+  const contentBlock: Anthropic.Messages.ContentBlockParam[] = isPdf
+    ? [
+        {
+          type: 'document' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: 'application/pdf' as const,
+            data: source.data,
+          },
+        },
+        { type: 'text' as const, text: PROCESS_EXTRACTION_PROMPT },
+      ]
+    : [
+        {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: (source.media_type === 'application/pdf' ? 'image/jpeg' : source.media_type) as 'image/jpeg',
+            data: source.data,
+          },
+        },
+        { type: 'text' as const, text: PROCESS_EXTRACTION_PROMPT },
+      ];
+
+  const response = await client.messages.create({
+    model: config.anthropic.model,
+    max_tokens: config.anthropic.maxTokens,
+    messages: [{ role: 'user', content: contentBlock }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === 'text');
+  if (!textBlock || textBlock.type !== 'text') {
+    throw new Error('Claude returned no text response');
+  }
+
+  let raw = textBlock.text.trim();
+  if (raw.startsWith('```')) {
+    raw = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  }
+
+  let parsed: ProcessExtractionResult;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    logger.error('Claude returned invalid JSON:', raw.slice(0, 500));
+    throw new Error('AI returned invalid JSON. Please try again or use manual entry.');
+  }
+
+  // Sanitize
+  parsed.facility = String(parsed.facility ?? '').trim();
+  parsed.processSector = String(parsed.processSector ?? '').trim();
+  parsed.processType = String(parsed.processType ?? '').trim();
+  parsed.materialProduct = String(parsed.materialProduct ?? '').trim();
+  parsed.activityValue = Number(parsed.activityValue) || 0;
+  parsed.unit = String(parsed.unit ?? '').trim();
+  parsed.dateOfTransaction = String(parsed.dateOfTransaction ?? '').trim();
+  parsed.notes = String(parsed.notes ?? '').trim();
+  parsed.confidence = (['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low') as 'high' | 'medium' | 'low';
+
+  logger.info(`AI process extraction complete: sector=${parsed.processSector}, type=${parsed.processType}, qty=${parsed.activityValue} ${parsed.unit}, confidence=${parsed.confidence}`);
+
+  return parsed;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Fugitive Emissions — document extraction
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+const FUGITIVE_EXTRACTION_PROMPT = `You are an expert at reading equipment maintenance records, refrigerant logs, fire suppression system reports, and compliance documents for GHG (Greenhouse Gas) emissions reporting under the GHG Protocol Scope 1 — Fugitive Emissions category.
+
+The document may be in Arabic, English, or any other language. Extract the data regardless of language.
+
+Extract the following fields from the uploaded document. Return ONLY a valid JSON object (no markdown, no explanation) with these keys:
+
+{
+  "equipmentType": "One of: AC, Chiller, Refrigerator, Heat Pump, Cold Storage, Fire Equipment, Switchgear, Transformer, Other",
+  "refrigerantUsed": "Refrigerant type if applicable (e.g. HFC-134a, R-32, R-410A, R-404A, R-407C, R-507A, R-22, R-125). Empty string if not a refrigerant.",
+  "fireSuppressantUsed": "Fire suppressant type if applicable (e.g. CO2, SF6, HFC-227ea, Novec-1230). Empty string if not a suppressant.",
+  "netInventoryKg": 0,
+  "facility": "Name of the facility or building if mentioned",
+  "dateOfTransaction": "Date in DD/MM/YYYY format",
+  "notes": "Any additional relevant information (service report number, technician, serial number, etc.)",
+  "confidence": "high | medium | low"
+}
+
+Rules:
+- equipmentType must be one of: AC, Chiller, Refrigerator, Heat Pump, Cold Storage, Fire Equipment, Switchgear, Transformer, Other
+- Either refrigerantUsed or fireSuppressantUsed should be filled (not both). Use empty string for the one that does not apply.
+- netInventoryKg must be a positive number representing the net amount of gas charged/leaked/lost in kilograms
+- dateOfTransaction must be in DD/MM/YYYY format
+- If a field cannot be determined, use empty string for text fields and 0 for numeric fields
+- Translate any Arabic/non-English text to English for the field values
+- Set confidence to "high" if all key fields are clearly readable, "medium" if some are inferred, "low" if guessing
+- Return ONLY the JSON object, nothing else`;
+
+export type FugitiveExtractionResult = {
+  equipmentType: string;
+  refrigerantUsed: string;
+  fireSuppressantUsed: string;
+  netInventoryKg: number;
+  facility: string;
+  dateOfTransaction: string;
+  notes: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+export async function extractFugitiveEmissionsData(
+  fileBuffer: Buffer,
+  mimeType: string,
+  originalName: string
+): Promise<FugitiveExtractionResult> {
+  if (!config.anthropic.apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not configured. Set it in your .env file.');
+  }
+
+  const client = new Anthropic({ apiKey: config.anthropic.apiKey });
+  const source = bufferToBase64MediaType(fileBuffer, mimeType);
+
+  logger.info(`AI fugitive emissions extraction starting for "${originalName}" (${mimeType}, ${(fileBuffer.length / 1024).toFixed(0)} KB)`);
+
+  const isPdf = mimeType === 'application/pdf';
+
+  const contentBlock: Anthropic.Messages.ContentBlockParam[] = isPdf
+    ? [
+        {
+          type: 'document' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: 'application/pdf' as const,
+            data: source.data,
+          },
+        },
+        { type: 'text' as const, text: FUGITIVE_EXTRACTION_PROMPT },
+      ]
+    : [
+        {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: (source.media_type === 'application/pdf' ? 'image/jpeg' : source.media_type) as 'image/jpeg',
+            data: source.data,
+          },
+        },
+        { type: 'text' as const, text: FUGITIVE_EXTRACTION_PROMPT },
+      ];
+
+  const response = await client.messages.create({
+    model: config.anthropic.model,
+    max_tokens: config.anthropic.maxTokens,
+    messages: [{ role: 'user', content: contentBlock }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === 'text');
+  if (!textBlock || textBlock.type !== 'text') {
+    throw new Error('Claude returned no text response');
+  }
+
+  let raw = textBlock.text.trim();
+  if (raw.startsWith('```')) {
+    raw = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  }
+
+  let parsed: FugitiveExtractionResult;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    logger.error('Claude returned invalid JSON:', raw.slice(0, 500));
+    throw new Error('AI returned invalid JSON. Please try again or use manual entry.');
+  }
+
+  // Sanitize
+  parsed.equipmentType = String(parsed.equipmentType ?? '').trim();
+  parsed.refrigerantUsed = String(parsed.refrigerantUsed ?? '').trim();
+  parsed.fireSuppressantUsed = String(parsed.fireSuppressantUsed ?? '').trim();
+  parsed.netInventoryKg = Number(parsed.netInventoryKg) || 0;
+  parsed.facility = String(parsed.facility ?? '').trim();
+  parsed.dateOfTransaction = String(parsed.dateOfTransaction ?? '').trim();
+  parsed.notes = String(parsed.notes ?? '').trim();
+  parsed.confidence = (['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low') as 'high' | 'medium' | 'low';
+
+  logger.info(`AI fugitive extraction complete: equipment=${parsed.equipmentType}, refrigerant=${parsed.refrigerantUsed}, suppressant=${parsed.fireSuppressantUsed}, qty=${parsed.netInventoryKg}kg, confidence=${parsed.confidence}`);
+
+  return parsed;
+}
