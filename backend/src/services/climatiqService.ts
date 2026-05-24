@@ -81,6 +81,10 @@ const UNIT_MAPPINGS: Record<string, string> = {
   'mi': 'mi',
   'm3': 'm3',
   'cubic_meters': 'm3',
+  'GJ': 'GJ',
+  'gj': 'GJ',
+  'gigajoule': 'GJ',
+  'gigajoules': 'GJ',
 };
 
 /**

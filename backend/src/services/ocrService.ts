@@ -332,7 +332,7 @@ function getMockOCRResult(filePath: string): OCRResult {
       consumption,
       consumptionUnit: 'kWh',
       amount: parseFloat((amount * 1.05).toFixed(2)),
-      currency: 'AED',
+      currency: 'SAR',
       billingPeriodStart: billingStart,
       billingPeriodEnd: billingEnd,
       documentDate: now.toLocaleDateString('en-GB'),
@@ -377,7 +377,7 @@ function getMockOCRResult(filePath: string): OCRResult {
       quantity,
       quantityUnit: 'L',
       amount: parseFloat((amount * 1.05).toFixed(2)),
-      currency: 'AED',
+      currency: 'SAR',
       documentDate: now.toLocaleDateString('en-GB'),
     };
   } else if (isWaterBill) {
@@ -407,7 +407,7 @@ function getMockOCRResult(filePath: string): OCRResult {
       consumption,
       consumptionUnit: 'm3',
       amount: parseFloat(amount.toFixed(2)),
-      currency: 'AED',
+      currency: 'SAR',
       billingPeriodStart: billingStart,
       billingPeriodEnd: billingEnd,
     };
@@ -436,7 +436,7 @@ function getMockOCRResult(filePath: string): OCRResult {
       consumption,
       consumptionUnit: 'm3',
       amount: parseFloat(amount.toFixed(2)),
-      currency: 'AED',
+      currency: 'SAR',
       billingPeriodStart: billingStart,
       billingPeriodEnd: billingEnd,
     };
@@ -455,7 +455,7 @@ function getMockOCRResult(filePath: string): OCRResult {
       consumption,
       consumptionUnit: 'kWh',
       amount: parseFloat((consumption * 0.35).toFixed(2)),
-      currency: 'AED',
+      currency: 'SAR',
     };
   }
 

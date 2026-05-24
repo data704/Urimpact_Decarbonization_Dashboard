@@ -25,7 +25,7 @@ export function syncOnboardingFacilitiesToDataInputSites(orgId, facilityRows) {
                     ? 'Manufacturing Plant'
                     : DI_FACILITY_FROM_ONBOARDING[f.facilityType] || 'Office',
             boundary: 'Operational Control',
-            currency: 'AED — UAE Dirham',
+            currency: 'SAR — Saudi Riyal',
             utilityProvider: '',
         }));
         localStorage.setItem(`${DATA_INPUT_SITES_PREFIX}${orgId}`, JSON.stringify(mapped));

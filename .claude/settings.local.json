@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cd \"C:/Users/Muhammad Kashif/Documents/Urimpact-Carbon-Emission/frontend\" && node -e \"\nconst {transformSync} = require\\('esbuild'\\);\nconst fs = require\\('fs'\\);\ntry {\n  transformSync\\(fs.readFileSync\\('src/pages/Dashboard/Dashboard.jsx', 'utf8'\\), {loader:'jsx', target:'es2020'}\\);\n  console.log\\('Dashboard.jsx OK'\\);\n} catch\\(e\\) {\n  console.log\\('ERR:', e.message.split\\('\\\\\\\\n'\\).slice\\(0,5\\).join\\('\\\\\\\\n'\\)\\);\n}\" 2>&1)"
+      "Bash(cd \"C:/Users/Muhammad Kashif/Documents/Urimpact-Carbon-Emission/frontend\" && node -e \"\nconst {transformSync} = require\\('esbuild'\\);\nconst fs = require\\('fs'\\);\ntry {\n  transformSync\\(fs.readFileSync\\('src/pages/Dashboard/Dashboard.jsx', 'utf8'\\), {loader:'jsx', target:'es2020'}\\);\n  console.log\\('Dashboard.jsx OK'\\);\n} catch\\(e\\) {\n  console.log\\('ERR:', e.message.split\\('\\\\\\\\n'\\).slice\\(0,5\\).join\\('\\\\\\\\n'\\)\\);\n}\" 2>&1)",
+      "Bash(cd \"C:/Users/Muhammad Kashif/Documents/Urimpact-Carbon-Emission/backend\" && npx tsc --noEmit 2>&1 | head -50)"
     ]
   }
 }

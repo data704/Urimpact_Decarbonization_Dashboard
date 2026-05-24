@@ -52,7 +52,7 @@ const emptyForm = () => ({
     sectorIsicCode: '',
     subSectorIsicCode: '',
     revenueAmount: '',
-    revenueCurrency: 'AED',
+    revenueCurrency: 'SAR',
     employeeCount: '',
 });
 

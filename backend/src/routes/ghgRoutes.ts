@@ -26,6 +26,26 @@ import {
   getMobileCombustionLookupOptions,
   postMobileCombustionBulkPreview,
   postMobileCombustionBulkConfirm,
+  getPurchasedElectricityTemplate,
+  postPurchasedElectricityBulkPreview,
+  postPurchasedElectricityBulkConfirm,
+  postPurchasedElectricityAiExtract,
+  postPurchasedElectricityAiConfirm,
+  getPurchasedHeatingTemplate,
+  postPurchasedHeatingBulkPreview,
+  postPurchasedHeatingBulkConfirm,
+  postPurchasedHeatingAiExtract,
+  postPurchasedHeatingAiConfirm,
+  getPurchasedCoolingTemplate,
+  postPurchasedCoolingBulkPreview,
+  postPurchasedCoolingBulkConfirm,
+  postPurchasedCoolingAiExtract,
+  postPurchasedCoolingAiConfirm,
+  getPurchasedSteamingTemplate,
+  postPurchasedSteamingBulkPreview,
+  postPurchasedSteamingBulkConfirm,
+  postPurchasedSteamingAiExtract,
+  postPurchasedSteamingAiConfirm,
 } from '../controllers/ghgController.js';
 import { uploadGhgBulkMemory, uploadReceiptMemory } from '../middleware/upload.js';
 
@@ -91,6 +111,74 @@ router.post('/scope-1/categories/fugitive-emissions/ai/confirm', postFugitiveEmi
 /** One emission row per request — Scope 1 category form */
 router.post('/scope-1/categories/:categorySlug/form', postScope1CategoryForm);
 router.get('/scope-1/categories/:categorySlug/entries', getScope1CategoryEntries);
+
+/** Purchased electricity — template download + bulk preview / confirm (Scope 2) */
+router.get('/scope-2/categories/purchased-electricity/template', getPurchasedElectricityTemplate);
+router.post(
+  '/scope-2/categories/purchased-electricity/bulk/preview',
+  uploadGhgBulkMemory.single('file'),
+  postPurchasedElectricityBulkPreview
+);
+router.post('/scope-2/categories/purchased-electricity/bulk/confirm', postPurchasedElectricityBulkConfirm);
+
+/** AI document extraction — purchased electricity: upload electricity bill, get structured data; then confirm to persist */
+router.post(
+  '/scope-2/categories/purchased-electricity/ai/extract',
+  uploadReceiptMemory.single('file'),
+  postPurchasedElectricityAiExtract
+);
+router.post('/scope-2/categories/purchased-electricity/ai/confirm', postPurchasedElectricityAiConfirm);
+
+/** Purchased heating — template download + bulk preview / confirm (Scope 2) */
+router.get('/scope-2/categories/purchased-heating/template', getPurchasedHeatingTemplate);
+router.post(
+  '/scope-2/categories/purchased-heating/bulk/preview',
+  uploadGhgBulkMemory.single('file'),
+  postPurchasedHeatingBulkPreview
+);
+router.post('/scope-2/categories/purchased-heating/bulk/confirm', postPurchasedHeatingBulkConfirm);
+
+/** AI document extraction — purchased heating: upload heating bill, get structured data; then confirm to persist */
+router.post(
+  '/scope-2/categories/purchased-heating/ai/extract',
+  uploadReceiptMemory.single('file'),
+  postPurchasedHeatingAiExtract
+);
+router.post('/scope-2/categories/purchased-heating/ai/confirm', postPurchasedHeatingAiConfirm);
+
+/** Purchased cooling — template download + bulk preview / confirm (Scope 2) */
+router.get('/scope-2/categories/purchased-cooling/template', getPurchasedCoolingTemplate);
+router.post(
+  '/scope-2/categories/purchased-cooling/bulk/preview',
+  uploadGhgBulkMemory.single('file'),
+  postPurchasedCoolingBulkPreview
+);
+router.post('/scope-2/categories/purchased-cooling/bulk/confirm', postPurchasedCoolingBulkConfirm);
+
+/** AI document extraction — purchased cooling: upload cooling bill, get structured data; then confirm to persist */
+router.post(
+  '/scope-2/categories/purchased-cooling/ai/extract',
+  uploadReceiptMemory.single('file'),
+  postPurchasedCoolingAiExtract
+);
+router.post('/scope-2/categories/purchased-cooling/ai/confirm', postPurchasedCoolingAiConfirm);
+
+/** Purchased steaming — template download + bulk preview / confirm (Scope 2) */
+router.get('/scope-2/categories/purchased-steaming/template', getPurchasedSteamingTemplate);
+router.post(
+  '/scope-2/categories/purchased-steaming/bulk/preview',
+  uploadGhgBulkMemory.single('file'),
+  postPurchasedSteamingBulkPreview
+);
+router.post('/scope-2/categories/purchased-steaming/bulk/confirm', postPurchasedSteamingBulkConfirm);
+
+/** AI document extraction — purchased steaming: upload steam bill, get structured data; then confirm to persist */
+router.post(
+  '/scope-2/categories/purchased-steaming/ai/extract',
+  uploadReceiptMemory.single('file'),
+  postPurchasedSteamingAiExtract
+);
+router.post('/scope-2/categories/purchased-steaming/ai/confirm', postPurchasedSteamingAiConfirm);
 
 /** One emission row per request — Scope 2 category form */
 router.post('/scope-2/categories/:categorySlug/form', postScope2CategoryForm);

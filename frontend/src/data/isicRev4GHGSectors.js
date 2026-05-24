@@ -108,7 +108,7 @@ export const ISIC_SECTORS = [
     },
 ];
 
-export const REVENUE_CURRENCIES = ['AED', 'INR', 'EUR', 'USD', 'GBP', 'SAR'];
+export const REVENUE_CURRENCIES = ['SAR', 'AED', 'INR', 'EUR', 'USD', 'GBP'];
 
 /** Dial codes for primary phone — Saudi Arabia listed first as default; remainder A–Z */
 export const PHONE_COUNTRY_CODES = [

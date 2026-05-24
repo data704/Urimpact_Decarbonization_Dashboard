@@ -864,6 +864,401 @@ export async function aiConfirmFugitiveEmissions(data) {
   return json?.data ?? json;
 }
 
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Scope 2 — Purchased Electricity: template, bulk, AI
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Download Excel template for Scope 2 — Purchased Electricity.
+ */
+export async function downloadPurchasedElectricityTemplate() {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-electricity/template`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 240) || 'Template download failed');
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'purchased-electricity-template.xlsx';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Parse workbook for purchased electricity bulk import (preview only).
+ */
+export async function previewPurchasedElectricityBulk(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-electricity/bulk/preview`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Preview failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm reviewed purchased electricity rows (JSON).
+ */
+export async function confirmPurchasedElectricityBulk(rows) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-electricity/bulk/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * AI document extraction — upload electricity bill image/PDF, get structured data.
+ */
+export async function aiExtractPurchasedElectricity(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-electricity/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm AI-extracted purchased electricity data — validate, calculate via Climatiq, persist.
+ */
+export async function aiConfirmPurchasedElectricity(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-electricity/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/* ── Purchased Heating (Scope 2) ────────────────────────────── */
+
+export async function downloadPurchasedHeatingTemplate() {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-heating/template`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 240) || 'Template download failed');
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'purchased-heating-template.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Parse workbook for purchased heating bulk import (preview only).
+ */
+export async function previewPurchasedHeatingBulk(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-heating/bulk/preview`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Preview failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm reviewed purchased heating rows (JSON).
+ */
+export async function confirmPurchasedHeatingBulk(rows) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-heating/bulk/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+export async function aiExtractPurchasedHeating(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-heating/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/**
+ * Confirm AI-extracted purchased heating data — validate, calculate via Climatiq, persist.
+ */
+export async function aiConfirmPurchasedHeating(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-heating/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/* ── Purchased Cooling (Scope 2) ────────────────────────────── */
+
+export async function downloadPurchasedCoolingTemplate() {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-cooling/template`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 240) || 'Template download failed');
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'purchased-cooling-template.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function previewPurchasedCoolingBulk(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-cooling/bulk/preview`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Preview failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+export async function confirmPurchasedCoolingBulk(rows) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-cooling/bulk/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+export async function aiExtractPurchasedCooling(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-cooling/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+export async function aiConfirmPurchasedCooling(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-cooling/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+/* ── Purchased Steaming (Scope 2) ───────────────────────────── */
+
+export async function downloadPurchasedSteamingTemplate() {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-steaming/template`, {
+    method: 'GET',
+    headers: authHeaders(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text.slice(0, 240) || 'Template download failed');
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'purchased-steaming-template.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function previewPurchasedSteamingBulk(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-steaming/bulk/preview`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Preview failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+export async function confirmPurchasedSteamingBulk(rows) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-steaming/bulk/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rows }),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `Confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+export async function aiExtractPurchasedSteaming(file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-steaming/ai/extract`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI extraction failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
+export async function aiConfirmPurchasedSteaming(data) {
+  const res = await authFetch(`${API_BASE}/ghg/scope-2/categories/purchased-steaming/ai/confirm`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = json?.error || json?.message || `AI confirm failed (${res.status})`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  return json?.data ?? json;
+}
+
 /**
  * Fetch user's emissions list with optional filters. Requires auth.
  * Query: { scope?, category?, ghgCategorySlug?, region?, startDate?, endDate?, page?, limit? }

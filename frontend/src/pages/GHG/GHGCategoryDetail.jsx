@@ -23,6 +23,26 @@ import {
     aiConfirmProcessEmissions,
     aiExtractFugitiveEmissions,
     aiConfirmFugitiveEmissions,
+    downloadPurchasedElectricityTemplate,
+    previewPurchasedElectricityBulk,
+    confirmPurchasedElectricityBulk,
+    aiExtractPurchasedElectricity,
+    aiConfirmPurchasedElectricity,
+    downloadPurchasedHeatingTemplate,
+    previewPurchasedHeatingBulk,
+    confirmPurchasedHeatingBulk,
+    aiExtractPurchasedHeating,
+    aiConfirmPurchasedHeating,
+    downloadPurchasedCoolingTemplate,
+    previewPurchasedCoolingBulk,
+    confirmPurchasedCoolingBulk,
+    aiExtractPurchasedCooling,
+    aiConfirmPurchasedCooling,
+    downloadPurchasedSteamingTemplate,
+    previewPurchasedSteamingBulk,
+    confirmPurchasedSteamingBulk,
+    aiExtractPurchasedSteaming,
+    aiConfirmPurchasedSteaming,
 } from '../../api/client.js';
 import { useAuth } from '../../context/AuthContext.jsx';
 import { readSitesForOrganization } from '../../utils/dataInputSitesStorage.js';
@@ -36,6 +56,10 @@ import {
 } from './mobileCombustionConfig.js';
 import { PROCESS_SECTORS, typesForProcessSector, defaultMaterialForProcessType, PROCESS_UNITS } from '../../data/scope1ProcessEmissions.js';
 import { EQUIPMENT_TYPES, REFRIGERANTS, FIRE_SUPPRESSANTS } from '../../data/scope1FugitiveEmissions.js';
+import { PE_TEMPLATE_COLUMNS, PE_TEMPLATE_UNITS } from './purchasedElectricityConfig.js';
+import { PH_TEMPLATE_COLUMNS, PH_TEMPLATE_UNITS } from './purchasedHeatingConfig.js';
+import { PC_TEMPLATE_COLUMNS, PC_TEMPLATE_UNITS } from './purchasedCoolingConfig.js';
+import { PS_TEMPLATE_COLUMNS, PS_TEMPLATE_UNITS } from './purchasedSteamingConfig.js';
 import './GHG.css';
 
 function formatTonnes(n) {
@@ -110,6 +134,15 @@ export default function GHGCategoryDetail() {
     const [feFacility, setFeFacility] = useState('');
     const [feDate, setFeDate] = useState('');
 
+    /* ── Purchased Electricity state (Scope 2) ── */
+    const [peActivityType, setPeActivityType] = useState('Activity based');
+    const [peSourceType, setPeSourceType] = useState('');
+    const [peConsumption, setPeConsumption] = useState('');
+    const [peConsumptionUnit, setPeConsumptionUnit] = useState('kWh');
+    const [peSiteId, setPeSiteId] = useState('');
+    const [peStartDate, setPeStartDate] = useState('');
+    const [peEndDate, setPeEndDate] = useState('');
+
     const [bulkFile, setBulkFile] = useState(null);
     const [bulkUploading, setBulkUploading] = useState(false);
     /** @type {{ type: 'ok' | 'err'; text: string } | null} */
@@ -154,7 +187,13 @@ export default function GHGCategoryDetail() {
     const isMobileCombustion = Boolean(slug === 'mobile-combustion' && scope === 1);
     const isProcessEmissions = Boolean(slug === 'process-emissions' && scope === 1);
     const isFugitiveEmissions = Boolean(slug === 'fugitive-emissions' && scope === 1);
+    const isPurchasedElectricity = Boolean(slug === 'purchased-electricity' && scope === 2);
+    const isPurchasedHeating = Boolean(slug === 'purchased-heating' && scope === 2);
+    const isPurchasedCooling = Boolean(slug === 'purchased-cooling' && scope === 2);
+    const isPurchasedSteaming = Boolean(slug === 'purchased-steaming' && scope === 2);
+    const isScope2Purchased = isPurchasedElectricity || isPurchasedHeating || isPurchasedCooling || isPurchasedSteaming;
     const isWorkbookScope1 = isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions;
+    const isWorkbookCategory = isWorkbookScope1 || isScope2Purchased;
 
     /** i18n + column list for Scope 1 workbook bulk (stationary vs mobile). */
     const wbBulk = isStationaryCombustion ? 'ghg.stationary' : 'ghg.mobile';
@@ -165,9 +204,9 @@ export default function GHGCategoryDetail() {
             { id: 'form', icon: 'fa-file-pen' },
             { id: 'bulk', icon: 'fa-cloud-arrow-up' },
         ];
-        if (isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions) cards.push({ id: 'ai', icon: 'fa-wand-magic-sparkles' });
+        if (isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions || isScope2Purchased) cards.push({ id: 'ai', icon: 'fa-wand-magic-sparkles' });
         return cards;
-    }, [isStationaryCombustion, isMobileCombustion, isProcessEmissions, isFugitiveEmissions]);
+    }, [isStationaryCombustion, isMobileCombustion, isProcessEmissions, isFugitiveEmissions, isScope2Purchased]);
 
     const stationaryExtraPastFuels = useMemo(() => {
         const presetLower = new Set(STATIONARY_FUEL_SELECT_PRESETS.map((p) => p.value.toLowerCase()));
@@ -359,7 +398,19 @@ export default function GHGCategoryDetail() {
     const handleDownloadWorkbookTemplate = async () => {
         setBulkFeedback(null);
         try {
-            if (isStationaryCombustion) {
+            if (isPurchasedSteaming) {
+                await downloadPurchasedSteamingTemplate();
+                setBulkFeedback({ type: 'ok', text: 'Template downloaded successfully.' });
+            } else if (isPurchasedCooling) {
+                await downloadPurchasedCoolingTemplate();
+                setBulkFeedback({ type: 'ok', text: 'Template downloaded successfully.' });
+            } else if (isPurchasedElectricity) {
+                await downloadPurchasedElectricityTemplate();
+                setBulkFeedback({ type: 'ok', text: 'Template downloaded successfully.' });
+            } else if (isPurchasedHeating) {
+                await downloadPurchasedHeatingTemplate();
+                setBulkFeedback({ type: 'ok', text: 'Template downloaded successfully.' });
+            } else if (isStationaryCombustion) {
                 await downloadStationaryCombustionTemplate();
                 setBulkFeedback({ type: 'ok', text: t('ghg.stationary.templateDownloaded') });
             } else {
@@ -389,9 +440,17 @@ export default function GHGCategoryDetail() {
         setBulkUploading(true);
         setBulkFeedback(null);
         try {
-            const data = isStationaryCombustion
-                ? await previewStationaryCombustionBulk(bulkFile)
-                : await previewMobileCombustionBulk(bulkFile);
+            const data = isPurchasedSteaming
+                ? await previewPurchasedSteamingBulk(bulkFile)
+                : isPurchasedCooling
+                    ? await previewPurchasedCoolingBulk(bulkFile)
+                    : isPurchasedElectricity
+                    ? await previewPurchasedElectricityBulk(bulkFile)
+                    : isPurchasedHeating
+                        ? await previewPurchasedHeatingBulk(bulkFile)
+                        : isStationaryCombustion
+                            ? await previewStationaryCombustionBulk(bulkFile)
+                            : await previewMobileCombustionBulk(bulkFile);
             const rows = Array.isArray(data.rows) ? data.rows : [];
             setBulkReviewRows(
                 rows.map((r) => ({
@@ -428,25 +487,51 @@ export default function GHGCategoryDetail() {
         setBulkUploading(true);
         setBulkFeedback(null);
         try {
-            const rows = bulkReviewRows.map((r) => {
-                const q = parseFloat(String(r.input.fuelUsedQuantity).replace(',', '.'));
-                const base = {
-                    fuelUsed: String(r.input.fuelUsed ?? '').trim(),
-                    fuelUsedQuantity: Number.isFinite(q) && q > 0 ? q : r.input.fuelUsedQuantity,
-                    fuelUsedUnit: String(r.input.fuelUsedUnit ?? '').trim(),
-                    facility: String(r.input.facility ?? '').trim(),
-                    dateOfTransaction: r.input.dateOfTransaction,
-                    notes: r.input.notes ? String(r.input.notes).trim() : undefined,
-                    excelRow: r.excelRow,
-                };
-                if (isStationaryCombustion) {
-                    return { ...base, asset: String(r.input.asset ?? '').trim() };
-                }
-                return { ...base, vehicleType: String(r.input.vehicleType ?? '').trim() };
-            });
-            const data = isStationaryCombustion
-                ? await confirmStationaryCombustionBulk(rows)
-                : await confirmMobileCombustionBulk(rows);
+            let rows;
+            let data;
+            if (isScope2Purchased) {
+                rows = bulkReviewRows.map((r) => {
+                    const q = parseFloat(String(r.input.consumption).replace(',', '.'));
+                    return {
+                        activityType: String(r.input.activityType ?? 'Activity based').trim(),
+                        sourceType: String(r.input.sourceType ?? '').trim(),
+                        consumption: Number.isFinite(q) && q > 0 ? q : r.input.consumption,
+                        consumptionUnit: String(r.input.consumptionUnit ?? '').trim(),
+                        siteId: String(r.input.siteId ?? '').trim(),
+                        startDate: r.input.startDate,
+                        endDate: r.input.endDate,
+                        notes: r.input.notes ? String(r.input.notes).trim() : undefined,
+                        excelRow: r.excelRow,
+                    };
+                });
+                data = isPurchasedSteaming
+                    ? await confirmPurchasedSteamingBulk(rows)
+                    : isPurchasedCooling
+                        ? await confirmPurchasedCoolingBulk(rows)
+                        : isPurchasedHeating
+                        ? await confirmPurchasedHeatingBulk(rows)
+                        : await confirmPurchasedElectricityBulk(rows);
+            } else {
+                rows = bulkReviewRows.map((r) => {
+                    const q = parseFloat(String(r.input.fuelUsedQuantity).replace(',', '.'));
+                    const base = {
+                        fuelUsed: String(r.input.fuelUsed ?? '').trim(),
+                        fuelUsedQuantity: Number.isFinite(q) && q > 0 ? q : r.input.fuelUsedQuantity,
+                        fuelUsedUnit: String(r.input.fuelUsedUnit ?? '').trim(),
+                        facility: String(r.input.facility ?? '').trim(),
+                        dateOfTransaction: r.input.dateOfTransaction,
+                        notes: r.input.notes ? String(r.input.notes).trim() : undefined,
+                        excelRow: r.excelRow,
+                    };
+                    if (isStationaryCombustion) {
+                        return { ...base, asset: String(r.input.asset ?? '').trim() };
+                    }
+                    return { ...base, vehicleType: String(r.input.vehicleType ?? '').trim() };
+                });
+                data = isStationaryCombustion
+                    ? await confirmStationaryCombustionBulk(rows)
+                    : await confirmMobileCombustionBulk(rows);
+            }
             const created = data.createdCount ?? 0;
             const failed = data.failedCount ?? 0;
             const rowErrors = Array.isArray(data.rowErrors) ? data.rowErrors.filter(Boolean) : [];
@@ -561,13 +646,36 @@ export default function GHGCategoryDetail() {
         return true;
     };
 
+    const validatePurchasedElectricity = () => {
+        const amt = parseFloat(String(peConsumption).replace(',', '.'));
+        if (!Number.isFinite(amt) || amt <= 0) {
+            setSubmitFeedback({ type: 'err', text: 'Consumption must be a positive number.' });
+            return false;
+        }
+        if (!peConsumptionUnit) {
+            setSubmitFeedback({ type: 'err', text: 'Consumption Unit is required.' });
+            return false;
+        }
+        if (!peStartDate) {
+            setSubmitFeedback({ type: 'err', text: 'Start Date is required.' });
+            return false;
+        }
+        if (!peEndDate) {
+            setSubmitFeedback({ type: 'err', text: 'End Date is required.' });
+            return false;
+        }
+        return true;
+    };
+
     const handleSubmitForm = async (e) => {
         e.preventDefault();
         if (!hasApi || !slug) return;
 
-        if (isWorkbookScope1 && stManualPhase === 'edit') {
+        if ((isWorkbookScope1 || isScope2Purchased) && stManualPhase === 'edit') {
             setSubmitFeedback(null);
-            if (isStationaryCombustion) {
+            if (isScope2Purchased) {
+                if (!validatePurchasedElectricity()) return;
+            } else if (isStationaryCombustion) {
                 if (!validateStationaryManual()) return;
             } else if (isProcessEmissions) {
                 if (!validateProcessManual()) return;
@@ -654,6 +762,22 @@ export default function GHGCategoryDetail() {
                     notes: notes.trim() || undefined,
                     dataEntryChannel: 'FORM',
                 };
+            } else if (isScope2Purchased) {
+                if (!validatePurchasedElectricity()) {
+                    setSubmitting(false);
+                    return;
+                }
+                payload = {
+                    activityType: peActivityType.trim() || 'Activity based',
+                    sourceType: peSourceType.trim(),
+                    consumption: parseFloat(String(peConsumption).replace(',', '.')),
+                    consumptionUnit: peConsumptionUnit,
+                    siteId: peSiteId.trim(),
+                    startDate: peStartDate,
+                    endDate: peEndDate,
+                    notes: notes.trim() || undefined,
+                    dataEntryChannel: 'FORM',
+                };
             } else {
                 payload = {
                     activityType: activityType.trim(),
@@ -693,6 +817,26 @@ export default function GHGCategoryDetail() {
                     replace: false,
                     state: { fromSubmit: true, submitMessage: 'Fugitive emission saved successfully.' },
                 });
+            } else if (isPurchasedElectricity) {
+                navigate('/', {
+                    replace: false,
+                    state: { fromSubmit: true, submitMessage: 'Purchased electricity emission saved successfully.' },
+                });
+            } else if (isPurchasedHeating) {
+                navigate('/', {
+                    replace: false,
+                    state: { fromSubmit: true, submitMessage: 'Purchased heating emission saved successfully.' },
+                });
+            } else if (isPurchasedCooling) {
+                navigate('/', {
+                    replace: false,
+                    state: { fromSubmit: true, submitMessage: 'Purchased cooling emission saved successfully.' },
+                });
+            } else if (isPurchasedSteaming) {
+                navigate('/', {
+                    replace: false,
+                    state: { fromSubmit: true, submitMessage: 'Purchased steaming emission saved successfully.' },
+                });
             }
         } catch (err) {
             setSubmitFeedback({ type: 'err', text: err?.message || t('ghg.form.submitError') });
@@ -705,7 +849,7 @@ export default function GHGCategoryDetail() {
         return (
             <div className="ghg-detail ghg-detail--empty">
                 <p>{t('ghg.categoryNotFound')}</p>
-                <Link to="/data-input" className="ghg-link-back">
+                <Link to="/data-input" state={{ scopeTab: scope }} className="ghg-link-back">
                     {t('ghg.backToGhg')}
                 </Link>
             </div>
@@ -714,7 +858,7 @@ export default function GHGCategoryDetail() {
 
     return (
         <div className="ghg-detail">
-            <button type="button" className="ghg-back-row" onClick={() => navigate('/data-input')}>
+            <button type="button" className="ghg-back-row" onClick={() => navigate('/data-input', { state: { scopeTab: scope } })}>
                 <i className="fas fa-arrow-left" aria-hidden />
                 <span>{t('ghg.backToCategories')}</span>
             </button>
@@ -822,9 +966,9 @@ export default function GHGCategoryDetail() {
                             </div>
                             <form className="ghg-v2-layout" onSubmit={handleSubmitForm}>
                                 <div>
-                                    {(isStationaryCombustion || isMobileCombustion) && stManualPhase === 'review' && (
+                                    {(isStationaryCombustion || isMobileCombustion || isScope2Purchased) && stManualPhase === 'review' && (
                                         <div className="ghg-v2-status-bar ghg-v2-status-bar--ok" role="status" style={{ marginBottom: 14 }}>
-                                            ✓ {t(isStationaryCombustion ? 'ghg.stationary.reviewBannerManual' : isProcessEmissions ? 'Review your process emission data before submitting.' : isFugitiveEmissions ? 'Review your fugitive emission data before submitting.' : 'ghg.mobile.reviewBannerManual')}
+                                            ✓ {isScope2Purchased ? (isPurchasedSteaming ? 'Review your purchased steaming data before submitting.' : isPurchasedCooling ? 'Review your purchased cooling data before submitting.' : isPurchasedHeating ? 'Review your purchased heating data before submitting.' : 'Review your purchased electricity data before submitting.') : t(isStationaryCombustion ? 'ghg.stationary.reviewBannerManual' : isProcessEmissions ? 'Review your process emission data before submitting.' : isFugitiveEmissions ? 'Review your fugitive emission data before submitting.' : 'ghg.mobile.reviewBannerManual')}
                                         </div>
                                     )}
                                     <div className="ghg-v2-card">
@@ -1256,6 +1400,93 @@ export default function GHGCategoryDetail() {
                                                 />
                                             </div>
                                         </>
+                                    ) : isScope2Purchased ? (
+                                        <>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-acttype">Activity Type</label>
+                                                <input
+                                                    id="ghg-pe-acttype"
+                                                    value={peActivityType}
+                                                    onChange={(ev) => setPeActivityType(ev.target.value)}
+                                                    placeholder="Activity based"
+                                                />
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-source">Source Type</label>
+                                                <input
+                                                    id="ghg-pe-source"
+                                                    value={peSourceType}
+                                                    onChange={(ev) => setPeSourceType(ev.target.value)}
+                                                    placeholder="e.g. Grid electricity"
+                                                />
+                                            </div>
+                                            <div className="ghg-field-row">
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-pe-consumption">Consumption</label>
+                                                    <input
+                                                        id="ghg-pe-consumption"
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        value={peConsumption}
+                                                        onChange={(ev) => setPeConsumption(ev.target.value)}
+                                                        placeholder="e.g. 10"
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-pe-unit">Consumption Unit</label>
+                                                    <select
+                                                        id="ghg-pe-unit"
+                                                        value={peConsumptionUnit}
+                                                        onChange={(ev) => setPeConsumptionUnit(ev.target.value)}
+                                                    >
+                                                        {(isPurchasedSteaming ? PS_TEMPLATE_UNITS : isPurchasedCooling ? PC_TEMPLATE_UNITS : isPurchasedHeating ? PH_TEMPLATE_UNITS : PE_TEMPLATE_UNITS).map((u) => (
+                                                            <option key={u} value={u}>{u}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-siteid">Site ID</label>
+                                                <input
+                                                    id="ghg-pe-siteid"
+                                                    value={peSiteId}
+                                                    onChange={(ev) => setPeSiteId(ev.target.value)}
+                                                    placeholder="e.g. 149"
+                                                />
+                                            </div>
+                                            <div className="ghg-field-row">
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-pe-start">Start Date</label>
+                                                    <input
+                                                        id="ghg-pe-start"
+                                                        type="date"
+                                                        value={peStartDate}
+                                                        onChange={(ev) => setPeStartDate(ev.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                                <div className="ghg-field">
+                                                    <label htmlFor="ghg-pe-end">End Date</label>
+                                                    <input
+                                                        id="ghg-pe-end"
+                                                        type="date"
+                                                        value={peEndDate}
+                                                        onChange={(ev) => setPeEndDate(ev.target.value)}
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="ghg-field">
+                                                <label htmlFor="ghg-pe-notes">{t('ghg.form.notes')}</label>
+                                                <textarea
+                                                    id="ghg-pe-notes"
+                                                    rows={2}
+                                                    value={notes}
+                                                    onChange={(ev) => setNotes(ev.target.value)}
+                                                />
+                                            </div>
+                                        </>
                                     ) : (
                                         <>
                                             <div className="ghg-field">
@@ -1342,19 +1573,19 @@ export default function GHGCategoryDetail() {
                                         </p>
                                     )}
                                     <div className="ghg-v2-btn-row" style={{ marginTop: 14 }}>
-                                        {isWorkbookScope1 && stManualPhase === 'review' && (
+                                        {isWorkbookCategory && stManualPhase === 'review' && (
                                             <button type="button" className="ghg-v2-btn ghg-v2-btn-g" disabled={submitting} onClick={() => { setStManualPhase('edit'); setSubmitFeedback(null); }}>
-                                                {t(isStationaryCombustion ? 'ghg.stationary.backToEdit' : 'ghg.mobile.backToEdit')}
+                                                {isScope2Purchased ? '← Back to Edit' : t(isStationaryCombustion ? 'ghg.stationary.backToEdit' : 'ghg.mobile.backToEdit')}
                                             </button>
                                         )}
                                         <button type="submit" className="ghg-v2-btn ghg-v2-btn-p" style={{ flex: 2, justifyContent: 'center' }} disabled={submitting}>
                                             {submitting
                                                 ? t('ghg.form.submitting')
-                                                : !isWorkbookScope1
+                                                : !isWorkbookCategory
                                                   ? t('ghg.form.submit')
                                                   : stManualPhase === 'edit'
-                                                    ? t(isStationaryCombustion ? 'ghg.stationary.continueToReview' : 'ghg.mobile.continueToReview')
-                                                    : t(isStationaryCombustion ? 'ghg.stationary.submitToInventory' : 'ghg.mobile.submitToInventory')}
+                                                    ? (isScope2Purchased ? 'Continue to Review' : t(isStationaryCombustion ? 'ghg.stationary.continueToReview' : 'ghg.mobile.continueToReview'))
+                                                    : (isScope2Purchased ? 'Submit to Inventory' : t(isStationaryCombustion ? 'ghg.stationary.submitToInventory' : 'ghg.mobile.submitToInventory'))}
                                              →
                                         </button>
                                     </div>
@@ -1404,7 +1635,7 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'bulk' && hasApi && isWorkbookScope1 && (
+                    {addStep === 'bulk' && hasApi && isWorkbookCategory && (
                         <div className="ghg-method-workspace">
                             <div className="ghg-v2-page-header">
                                 <div>
@@ -1421,7 +1652,7 @@ export default function GHGCategoryDetail() {
                                             <div className="ghg-v2-template-row">
                                                 <div className="ghg-v2-template-icon"><i className="fas fa-file-excel" aria-hidden /></div>
                                                 <div className="ghg-v2-template-info">
-                                                    <div className="ghg-v2-template-name">{isStationaryCombustion ? 'URImpact_Stationary_Combustion_Template.xlsx' : isProcessEmissions ? 'URImpact_Process_Based_Emissions_Template.xlsx' : isFugitiveEmissions ? 'URImpact_Fugitive_Emissions_Template.xlsx' : 'URImpact_Mobile_Combustion_Template.xlsx'}</div>
+                                                    <div className="ghg-v2-template-name">{isPurchasedSteaming ? 'URImpact_Purchased_Steaming_Template.xlsx' : isPurchasedCooling ? 'URImpact_Purchased_Cooling_Template.xlsx' : isPurchasedHeating ? 'URImpact_Purchased_Heating_Template.xlsx' : isPurchasedElectricity ? 'URImpact_Purchased_Electricity_Template.xlsx' : isStationaryCombustion ? 'URImpact_Stationary_Combustion_Template.xlsx' : isProcessEmissions ? 'URImpact_Process_Based_Emissions_Template.xlsx' : isFugitiveEmissions ? 'URImpact_Fugitive_Emissions_Template.xlsx' : 'URImpact_Mobile_Combustion_Template.xlsx'}</div>
                                                     <div className="ghg-v2-template-desc">Required fields, dropdown validations, sample data included</div>
                                                 </div>
                                                 <button type="button" className="ghg-v2-btn ghg-v2-btn-p" style={{ fontSize: 11.5 }} onClick={handleDownloadWorkbookTemplate}>Download</button>
@@ -1485,8 +1716,8 @@ export default function GHGCategoryDetail() {
                                                     <thead>
                                                         <tr>
                                                             <th>Row</th>
-                                                            <th>Facility</th>
-                                                            <th>Fuel Type</th>
+                                                            <th>{isScope2Purchased ? 'Site ID' : 'Facility'}</th>
+                                                            <th>{isScope2Purchased ? 'Activity' : 'Fuel Type'}</th>
                                                             <th>Qty</th>
                                                             <th>Unit</th>
                                                             <th>Status</th>
@@ -1505,10 +1736,10 @@ export default function GHGCategoryDetail() {
                                                                 }
                                                             >
                                                                 <td>{row.excelRow}</td>
-                                                                <td>{row.input.facility || row.input.asset || row.input.vehicleType || '—'}</td>
-                                                                <td>{row.input.fuelUsed ?? '—'}</td>
-                                                                <td>{row.input.fuelUsedQuantity != null ? formatTonnes(Number(row.input.fuelUsedQuantity)) : '—'}</td>
-                                                                <td>{row.input.fuelUsedUnit ?? '—'}</td>
+                                                                <td>{isScope2Purchased ? (row.input.siteId || '—') : (row.input.facility || row.input.asset || row.input.vehicleType || '—')}</td>
+                                                                <td>{isScope2Purchased ? (row.input.activityType ?? '—') : (row.input.fuelUsed ?? '—')}</td>
+                                                                <td>{isScope2Purchased ? (row.input.consumption != null ? formatTonnes(Number(row.input.consumption)) : '—') : (row.input.fuelUsedQuantity != null ? formatTonnes(Number(row.input.fuelUsedQuantity)) : '—')}</td>
+                                                                <td>{isScope2Purchased ? (row.input.consumptionUnit ?? '—') : (row.input.fuelUsedUnit ?? '—')}</td>
                                                                 <td>
                                                                     <span className={`ghg-bulk-status ghg-bulk-status--${row.status}`}>
                                                                         {row.status === 'edited'
@@ -1597,7 +1828,7 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'bulk' && hasApi && !isWorkbookScope1 && (
+                    {addStep === 'bulk' && hasApi && !isWorkbookCategory && (
                         <div className="ghg-method-workspace">
                             <button type="button" className="ghg-back-to-methods" onClick={() => setAddStep(null)}>
                                 <i className="fas fa-arrow-left" aria-hidden />
@@ -1616,7 +1847,7 @@ export default function GHGCategoryDetail() {
                         </div>
                     )}
 
-                    {addStep === 'ai' && (isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions) && (
+                    {addStep === 'ai' && (isStationaryCombustion || isMobileCombustion || isProcessEmissions || isFugitiveEmissions || isScope2Purchased) && (
                         <div className="ghg-method-workspace">
                             {/* v2 Page header */}
                             <div className="ghg-v2-page-header">
@@ -1691,15 +1922,32 @@ export default function GHGCategoryDetail() {
                                                 setAiStep('extracting');
                                                 setAiFeedback(null);
                                                 try {
-                                                    const result = isFugitiveEmissions
-                                                        ? await aiExtractFugitiveEmissions(aiFile)
-                                                        : isProcessEmissions
-                                                            ? await aiExtractProcessEmissions(aiFile)
-                                                            : isMobileCombustion
-                                                                ? await aiExtractMobileReceipt(aiFile)
-                                                                : await aiExtractReceipt(aiFile);
+                                                    const result = isPurchasedSteaming
+                                                        ? await aiExtractPurchasedSteaming(aiFile)
+                                                        : isPurchasedCooling
+                                                        ? await aiExtractPurchasedCooling(aiFile)
+                                                        : isPurchasedHeating
+                                                        ? await aiExtractPurchasedHeating(aiFile)
+                                                        : isPurchasedElectricity
+                                                        ? await aiExtractPurchasedElectricity(aiFile)
+                                                        : isFugitiveEmissions
+                                                            ? await aiExtractFugitiveEmissions(aiFile)
+                                                            : isProcessEmissions
+                                                                ? await aiExtractProcessEmissions(aiFile)
+                                                                : isMobileCombustion
+                                                                    ? await aiExtractMobileReceipt(aiFile)
+                                                                    : await aiExtractReceipt(aiFile);
                                                     setAiExtracted(result);
-                                                    setAiEdited(isFugitiveEmissions ? {
+                                                    setAiEdited(isScope2Purchased ? {
+                                                        activityType: result.activityType || 'Activity based',
+                                                        sourceType: result.sourceType || '',
+                                                        consumption: result.consumption || '',
+                                                        consumptionUnit: result.consumptionUnit || 'kWh',
+                                                        siteId: result.siteId || '',
+                                                        startDate: result.startDate || '',
+                                                        endDate: result.endDate || '',
+                                                        notes: result.notes || '',
+                                                    } : isFugitiveEmissions ? {
                                                         equipmentType: result.equipmentType || '',
                                                         refrigerantUsed: result.refrigerantUsed || '',
                                                         fireSuppressantUsed: result.fireSuppressantUsed || '',
@@ -1790,7 +2038,48 @@ export default function GHGCategoryDetail() {
                                             <div className="ghg-v2-status-bar ghg-v2-status-bar--warn" style={{ marginBottom: 12 }}>
                                                 ⚠ Review all fields before approving. Highlighted fields need attention.
                                             </div>
-                                            {isFugitiveEmissions ? (
+                                            {isScope2Purchased ? (
+                                                <>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Activity Type</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.activityType} onChange={(e) => setAiEdited({ ...aiEdited, activityType: e.target.value })} />
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Source Type</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.sourceType} onChange={(e) => setAiEdited({ ...aiEdited, sourceType: e.target.value })} />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Consumption</label>
+                                                            <input className="ghg-v2-fi" type="number" step="any" min="0" value={aiEdited.consumption} onChange={(e) => setAiEdited({ ...aiEdited, consumption: e.target.value })} />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Consumption Unit</label>
+                                                            <select className="ghg-v2-fsel" value={aiEdited.consumptionUnit} onChange={(e) => setAiEdited({ ...aiEdited, consumptionUnit: e.target.value })}>
+                                                                {(isPurchasedSteaming ? PS_TEMPLATE_UNITS : isPurchasedCooling ? PC_TEMPLATE_UNITS : isPurchasedHeating ? PH_TEMPLATE_UNITS : PE_TEMPLATE_UNITS).map((u) => <option key={u} value={u}>{u}</option>)}
+                                                            </select>
+                                                        </div>
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">Site ID</label>
+                                                        <input className="ghg-v2-fi" value={aiEdited.siteId} onChange={(e) => setAiEdited({ ...aiEdited, siteId: e.target.value })} />
+                                                    </div>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">Start Date</label>
+                                                            <input className="ghg-v2-fi" value={aiEdited.startDate} onChange={(e) => setAiEdited({ ...aiEdited, startDate: e.target.value })} placeholder="DD/MM/YYYY" />
+                                                        </div>
+                                                        <div className="ghg-v2-fg">
+                                                            <label className="ghg-v2-fl">End Date</label>
+                                                            <input className="ghg-v2-fi" value={aiEdited.endDate} onChange={(e) => setAiEdited({ ...aiEdited, endDate: e.target.value })} placeholder="DD/MM/YYYY" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="ghg-v2-fg">
+                                                        <label className="ghg-v2-fl">{t('ghg.form.notes')}</label>
+                                                        <textarea className="ghg-v2-fta" rows={2} value={aiEdited.notes} onChange={(e) => setAiEdited({ ...aiEdited, notes: e.target.value })} />
+                                                    </div>
+                                                </>
+                                            ) : isFugitiveEmissions ? (
                                                 <>
                                                     <div className="ghg-v2-fg">
                                                         <label className="ghg-v2-fl">Equipment Type</label>
@@ -1973,16 +2262,27 @@ export default function GHGCategoryDetail() {
                                                 type="button"
                                                 className="ghg-v2-btn ghg-v2-btn-p"
                                                 style={{ flex: 2 }}
-                                                disabled={isFugitiveEmissions
-                                                    ? (!aiEdited.equipmentType || (!aiEdited.refrigerantUsed && !aiEdited.fireSuppressantUsed) || !aiEdited.netInventoryKg)
-                                                    : isProcessEmissions
-                                                        ? (!aiEdited.processSector || !aiEdited.processType || !aiEdited.activityValue || !aiEdited.unit)
-                                                        : (!aiEdited.fuelUsed || !aiEdited.fuelUsedQuantity || !aiEdited.fuelUsedUnit)}
+                                                disabled={isScope2Purchased
+                                                    ? (!aiEdited.consumption || !aiEdited.consumptionUnit || !aiEdited.startDate || !aiEdited.endDate)
+                                                    : isFugitiveEmissions
+                                                        ? (!aiEdited.equipmentType || (!aiEdited.refrigerantUsed && !aiEdited.fireSuppressantUsed) || !aiEdited.netInventoryKg)
+                                                        : isProcessEmissions
+                                                            ? (!aiEdited.processSector || !aiEdited.processType || !aiEdited.activityValue || !aiEdited.unit)
+                                                            : (!aiEdited.fuelUsed || !aiEdited.fuelUsedQuantity || !aiEdited.fuelUsedUnit)}
                                                 onClick={async () => {
                                                     setAiStep('confirming');
                                                     setAiFeedback(null);
                                                     try {
-                                                        const payload = isFugitiveEmissions ? {
+                                                        const payload = isScope2Purchased ? {
+                                                            activityType: aiEdited.activityType || 'Activity based',
+                                                            sourceType: aiEdited.sourceType,
+                                                            consumption: Number(aiEdited.consumption),
+                                                            consumptionUnit: aiEdited.consumptionUnit,
+                                                            siteId: aiEdited.siteId,
+                                                            startDate: aiEdited.startDate,
+                                                            endDate: aiEdited.endDate,
+                                                            notes: aiEdited.notes,
+                                                        } : isFugitiveEmissions ? {
                                                             equipmentType: aiEdited.equipmentType,
                                                             refrigerantUsed: aiEdited.refrigerantUsed,
                                                             fireSuppressantUsed: aiEdited.fireSuppressantUsed,
@@ -2016,13 +2316,21 @@ export default function GHGCategoryDetail() {
                                                             dateOfTransaction: aiEdited.dateOfTransaction,
                                                             notes: aiEdited.notes,
                                                         };
-                                                        const result = isFugitiveEmissions
-                                                            ? await aiConfirmFugitiveEmissions(payload)
-                                                            : isProcessEmissions
-                                                                ? await aiConfirmProcessEmissions(payload)
-                                                                : isMobileCombustion
-                                                                    ? await aiConfirmMobileReceipt(payload)
-                                                                    : await aiConfirmReceipt(payload);
+                                                        const result = isPurchasedSteaming
+                                                            ? await aiConfirmPurchasedSteaming(payload)
+                                                            : isPurchasedCooling
+                                                            ? await aiConfirmPurchasedCooling(payload)
+                                                            : isPurchasedHeating
+                                                            ? await aiConfirmPurchasedHeating(payload)
+                                                            : isPurchasedElectricity
+                                                            ? await aiConfirmPurchasedElectricity(payload)
+                                                            : isFugitiveEmissions
+                                                                ? await aiConfirmFugitiveEmissions(payload)
+                                                                : isProcessEmissions
+                                                                    ? await aiConfirmProcessEmissions(payload)
+                                                                    : isMobileCombustion
+                                                                        ? await aiConfirmMobileReceipt(payload)
+                                                                        : await aiConfirmReceipt(payload);
                                                         setLastSaved(result);
                                                         setAiFeedback({ type: 'ok', text: t('ghg.ai.confirmSuccess') });
                                                         setAiStep('done');

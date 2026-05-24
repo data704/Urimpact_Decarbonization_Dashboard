@@ -27,7 +27,7 @@ const getDemoScope1 = () => [
         emissions: 198,
         status: 'verified',
         costAmount: 720,
-        currency: 'USD'
+        currency: 'SAR'
     },
     {
         id: 2,
@@ -40,7 +40,7 @@ const getDemoScope1 = () => [
         emissions: 213,
         status: 'verified',
         costAmount: 540,
-        currency: 'USD'
+        currency: 'SAR'
     },
     {
         id: 3,
@@ -53,7 +53,7 @@ const getDemoScope1 = () => [
         emissions: 139,
         status: 'verified',
         costAmount: 520,
-        currency: 'USD'
+        currency: 'SAR'
     }
 ];
 
@@ -69,7 +69,7 @@ const getDemoScope2 = () => [
         emissions: 520,
         status: 'verified',
         costAmount: 1480,
-        currency: 'USD'
+        currency: 'SAR'
     },
     {
         id: 2,
@@ -82,7 +82,7 @@ const getDemoScope2 = () => [
         emissions: 680,
         status: 'verified',
         costAmount: 2120,
-        currency: 'USD'
+        currency: 'SAR'
     },
     {
         id: 3,
@@ -95,7 +95,7 @@ const getDemoScope2 = () => [
         emissions: 400,
         status: 'verified',
         costAmount: 1085,
-        currency: 'USD'
+        currency: 'SAR'
     }
 ];
 
@@ -184,7 +184,7 @@ export function DataStoreProvider({ children }) {
             id: Date.now(),
             status: 'verified',
             costAmount: Number(entry.costAmount) || 0,
-            currency: entry.currency || 'USD',
+            currency: entry.currency || 'SAR',
             emissions: precomputedTonnes != null && !Number.isNaN(precomputedTonnes)
                 ? precomputedTonnes
                 : calculateScope1Emissions(entry)
@@ -217,7 +217,7 @@ export function DataStoreProvider({ children }) {
             id: Date.now(),
             status: 'verified',
             costAmount: Number(entry.costAmount) || 0,
-            currency: entry.currency || 'USD',
+            currency: entry.currency || 'SAR',
             emissions: precomputedTonnes != null && !Number.isNaN(precomputedTonnes)
                 ? precomputedTonnes
                 : calculateScope2Emissions(entry)

@@ -127,9 +127,13 @@ export const config = {
   // Logging
   logLevel: process.env.LOG_LEVEL || 'debug',
 
-  // CORS
+  // CORS — supports comma-separated origins in CORS_ORIGIN env var
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: (() => {
+      const raw = process.env.CORS_ORIGIN || 'http://localhost:5173';
+      const origins = raw.split(',').map((s) => s.trim()).filter(Boolean);
+      return origins.length === 1 ? origins[0] : origins;
+    })(),
     credentials: true,
   },
 } as const;

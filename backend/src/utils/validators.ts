@@ -175,6 +175,180 @@ export const fugitiveEmissionsFormSchema = z
 
 export type FugitiveEmissionsFormBody = z.infer<typeof fugitiveEmissionsFormSchema>;
 
+/**
+ * Strict body for Scope 2 — purchased electricity.
+ * Fields: activityType, sourceType, consumption, consumptionUnit, siteId, startDate, endDate.
+ */
+export const purchasedElectricityFormSchema = z
+  .object({
+    activityType: z.string().min(1, 'Activity Type is required').max(500),
+    sourceType: z.string().max(500).optional().default(''),
+    consumption: z.coerce.number().positive('Consumption must be positive'),
+    consumptionUnit: z.string().min(1, 'Consumption Unit is required').max(120),
+    siteId: z.string().max(500).optional().default(''),
+    startDate: z.union([z.string(), z.number()]),
+    endDate: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict();
+
+export type PurchasedElectricityFormBody = z.infer<typeof purchasedElectricityFormSchema>;
+
+/** Purchased electricity bulk confirm — row shape matching template, plus optional excelRow. */
+export const purchasedElectricityBulkConfirmBodySchema = z
+  .object({
+    rows: z
+      .array(
+        z
+          .object({
+            activityType: z.string().min(1).max(500),
+            sourceType: z.string().max(500).optional().default(''),
+            consumption: z.coerce.number().positive(),
+            consumptionUnit: z.string().min(1).max(120),
+            siteId: z.string().max(500).optional().default(''),
+            startDate: z.union([z.string(), z.number()]),
+            endDate: z.union([z.string(), z.number()]),
+            notes: z.string().max(5000).optional(),
+            excelRow: z.number().int().positive().optional(),
+          })
+          .strict()
+      )
+      .min(1),
+  })
+  .strict();
+
+export type PurchasedElectricityBulkConfirmBody = z.infer<typeof purchasedElectricityBulkConfirmBodySchema>;
+
+/**
+ * Strict body for Scope 2 — purchased heating.
+ * Same fields as purchased electricity.
+ */
+export const purchasedHeatingFormSchema = z
+  .object({
+    activityType: z.string().min(1, 'Activity Type is required').max(500),
+    sourceType: z.string().max(500).optional().default(''),
+    consumption: z.coerce.number().positive('Consumption must be positive'),
+    consumptionUnit: z.string().min(1, 'Consumption Unit is required').max(120),
+    siteId: z.string().max(500).optional().default(''),
+    startDate: z.union([z.string(), z.number()]),
+    endDate: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict();
+
+export type PurchasedHeatingFormBody = z.infer<typeof purchasedHeatingFormSchema>;
+
+/** Purchased heating bulk confirm. */
+export const purchasedHeatingBulkConfirmBodySchema = z
+  .object({
+    rows: z
+      .array(
+        z
+          .object({
+            activityType: z.string().min(1).max(500),
+            sourceType: z.string().max(500).optional().default(''),
+            consumption: z.coerce.number().positive(),
+            consumptionUnit: z.string().min(1).max(120),
+            siteId: z.string().max(500).optional().default(''),
+            startDate: z.union([z.string(), z.number()]),
+            endDate: z.union([z.string(), z.number()]),
+            notes: z.string().max(5000).optional(),
+            excelRow: z.number().int().positive().optional(),
+          })
+          .strict()
+      )
+      .min(1),
+  })
+  .strict();
+
+export type PurchasedHeatingBulkConfirmBody = z.infer<typeof purchasedHeatingBulkConfirmBodySchema>;
+
+/** Purchased cooling form (same field structure as electricity/heating). */
+export const purchasedCoolingFormSchema = z
+  .object({
+    activityType: z.string().min(1, 'Activity Type is required').max(500),
+    sourceType: z.string().max(500).optional().default(''),
+    consumption: z.coerce.number().positive('Consumption must be positive'),
+    consumptionUnit: z.string().min(1, 'Consumption Unit is required').max(120),
+    siteId: z.string().max(500).optional().default(''),
+    startDate: z.union([z.string(), z.number()]),
+    endDate: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict();
+
+export type PurchasedCoolingFormBody = z.infer<typeof purchasedCoolingFormSchema>;
+
+/** Purchased cooling bulk confirm. */
+export const purchasedCoolingBulkConfirmBodySchema = z
+  .object({
+    rows: z
+      .array(
+        z
+          .object({
+            activityType: z.string().min(1).max(500),
+            sourceType: z.string().max(500).optional().default(''),
+            consumption: z.coerce.number().positive(),
+            consumptionUnit: z.string().min(1).max(120),
+            siteId: z.string().max(500).optional().default(''),
+            startDate: z.union([z.string(), z.number()]),
+            endDate: z.union([z.string(), z.number()]),
+            notes: z.string().max(5000).optional(),
+            excelRow: z.number().int().positive().optional(),
+          })
+          .strict()
+      )
+      .min(1),
+  })
+  .strict();
+
+export type PurchasedCoolingBulkConfirmBody = z.infer<typeof purchasedCoolingBulkConfirmBodySchema>;
+
+/** Purchased steaming form (same field structure as electricity/heating/cooling). */
+export const purchasedSteamingFormSchema = z
+  .object({
+    activityType: z.string().min(1, 'Activity Type is required').max(500),
+    sourceType: z.string().max(500).optional().default(''),
+    consumption: z.coerce.number().positive('Consumption must be positive'),
+    consumptionUnit: z.string().min(1, 'Consumption Unit is required').max(120),
+    siteId: z.string().max(500).optional().default(''),
+    startDate: z.union([z.string(), z.number()]),
+    endDate: z.union([z.string(), z.number()]),
+    notes: z.string().max(5000).optional(),
+    dataEntryChannel: z.enum(['FORM', 'BULK_UPLOAD', 'AI_EXTRACT']).optional().default('FORM'),
+  })
+  .strict();
+
+export type PurchasedSteamingFormBody = z.infer<typeof purchasedSteamingFormSchema>;
+
+/** Purchased steaming bulk confirm. */
+export const purchasedSteamingBulkConfirmBodySchema = z
+  .object({
+    rows: z
+      .array(
+        z
+          .object({
+            activityType: z.string().min(1).max(500),
+            sourceType: z.string().max(500).optional().default(''),
+            consumption: z.coerce.number().positive(),
+            consumptionUnit: z.string().min(1).max(120),
+            siteId: z.string().max(500).optional().default(''),
+            startDate: z.union([z.string(), z.number()]),
+            endDate: z.union([z.string(), z.number()]),
+            notes: z.string().max(5000).optional(),
+            excelRow: z.number().int().positive().optional(),
+          })
+          .strict()
+      )
+      .min(1),
+  })
+  .strict();
+
+export type PurchasedSteamingBulkConfirmBody = z.infer<typeof purchasedSteamingBulkConfirmBodySchema>;
+
 /** Confirmed bulk rows (after user review); `excelRow` is optional metadata for error messages. */
 export const stationaryBulkConfirmBodySchema = z
   .object({

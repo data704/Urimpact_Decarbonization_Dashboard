@@ -14,6 +14,14 @@ import {
   mobileBulkConfirmBodySchema,
   processEmissionsFormSchema,
   fugitiveEmissionsFormSchema,
+  purchasedElectricityFormSchema,
+  purchasedElectricityBulkConfirmBodySchema,
+  purchasedHeatingFormSchema,
+  purchasedHeatingBulkConfirmBodySchema,
+  purchasedCoolingFormSchema,
+  purchasedCoolingBulkConfirmBodySchema,
+  purchasedSteamingFormSchema,
+  purchasedSteamingBulkConfirmBodySchema,
 } from '../utils/validators.js';
 import type { GhgCategoryFormBody } from '../utils/validators.js';
 import {
@@ -34,6 +42,26 @@ import {
 import { mapProcessEmissionsToGhgBody } from '../constants/ghgProcessEmissionsTemplate.js';
 import { mapFugitiveEmissionsToGhgBody } from '../constants/ghgFugitiveEmissionsTemplate.js';
 import {
+  PURCHASED_ELECTRICITY_EXCEL_HEADERS,
+  PURCHASED_ELECTRICITY_SHEET_NAME,
+  mapPurchasedElectricityToGhgBody,
+} from '../constants/ghgPurchasedElectricityTemplate.js';
+import {
+  PURCHASED_HEATING_EXCEL_HEADERS,
+  PURCHASED_HEATING_SHEET_NAME,
+  mapPurchasedHeatingToGhgBody,
+} from '../constants/ghgPurchasedHeatingTemplate.js';
+import {
+  PURCHASED_COOLING_EXCEL_HEADERS,
+  PURCHASED_COOLING_SHEET_NAME,
+  mapPurchasedCoolingToGhgBody,
+} from '../constants/ghgPurchasedCoolingTemplate.js';
+import {
+  PURCHASED_STEAMING_EXCEL_HEADERS,
+  PURCHASED_STEAMING_SHEET_NAME,
+  mapPurchasedSteamingToGhgBody,
+} from '../constants/ghgPurchasedSteamingTemplate.js';
+import {
   parseStationaryCombustionBulkFile,
   buildStationaryBulkPreview,
 } from '../services/ghgStationaryCombustionBulkService.js';
@@ -41,8 +69,24 @@ import {
   parseMobileCombustionBulkFile,
   buildMobileBulkPreview,
 } from '../services/ghgMobileCombustionBulkService.js';
+import {
+  parsePurchasedElectricityBulkFile,
+  buildPurchasedElectricityBulkPreview,
+} from '../services/ghgPurchasedElectricityBulkService.js';
+import {
+  parsePurchasedHeatingBulkFile,
+  buildPurchasedHeatingBulkPreview,
+} from '../services/ghgPurchasedHeatingBulkService.js';
+import {
+  parsePurchasedCoolingBulkFile,
+  buildPurchasedCoolingBulkPreview,
+} from '../services/ghgPurchasedCoolingBulkService.js';
+import {
+  parsePurchasedSteamingBulkFile,
+  buildPurchasedSteamingBulkPreview,
+} from '../services/ghgPurchasedSteamingBulkService.js';
 import { logUserAction, AuditActions } from '../services/auditService.js';
-import { extractReceiptData, extractMobileReceiptData, extractProcessEmissionsData, extractFugitiveEmissionsData } from '../services/receiptExtractionService.js';
+import { extractReceiptData, extractMobileReceiptData, extractProcessEmissionsData, extractFugitiveEmissionsData, extractPurchasedElectricityData, extractPurchasedHeatingData, extractPurchasedCoolingData, extractPurchasedSteamingData } from '../services/receiptExtractionService.js';
 import { logger } from '../utils/logger.js';
 import { canAccessDashboard, canUpload } from '../utils/rolePermissions.js';
 
@@ -165,6 +209,110 @@ async function postGhgCategoryForm(req: AuthRequest, res: Response, scope: Emiss
             netInventoryKg: validation.data!.netInventoryKg,
             facility: validation.data!.facility ?? '',
             dateOfTransaction: validation.data!.dateOfTransaction,
+            notes: validation.data!.notes,
+          },
+          validation.data!.dataEntryChannel ?? 'FORM'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sendError(res, msg, 400);
+        return;
+      }
+      channel = validation.data!.dataEntryChannel ?? 'FORM';
+    } else if (slug === 'purchased-electricity') {
+      const validation = validate(purchasedElectricityFormSchema, req.body);
+      if (!validation.success) {
+        sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+        return;
+      }
+      try {
+        body = mapPurchasedElectricityToGhgBody(
+          {
+            activityType: validation.data!.activityType ?? '',
+            sourceType: validation.data!.sourceType ?? '',
+            consumption: validation.data!.consumption!,
+            consumptionUnit: validation.data!.consumptionUnit ?? '',
+            siteId: validation.data!.siteId ?? '',
+            startDate: validation.data!.startDate,
+            endDate: validation.data!.endDate,
+            notes: validation.data!.notes,
+          },
+          validation.data!.dataEntryChannel ?? 'FORM'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sendError(res, msg, 400);
+        return;
+      }
+      channel = validation.data!.dataEntryChannel ?? 'FORM';
+    } else if (slug === 'purchased-steaming') {
+      const validation = validate(purchasedSteamingFormSchema, req.body);
+      if (!validation.success) {
+        sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+        return;
+      }
+      try {
+        body = mapPurchasedSteamingToGhgBody(
+          {
+            activityType: validation.data!.activityType ?? '',
+            sourceType: validation.data!.sourceType ?? '',
+            consumption: validation.data!.consumption!,
+            consumptionUnit: validation.data!.consumptionUnit ?? '',
+            siteId: validation.data!.siteId ?? '',
+            startDate: validation.data!.startDate,
+            endDate: validation.data!.endDate,
+            notes: validation.data!.notes,
+          },
+          validation.data!.dataEntryChannel ?? 'FORM'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sendError(res, msg, 400);
+        return;
+      }
+      channel = validation.data!.dataEntryChannel ?? 'FORM';
+    } else if (slug === 'purchased-cooling') {
+      const validation = validate(purchasedCoolingFormSchema, req.body);
+      if (!validation.success) {
+        sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+        return;
+      }
+      try {
+        body = mapPurchasedCoolingToGhgBody(
+          {
+            activityType: validation.data!.activityType ?? '',
+            sourceType: validation.data!.sourceType ?? '',
+            consumption: validation.data!.consumption!,
+            consumptionUnit: validation.data!.consumptionUnit ?? '',
+            siteId: validation.data!.siteId ?? '',
+            startDate: validation.data!.startDate,
+            endDate: validation.data!.endDate,
+            notes: validation.data!.notes,
+          },
+          validation.data!.dataEntryChannel ?? 'FORM'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        sendError(res, msg, 400);
+        return;
+      }
+      channel = validation.data!.dataEntryChannel ?? 'FORM';
+    } else if (slug === 'purchased-heating') {
+      const validation = validate(purchasedHeatingFormSchema, req.body);
+      if (!validation.success) {
+        sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+        return;
+      }
+      try {
+        body = mapPurchasedHeatingToGhgBody(
+          {
+            activityType: validation.data!.activityType ?? '',
+            sourceType: validation.data!.sourceType ?? '',
+            consumption: validation.data!.consumption!,
+            consumptionUnit: validation.data!.consumptionUnit ?? '',
+            siteId: validation.data!.siteId ?? '',
+            startDate: validation.data!.startDate,
+            endDate: validation.data!.endDate,
             notes: validation.data!.notes,
           },
           validation.data!.dataEntryChannel ?? 'FORM'
@@ -1110,6 +1258,1190 @@ export async function postFugitiveEmissionsAiConfirm(req: AuthRequest, res: Resp
       sendError(res, error.message, 500);
     } else {
       sendError(res, 'AI fugitive confirm failed', 500);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * SCOPE 2 — Purchased Electricity: template, bulk, AI
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+/** Generated Scope 2 workbook (Purchased Electricity sheet) with example rows. */
+export async function getPurchasedElectricityTemplate(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const aoa = [
+      ['Fields Required for Calculation'],
+      [...PURCHASED_ELECTRICITY_EXCEL_HEADERS],
+      ['Activity based', '', 10, 'kWh', '149', '01/01/25', '01/02/25'],
+      ['Activity based', '', 15, 'GJ', '127', '15/02/25', '15/03/25'],
+      ['Activity based', '', 10, 'kWh', '149', '19/04/25', '19/05/25'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, PURCHASED_ELECTRICITY_SHEET_NAME);
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="purchased-electricity-template.xlsx"');
+    res.status(200).send(buf);
+  } catch (error) {
+    logger.error('Purchased electricity template generation failed:', error);
+    sendError(res, 'Could not generate purchased electricity template', 500);
+  }
+}
+
+/** Parse file and return row-level validation + mapped preview (no DB / Climatiq). */
+export async function postPurchasedElectricityBulkPreview(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file)', 400);
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = parsePurchasedElectricityBulkFile(file.buffer, file.originalname);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Invalid file';
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const rows = buildPurchasedElectricityBulkPreview(parsed);
+    const validCount = rows.filter((r) => r.status === 'valid').length;
+    const invalidCount = rows.filter((r) => r.status === 'invalid').length;
+
+    sendSuccess(
+      res,
+      {
+        rows,
+        summary: { total: rows.length, validCount, invalidCount },
+      },
+      'Preview ready',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased electricity bulk preview error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Preview failed', 500);
+    }
+  }
+}
+
+/** Persist reviewed purchased electricity rows. */
+export async function postPurchasedElectricityBulkConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const parsed = validate(purchasedElectricityBulkConfirmBodySchema, req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    const emissionIds: string[] = [];
+    const rowErrors: string[] = [];
+
+    for (const rawRow of parsed.data!.rows) {
+      const excelRow = rawRow.excelRow;
+      const label = excelRow != null ? `Row ${excelRow}` : 'Row';
+
+      const v = validate(purchasedElectricityFormSchema, {
+        activityType: rawRow.activityType,
+        sourceType: rawRow.sourceType,
+        consumption: rawRow.consumption,
+        consumptionUnit: rawRow.consumptionUnit,
+        siteId: rawRow.siteId,
+        startDate: rawRow.startDate,
+        endDate: rawRow.endDate,
+        notes: rawRow.notes,
+        dataEntryChannel: 'BULK_UPLOAD',
+      });
+      if (!v.success) {
+        rowErrors.push(`${label}: ${v.errors?.join('; ') ?? 'invalid'}`);
+        continue;
+      }
+
+      let body: GhgCategoryFormBody;
+      try {
+        body = mapPurchasedElectricityToGhgBody(
+          {
+            activityType: v.data!.activityType ?? '',
+            sourceType: v.data!.sourceType ?? '',
+            consumption: v.data!.consumption!,
+            consumptionUnit: v.data!.consumptionUnit ?? '',
+            siteId: v.data!.siteId ?? '',
+            startDate: v.data!.startDate,
+            endDate: v.data!.endDate,
+            notes: v.data!.notes,
+          },
+          'BULK_UPLOAD'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        rowErrors.push(`${label}: ${msg}`);
+        continue;
+      }
+
+      try {
+        const emission = await submitGhgCategoryFormEntry({
+          userId: req.user.userId,
+          organizationId: req.user.organizationId,
+          scope: 'SCOPE_2',
+          categorySlug: 'purchased-electricity',
+          body,
+        });
+        emissionIds.push(emission.id);
+        await logUserAction(
+          req.user.userId,
+          AuditActions.EMISSION_CALCULATED,
+          'emission',
+          emission.id,
+          {
+            ghgCategorySlug: 'purchased-electricity',
+            scope: 'SCOPE_2',
+            channel: 'BULK_UPLOAD',
+            bulkRow: excelRow,
+          },
+          req
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        rowErrors.push(`${label}: ${msg}`);
+        logger.warn(`Purchased electricity bulk confirm ${label} failed: ${msg}`);
+      }
+    }
+
+    sendSuccess(
+      res,
+      {
+        createdCount: emissionIds.length,
+        emissionIds,
+        failedCount: rowErrors.length,
+        rowErrors,
+      },
+      emissionIds.length ? 'Bulk import completed' : 'No rows were imported',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased electricity bulk confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Bulk import failed', 500);
+    }
+  }
+}
+
+/** AI document extraction — upload electricity bill image/PDF, get structured data. */
+export async function postPurchasedElectricityAiExtract(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file). Accepted: PDF, JPG, PNG.', 400);
+      return;
+    }
+
+    const extracted = await extractPurchasedElectricityData(file.buffer, file.mimetype, file.originalname);
+    sendSuccess(res, extracted, 'Electricity bill data extracted', 200);
+  } catch (error) {
+    logger.error('AI purchased electricity extraction error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI extraction failed', 500);
+    }
+  }
+}
+
+/** Confirm AI-extracted purchased electricity data — validate, calculate via Climatiq, persist. */
+export async function postPurchasedElectricityAiConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const validation = validate(purchasedElectricityFormSchema, {
+      ...req.body,
+      dataEntryChannel: 'AI_EXTRACT',
+    });
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    let body: GhgCategoryFormBody;
+    try {
+      body = mapPurchasedElectricityToGhgBody(
+        {
+          activityType: validation.data!.activityType ?? '',
+          sourceType: validation.data!.sourceType ?? '',
+          consumption: validation.data!.consumption!,
+          consumptionUnit: validation.data!.consumptionUnit ?? '',
+          siteId: validation.data!.siteId ?? '',
+          startDate: validation.data!.startDate,
+          endDate: validation.data!.endDate,
+          notes: validation.data!.notes,
+        },
+        'AI_EXTRACT'
+      ) as GhgCategoryFormBody;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const emission = await submitGhgCategoryFormEntry({
+      userId: req.user.userId,
+      organizationId: req.user.organizationId,
+      scope: 'SCOPE_2',
+      categorySlug: 'purchased-electricity',
+      body,
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_CALCULATED,
+      'emission',
+      emission.id,
+      {
+        ghgCategorySlug: 'purchased-electricity',
+        scope: 'SCOPE_2',
+        channel: 'AI_EXTRACT',
+      },
+      req
+    );
+
+    sendSuccess(res, emission, 'AI-extracted purchased electricity emission saved', 201);
+  } catch (error) {
+    logger.error('AI purchased electricity confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI purchased electricity confirm failed', 500);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * SCOPE 2 — Purchased Heating: template, bulk, AI
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+/** Generated Scope 2 workbook (Purchased Heating sheet) with example rows. */
+export async function getPurchasedHeatingTemplate(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const aoa = [
+      ['Fields Required for Calculation'],
+      [...PURCHASED_HEATING_EXCEL_HEADERS],
+      ['Activity based', '', 10, 'kWh', '149', '01/01/25', '01/02/25'],
+      ['Activity based', '', 15, 'GJ', '127', '15/02/25', '15/03/25'],
+      ['Activity based', '', 10, 'kWh', '149', '19/04/25', '19/05/25'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, PURCHASED_HEATING_SHEET_NAME);
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="purchased-heating-template.xlsx"');
+    res.status(200).send(buf);
+  } catch (error) {
+    logger.error('Purchased heating template generation failed:', error);
+    sendError(res, 'Could not generate purchased heating template', 500);
+  }
+}
+
+/** Parse file and return row-level validation + mapped preview (no DB / Climatiq). */
+export async function postPurchasedHeatingBulkPreview(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file)', 400);
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = parsePurchasedHeatingBulkFile(file.buffer, file.originalname);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Invalid file';
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const rows = buildPurchasedHeatingBulkPreview(parsed);
+    const validCount = rows.filter((r) => r.status === 'valid').length;
+    const invalidCount = rows.filter((r) => r.status === 'invalid').length;
+
+    sendSuccess(
+      res,
+      {
+        rows,
+        summary: { total: rows.length, validCount, invalidCount },
+      },
+      'Preview ready',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased heating bulk preview error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Preview failed', 500);
+    }
+  }
+}
+
+/** Persist reviewed purchased heating rows. */
+export async function postPurchasedHeatingBulkConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const parsed = validate(purchasedHeatingBulkConfirmBodySchema, req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    const emissionIds: string[] = [];
+    const rowErrors: string[] = [];
+
+    for (const rawRow of parsed.data!.rows) {
+      const excelRow = rawRow.excelRow;
+      const label = excelRow != null ? `Row ${excelRow}` : 'Row';
+
+      const v = validate(purchasedHeatingFormSchema, {
+        activityType: rawRow.activityType,
+        sourceType: rawRow.sourceType,
+        consumption: rawRow.consumption,
+        consumptionUnit: rawRow.consumptionUnit,
+        siteId: rawRow.siteId,
+        startDate: rawRow.startDate,
+        endDate: rawRow.endDate,
+        notes: rawRow.notes,
+        dataEntryChannel: 'BULK_UPLOAD',
+      });
+      if (!v.success) {
+        rowErrors.push(`${label}: ${v.errors?.join('; ') ?? 'invalid'}`);
+        continue;
+      }
+
+      let body: GhgCategoryFormBody;
+      try {
+        body = mapPurchasedHeatingToGhgBody(
+          {
+            activityType: v.data!.activityType ?? '',
+            sourceType: v.data!.sourceType ?? '',
+            consumption: v.data!.consumption!,
+            consumptionUnit: v.data!.consumptionUnit ?? '',
+            siteId: v.data!.siteId ?? '',
+            startDate: v.data!.startDate,
+            endDate: v.data!.endDate,
+            notes: v.data!.notes,
+          },
+          'BULK_UPLOAD'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        rowErrors.push(`${label}: ${msg}`);
+        continue;
+      }
+
+      try {
+        const emission = await submitGhgCategoryFormEntry({
+          userId: req.user.userId,
+          organizationId: req.user.organizationId,
+          scope: 'SCOPE_2',
+          categorySlug: 'purchased-heating',
+          body,
+        });
+        emissionIds.push(emission.id);
+        await logUserAction(
+          req.user.userId,
+          AuditActions.EMISSION_CALCULATED,
+          'emission',
+          emission.id,
+          {
+            ghgCategorySlug: 'purchased-heating',
+            scope: 'SCOPE_2',
+            channel: 'BULK_UPLOAD',
+            bulkRow: excelRow,
+          },
+          req
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        rowErrors.push(`${label}: ${msg}`);
+        logger.warn(`Purchased heating bulk confirm ${label} failed: ${msg}`);
+      }
+    }
+
+    sendSuccess(
+      res,
+      {
+        createdCount: emissionIds.length,
+        emissionIds,
+        failedCount: rowErrors.length,
+        rowErrors,
+      },
+      emissionIds.length ? 'Bulk import completed' : 'No rows were imported',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased heating bulk confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Bulk import failed', 500);
+    }
+  }
+}
+
+/** AI document extraction — upload heating bill image/PDF, get structured data. */
+export async function postPurchasedHeatingAiExtract(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file). Accepted: PDF, JPG, PNG.', 400);
+      return;
+    }
+
+    const extracted = await extractPurchasedHeatingData(file.buffer, file.mimetype, file.originalname);
+    sendSuccess(res, extracted, 'Heating bill data extracted', 200);
+  } catch (error) {
+    logger.error('AI purchased heating extraction error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI extraction failed', 500);
+    }
+  }
+}
+
+/** Confirm AI-extracted purchased heating data — validate, calculate via Climatiq, persist. */
+export async function postPurchasedHeatingAiConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const validation = validate(purchasedHeatingFormSchema, {
+      ...req.body,
+      dataEntryChannel: 'AI_EXTRACT',
+    });
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    let body: GhgCategoryFormBody;
+    try {
+      body = mapPurchasedHeatingToGhgBody(
+        {
+          activityType: validation.data!.activityType ?? '',
+          sourceType: validation.data!.sourceType ?? '',
+          consumption: validation.data!.consumption!,
+          consumptionUnit: validation.data!.consumptionUnit ?? '',
+          siteId: validation.data!.siteId ?? '',
+          startDate: validation.data!.startDate,
+          endDate: validation.data!.endDate,
+          notes: validation.data!.notes,
+        },
+        'AI_EXTRACT'
+      ) as GhgCategoryFormBody;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const emission = await submitGhgCategoryFormEntry({
+      userId: req.user.userId,
+      organizationId: req.user.organizationId,
+      scope: 'SCOPE_2',
+      categorySlug: 'purchased-heating',
+      body,
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_CALCULATED,
+      'emission',
+      emission.id,
+      {
+        ghgCategorySlug: 'purchased-heating',
+        scope: 'SCOPE_2',
+        channel: 'AI_EXTRACT',
+      },
+      req
+    );
+
+    sendSuccess(res, emission, 'AI-extracted purchased heating emission saved', 201);
+  } catch (error) {
+    logger.error('AI purchased heating confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI purchased heating confirm failed', 500);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * SCOPE 2 — Purchased Cooling: template, bulk, AI
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+/** Generated Scope 2 workbook (Purchased Cooling sheet) with example rows. */
+export async function getPurchasedCoolingTemplate(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const aoa = [
+      ['Fields Required for Calculation'],
+      [...PURCHASED_COOLING_EXCEL_HEADERS],
+      ['Activity based', '', 10, 'kWh', '149', '01/01/25', '01/02/25'],
+      ['Activity based', '', 15, 'GJ', '127', '15/02/25', '15/03/25'],
+      ['Activity based', '', 10, 'kWh', '149', '19/04/25', '19/05/25'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, PURCHASED_COOLING_SHEET_NAME);
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="purchased-cooling-template.xlsx"');
+    res.status(200).send(buf);
+  } catch (error) {
+    logger.error('Purchased cooling template generation failed:', error);
+    sendError(res, 'Could not generate purchased cooling template', 500);
+  }
+}
+
+/** Parse file and return row-level validation + mapped preview (no DB / Climatiq). */
+export async function postPurchasedCoolingBulkPreview(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file)', 400);
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = parsePurchasedCoolingBulkFile(file.buffer, file.originalname);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Invalid file';
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const rows = buildPurchasedCoolingBulkPreview(parsed);
+    const validCount = rows.filter((r) => r.status === 'valid').length;
+    const invalidCount = rows.filter((r) => r.status === 'invalid').length;
+
+    sendSuccess(
+      res,
+      {
+        rows,
+        summary: { total: rows.length, validCount, invalidCount },
+      },
+      'Preview ready',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased cooling bulk preview error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Preview failed', 500);
+    }
+  }
+}
+
+/** Persist reviewed purchased cooling rows. */
+export async function postPurchasedCoolingBulkConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const parsed = validate(purchasedCoolingBulkConfirmBodySchema, req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    const emissionIds: string[] = [];
+    const rowErrors: string[] = [];
+
+    for (const rawRow of parsed.data!.rows) {
+      const excelRow = rawRow.excelRow;
+      const label = excelRow != null ? `Row ${excelRow}` : 'Row';
+
+      const v = validate(purchasedCoolingFormSchema, {
+        activityType: rawRow.activityType,
+        sourceType: rawRow.sourceType,
+        consumption: rawRow.consumption,
+        consumptionUnit: rawRow.consumptionUnit,
+        siteId: rawRow.siteId,
+        startDate: rawRow.startDate,
+        endDate: rawRow.endDate,
+        notes: rawRow.notes,
+        dataEntryChannel: 'BULK_UPLOAD',
+      });
+      if (!v.success) {
+        rowErrors.push(`${label}: ${v.errors?.join('; ') ?? 'invalid'}`);
+        continue;
+      }
+
+      let body: GhgCategoryFormBody;
+      try {
+        body = mapPurchasedCoolingToGhgBody(
+          {
+            activityType: v.data!.activityType ?? '',
+            sourceType: v.data!.sourceType ?? '',
+            consumption: v.data!.consumption!,
+            consumptionUnit: v.data!.consumptionUnit ?? '',
+            siteId: v.data!.siteId ?? '',
+            startDate: v.data!.startDate,
+            endDate: v.data!.endDate,
+            notes: v.data!.notes,
+          },
+          'BULK_UPLOAD'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        rowErrors.push(`${label}: ${msg}`);
+        continue;
+      }
+
+      try {
+        const emission = await submitGhgCategoryFormEntry({
+          userId: req.user.userId,
+          organizationId: req.user.organizationId,
+          scope: 'SCOPE_2',
+          categorySlug: 'purchased-cooling',
+          body,
+        });
+        emissionIds.push(emission.id);
+        await logUserAction(
+          req.user.userId,
+          AuditActions.EMISSION_CALCULATED,
+          'emission',
+          emission.id,
+          {
+            ghgCategorySlug: 'purchased-cooling',
+            scope: 'SCOPE_2',
+            channel: 'BULK_UPLOAD',
+            bulkRow: excelRow,
+          },
+          req
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        rowErrors.push(`${label}: ${msg}`);
+        logger.warn(`Purchased cooling bulk confirm ${label} failed: ${msg}`);
+      }
+    }
+
+    sendSuccess(
+      res,
+      {
+        createdCount: emissionIds.length,
+        emissionIds,
+        failedCount: rowErrors.length,
+        rowErrors,
+      },
+      emissionIds.length ? 'Bulk import completed' : 'No rows were imported',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased cooling bulk confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Bulk import failed', 500);
+    }
+  }
+}
+
+/** AI document extraction — upload cooling bill image/PDF, get structured data. */
+export async function postPurchasedCoolingAiExtract(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file). Accepted: PDF, JPG, PNG.', 400);
+      return;
+    }
+
+    const extracted = await extractPurchasedCoolingData(file.buffer, file.mimetype, file.originalname);
+    sendSuccess(res, extracted, 'Cooling bill data extracted', 200);
+  } catch (error) {
+    logger.error('AI purchased cooling extraction error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI extraction failed', 500);
+    }
+  }
+}
+
+/** Confirm AI-extracted purchased cooling data — validate, calculate via Climatiq, persist. */
+export async function postPurchasedCoolingAiConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const validation = validate(purchasedCoolingFormSchema, {
+      ...req.body,
+      dataEntryChannel: 'AI_EXTRACT',
+    });
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    let body: GhgCategoryFormBody;
+    try {
+      body = mapPurchasedCoolingToGhgBody(
+        {
+          activityType: validation.data!.activityType ?? '',
+          sourceType: validation.data!.sourceType ?? '',
+          consumption: validation.data!.consumption!,
+          consumptionUnit: validation.data!.consumptionUnit ?? '',
+          siteId: validation.data!.siteId ?? '',
+          startDate: validation.data!.startDate,
+          endDate: validation.data!.endDate,
+          notes: validation.data!.notes,
+        },
+        'AI_EXTRACT'
+      ) as GhgCategoryFormBody;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const emission = await submitGhgCategoryFormEntry({
+      userId: req.user.userId,
+      organizationId: req.user.organizationId,
+      scope: 'SCOPE_2',
+      categorySlug: 'purchased-cooling',
+      body,
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_CALCULATED,
+      'emission',
+      emission.id,
+      {
+        ghgCategorySlug: 'purchased-cooling',
+        scope: 'SCOPE_2',
+        channel: 'AI_EXTRACT',
+      },
+      req
+    );
+
+    sendSuccess(res, emission, 'AI-extracted purchased cooling emission saved', 201);
+  } catch (error) {
+    logger.error('AI purchased cooling confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI purchased cooling confirm failed', 500);
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * SCOPE 2 — Purchased Steaming: template, bulk, AI
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+/** Generated Scope 2 workbook (Purchased Steaming sheet) with example rows. */
+export async function getPurchasedSteamingTemplate(_req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const aoa = [
+      ['Fields Required for Calculation'],
+      [...PURCHASED_STEAMING_EXCEL_HEADERS],
+      ['Activity based', '', 10, 'kWh', '149', '01/01/25', '01/02/25'],
+      ['Activity based', '', 15, 'GJ', '127', '15/02/25', '15/03/25'],
+      ['Activity based', '', 10, 'kWh', '149', '19/04/25', '19/05/25'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, PURCHASED_STEAMING_SHEET_NAME);
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="purchased-steaming-template.xlsx"');
+    res.status(200).send(buf);
+  } catch (error) {
+    logger.error('Purchased steaming template generation failed:', error);
+    sendError(res, 'Could not generate purchased steaming template', 500);
+  }
+}
+
+/** Parse file and return row-level validation + mapped preview (no DB / Climatiq). */
+export async function postPurchasedSteamingBulkPreview(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file)', 400);
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = parsePurchasedSteamingBulkFile(file.buffer, file.originalname);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Invalid file';
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const rows = buildPurchasedSteamingBulkPreview(parsed);
+    const validCount = rows.filter((r) => r.status === 'valid').length;
+    const invalidCount = rows.filter((r) => r.status === 'invalid').length;
+
+    sendSuccess(
+      res,
+      {
+        rows,
+        summary: { total: rows.length, validCount, invalidCount },
+      },
+      'Preview ready',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased steaming bulk preview error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Preview failed', 500);
+    }
+  }
+}
+
+/** Persist reviewed purchased steaming rows. */
+export async function postPurchasedSteamingBulkConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const parsed = validate(purchasedSteamingBulkConfirmBodySchema, req.body);
+    if (!parsed.success) {
+      sendError(res, parsed.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    const emissionIds: string[] = [];
+    const rowErrors: string[] = [];
+
+    for (const rawRow of parsed.data!.rows) {
+      const excelRow = rawRow.excelRow;
+      const label = excelRow != null ? `Row ${excelRow}` : 'Row';
+
+      const v = validate(purchasedSteamingFormSchema, {
+        activityType: rawRow.activityType,
+        sourceType: rawRow.sourceType,
+        consumption: rawRow.consumption,
+        consumptionUnit: rawRow.consumptionUnit,
+        siteId: rawRow.siteId,
+        startDate: rawRow.startDate,
+        endDate: rawRow.endDate,
+        notes: rawRow.notes,
+        dataEntryChannel: 'BULK_UPLOAD',
+      });
+      if (!v.success) {
+        rowErrors.push(`${label}: ${v.errors?.join('; ') ?? 'invalid'}`);
+        continue;
+      }
+
+      let body: GhgCategoryFormBody;
+      try {
+        body = mapPurchasedSteamingToGhgBody(
+          {
+            activityType: v.data!.activityType ?? '',
+            sourceType: v.data!.sourceType ?? '',
+            consumption: v.data!.consumption!,
+            consumptionUnit: v.data!.consumptionUnit ?? '',
+            siteId: v.data!.siteId ?? '',
+            startDate: v.data!.startDate,
+            endDate: v.data!.endDate,
+            notes: v.data!.notes,
+          },
+          'BULK_UPLOAD'
+        ) as GhgCategoryFormBody;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        rowErrors.push(`${label}: ${msg}`);
+        continue;
+      }
+
+      try {
+        const emission = await submitGhgCategoryFormEntry({
+          userId: req.user.userId,
+          organizationId: req.user.organizationId,
+          scope: 'SCOPE_2',
+          categorySlug: 'purchased-steaming',
+          body,
+        });
+        emissionIds.push(emission.id);
+        await logUserAction(
+          req.user.userId,
+          AuditActions.EMISSION_CALCULATED,
+          'emission',
+          emission.id,
+          {
+            ghgCategorySlug: 'purchased-steaming',
+            scope: 'SCOPE_2',
+            channel: 'BULK_UPLOAD',
+            bulkRow: excelRow,
+          },
+          req
+        );
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        rowErrors.push(`${label}: ${msg}`);
+        logger.warn(`Purchased steaming bulk confirm ${label} failed: ${msg}`);
+      }
+    }
+
+    sendSuccess(
+      res,
+      {
+        createdCount: emissionIds.length,
+        emissionIds,
+        failedCount: rowErrors.length,
+        rowErrors,
+      },
+      emissionIds.length ? 'Bulk import completed' : 'No rows were imported',
+      200
+    );
+  } catch (error) {
+    logger.error('Purchased steaming bulk confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'Bulk import failed', 500);
+    }
+  }
+}
+
+/** AI document extraction — upload steam bill image/PDF, get structured data. */
+export async function postPurchasedSteamingAiExtract(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const file = (req as ReqWithFile).file;
+    if (!file?.buffer) {
+      sendError(res, 'File is required (field name: file). Accepted: PDF, JPG, PNG.', 400);
+      return;
+    }
+
+    const extracted = await extractPurchasedSteamingData(file.buffer, file.mimetype, file.originalname);
+    sendSuccess(res, extracted, 'Steam bill data extracted', 200);
+  } catch (error) {
+    logger.error('AI purchased steaming extraction error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI extraction failed', 500);
+    }
+  }
+}
+
+/** Confirm AI-extracted purchased steaming data — validate, calculate via Climatiq, persist. */
+export async function postPurchasedSteamingAiConfirm(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    if (!req.user) {
+      sendError(res, 'Unauthorized', 401);
+      return;
+    }
+    if (!canUpload(req.user.role)) {
+      sendError(res, 'Your role cannot submit emissions data', 403);
+      return;
+    }
+
+    const validation = validate(purchasedSteamingFormSchema, {
+      ...req.body,
+      dataEntryChannel: 'AI_EXTRACT',
+    });
+    if (!validation.success) {
+      sendError(res, validation.errors?.join(', ') || 'Validation failed', 400);
+      return;
+    }
+
+    let body: GhgCategoryFormBody;
+    try {
+      body = mapPurchasedSteamingToGhgBody(
+        {
+          activityType: validation.data!.activityType ?? '',
+          sourceType: validation.data!.sourceType ?? '',
+          consumption: validation.data!.consumption!,
+          consumptionUnit: validation.data!.consumptionUnit ?? '',
+          siteId: validation.data!.siteId ?? '',
+          startDate: validation.data!.startDate,
+          endDate: validation.data!.endDate,
+          notes: validation.data!.notes,
+        },
+        'AI_EXTRACT'
+      ) as GhgCategoryFormBody;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      sendError(res, msg, 400);
+      return;
+    }
+
+    const emission = await submitGhgCategoryFormEntry({
+      userId: req.user.userId,
+      organizationId: req.user.organizationId,
+      scope: 'SCOPE_2',
+      categorySlug: 'purchased-steaming',
+      body,
+    });
+
+    await logUserAction(
+      req.user.userId,
+      AuditActions.EMISSION_CALCULATED,
+      'emission',
+      emission.id,
+      {
+        ghgCategorySlug: 'purchased-steaming',
+        scope: 'SCOPE_2',
+        channel: 'AI_EXTRACT',
+      },
+      req
+    );
+
+    sendSuccess(res, emission, 'AI-extracted purchased steaming emission saved', 201);
+  } catch (error) {
+    logger.error('AI purchased steaming confirm error:', error);
+    if (error instanceof Error) {
+      sendError(res, error.message, 500);
+    } else {
+      sendError(res, 'AI purchased steaming confirm failed', 500);
     }
   }
 }

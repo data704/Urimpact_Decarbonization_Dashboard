@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
     categoriesForScope,
     SCOPE3_DOWNSTREAM,
@@ -32,7 +32,12 @@ const SCOPE_COLORS = {
 export default function GHGLanding() {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const [scopeTab, setScopeTab] = useState(1); // 1, 2, 3, or 'analytics'
+    const location = useLocation();
+    const [scopeTab, setScopeTab] = useState(() => {
+        const fromState = location.state?.scopeTab;
+        if (fromState === 1 || fromState === 2 || fromState === 3) return fromState;
+        return 1;
+    }); // 1, 2, 3, or 'analytics'
     const [year, setYear] = useState(CURRENT_YEAR);
 
     const categories = useMemo(() => categoriesForScope(scopeTab), [scopeTab]);

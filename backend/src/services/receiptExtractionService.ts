@@ -498,3 +498,436 @@ export async function extractFugitiveEmissionsData(
 
   return parsed;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Purchased Electricity (Scope 2) — electricity bill / invoice extraction
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+const PURCHASED_ELECTRICITY_EXTRACTION_PROMPT = `You are an expert at reading electricity bills, utility invoices, and energy consumption documents for GHG (Greenhouse Gas) emissions reporting under the GHG Protocol Scope 2 — Purchased Electricity category.
+
+The document may be in Arabic, English, or any other language. Extract the data regardless of language.
+
+Extract the following fields from the uploaded electricity bill/invoice. Return ONLY a valid JSON object (no markdown, no explanation) with these keys:
+
+{
+  "activityType": "Activity based",
+  "sourceType": "Grid electricity, renewable, or other source type if mentioned. Leave empty if not clear.",
+  "consumption": 0,
+  "consumptionUnit": "Unit of measurement (kWh, MWh, GJ)",
+  "siteId": "Site ID, meter number, account number, or facility identifier if mentioned",
+  "startDate": "Billing period start date in DD/MM/YYYY format",
+  "endDate": "Billing period end date in DD/MM/YYYY format",
+  "notes": "Any additional relevant information (invoice number, supplier name, total cost, meter reading, etc.)",
+  "confidence": "high | medium | low"
+}
+
+Rules:
+- consumption must be a positive number representing electricity consumed
+- consumptionUnit must be one of: kWh, MWh, GJ
+- startDate and endDate must be in DD/MM/YYYY format
+- activityType should default to "Activity based" unless the document clearly indicates otherwise
+- If a field cannot be determined, use empty string for text fields and 0 for consumption
+- Translate any Arabic/non-English text to English for the field values
+- Set confidence to "high" if all key fields (consumption, unit, dates) are clearly readable, "medium" if some are inferred, "low" if guessing
+- Return ONLY the JSON object, nothing else`;
+
+export type PurchasedElectricityExtractionResult = {
+  activityType: string;
+  sourceType: string;
+  consumption: number;
+  consumptionUnit: string;
+  siteId: string;
+  startDate: string;
+  endDate: string;
+  notes: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+export async function extractPurchasedElectricityData(
+  fileBuffer: Buffer,
+  mimeType: string,
+  originalName: string
+): Promise<PurchasedElectricityExtractionResult> {
+  if (!config.anthropic.apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not configured. Set it in your .env file.');
+  }
+
+  const client = new Anthropic({ apiKey: config.anthropic.apiKey });
+  const source = bufferToBase64MediaType(fileBuffer, mimeType);
+
+  logger.info(`AI purchased electricity extraction starting for "${originalName}" (${mimeType}, ${(fileBuffer.length / 1024).toFixed(0)} KB)`);
+
+  const isPdf = mimeType === 'application/pdf';
+
+  const contentBlock: Anthropic.Messages.ContentBlockParam[] = isPdf
+    ? [
+        {
+          type: 'document' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: 'application/pdf' as const,
+            data: source.data,
+          },
+        },
+        { type: 'text' as const, text: PURCHASED_ELECTRICITY_EXTRACTION_PROMPT },
+      ]
+    : [
+        {
+          type: 'image' as const,
+          source: {
+            type: 'base64' as const,
+            media_type: (source.media_type === 'application/pdf' ? 'image/jpeg' : source.media_type) as 'image/jpeg',
+            data: source.data,
+          },
+        },
+        { type: 'text' as const, text: PURCHASED_ELECTRICITY_EXTRACTION_PROMPT },
+      ];
+
+  const response = await client.messages.create({
+    model: config.anthropic.model,
+    max_tokens: config.anthropic.maxTokens,
+    messages: [{ role: 'user', content: contentBlock }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === 'text');
+  if (!textBlock || textBlock.type !== 'text') {
+    throw new Error('Claude returned no text response');
+  }
+
+  let raw = textBlock.text.trim();
+  if (raw.startsWith('```')) {
+    raw = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+  }
+
+  let parsed: PurchasedElectricityExtractionResult;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    logger.error('Claude returned invalid JSON:', raw.slice(0, 500));
+    throw new Error('AI returned invalid JSON. Please try again or use manual entry.');
+  }
+
+  // Sanitize
+  parsed.activityType = String(parsed.activityType ?? 'Activity based').trim();
+  parsed.sourceType = String(parsed.sourceType ?? '').trim();
+  parsed.consumption = Number(parsed.consumption) || 0;
+  parsed.consumptionUnit = String(parsed.consumptionUnit ?? '').trim();
+  parsed.siteId = String(parsed.siteId ?? '').trim();
+  parsed.startDate = String(parsed.startDate ?? '').trim();
+  parsed.endDate = String(parsed.endDate ?? '').trim();
+  parsed.notes = String(parsed.notes ?? '').trim();
+  parsed.confidence = (['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low') as 'high' | 'medium' | 'low';
+
+  logger.info(`AI purchased electricity extraction complete: consumption=${parsed.consumption} ${parsed.consumptionUnit}, site=${parsed.siteId}, confidence=${parsed.confidence}`);
+
+  return parsed;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────────
+ * Purchased Heating (Scope 2) — heating bill / invoice extraction
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+const PURCHASED_HEATING_EXTRACTION_PROMPT = `You are an expert at reading heating bills, district heating invoices, natural gas bills, and energy consumption documents for GHG (Greenhouse Gas) emissions reporting under the GHG Protocol Scope 2 — Purchased Heating category.
+
+The document may be in Arabic, English, or any other language. Extract the data regardless of language.
+
+Extract the following fields from the uploaded heating bill/invoice. Return ONLY a valid JSON object (no markdown, no explanation) with these keys:
+
+{
+  "activityType": "Activity based",
+  "sourceType": "District heating, natural gas heating, or other source type if mentioned. Leave empty if not clear.",
+  "consumption": 0,
+  "consumptionUnit": "Unit of measurement (kWh, MWh, GJ)",
+  "siteId": "Site ID, meter number, account number, or facility identifier if mentioned",
+  "startDate": "Billing period start date in DD/MM/YYYY format",
+  "endDate": "Billing period end date in DD/MM/YYYY format",
+  "notes": "Any additional relevant information (invoice number, supplier name, total cost, meter reading, etc.)",
+  "confidence": "high | medium | low"
+}
+
+Rules:
+- consumption must be a positive number representing heating energy consumed
+- consumptionUnit must be one of: kWh, MWh, GJ
+- startDate and endDate must be in DD/MM/YYYY format
+- activityType should default to "Activity based" unless the document clearly indicates otherwise
+- If a field cannot be determined, use empty string for text fields and 0 for consumption
+- Translate any Arabic/non-English text to English for the field values
+- Set confidence to "high" if all key fields (consumption, unit, dates) are clearly readable, "medium" if some are inferred, "low" if guessing
+- Return ONLY the JSON object, nothing else`;
+
+export type PurchasedHeatingExtractionResult = {
+  activityType: string;
+  sourceType: string;
+  consumption: number;
+  consumptionUnit: string;
+  siteId: string;
+  startDate: string;
+  endDate: string;
+  notes: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+export async function extractPurchasedHeatingData(
+  fileBuffer: Buffer,
+  mimeType: string,
+  originalName: string
+): Promise<PurchasedHeatingExtractionResult> {
+  if (!config.anthropic.apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not configured. Set it in your .env file.');
+  }
+
+  const client = new Anthropic({ apiKey: config.anthropic.apiKey });
+  const source = bufferToBase64MediaType(fileBuffer, mimeType);
+
+  logger.info(`AI purchased heating extraction starting for "${originalName}" (${mimeType}, ${(fileBuffer.length / 1024).toFixed(0)} KB)`);
+
+  const isPdf = mimeType === 'application/pdf';
+
+  const contentBlock: Anthropic.Messages.ContentBlockParam[] = isPdf
+    ? [
+        { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: source.data } },
+        { type: 'text' as const, text: PURCHASED_HEATING_EXTRACTION_PROMPT },
+      ]
+    : [
+        { type: 'image' as const, source: { type: 'base64' as const, media_type: (source.media_type === 'application/pdf' ? 'image/jpeg' : source.media_type) as 'image/jpeg', data: source.data } },
+        { type: 'text' as const, text: PURCHASED_HEATING_EXTRACTION_PROMPT },
+      ];
+
+  const response = await client.messages.create({
+    model: config.anthropic.model,
+    max_tokens: config.anthropic.maxTokens,
+    messages: [{ role: 'user', content: contentBlock }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === 'text');
+  if (!textBlock || textBlock.type !== 'text') throw new Error('Claude returned no text response');
+
+  let raw = textBlock.text.trim();
+  if (raw.startsWith('```')) raw = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+
+  let parsed: PurchasedHeatingExtractionResult;
+  try { parsed = JSON.parse(raw); } catch {
+    logger.error('Claude returned invalid JSON:', raw.slice(0, 500));
+    throw new Error('AI returned invalid JSON. Please try again or use manual entry.');
+  }
+
+  parsed.activityType = String(parsed.activityType ?? 'Activity based').trim();
+  parsed.sourceType = String(parsed.sourceType ?? '').trim();
+  parsed.consumption = Number(parsed.consumption) || 0;
+  parsed.consumptionUnit = String(parsed.consumptionUnit ?? '').trim();
+  parsed.siteId = String(parsed.siteId ?? '').trim();
+  parsed.startDate = String(parsed.startDate ?? '').trim();
+  parsed.endDate = String(parsed.endDate ?? '').trim();
+  parsed.notes = String(parsed.notes ?? '').trim();
+  parsed.confidence = (['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low') as 'high' | 'medium' | 'low';
+
+  logger.info(`AI purchased heating extraction complete: consumption=${parsed.consumption} ${parsed.consumptionUnit}, site=${parsed.siteId}, confidence=${parsed.confidence}`);
+
+  return parsed;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Purchased Cooling — AI extraction
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+const PURCHASED_COOLING_EXTRACTION_PROMPT = `You are an expert at reading cooling bills, district cooling invoices, chilled water bills, and energy consumption documents for GHG (Greenhouse Gas) emissions reporting under the GHG Protocol Scope 2 — Purchased Cooling category.
+
+The document may be in Arabic, English, or any other language. Extract the data regardless of language.
+
+Extract the following fields from the uploaded cooling bill/invoice. Return ONLY a valid JSON object (no markdown, no explanation) with these keys:
+
+{
+  "activityType": "Activity based",
+  "sourceType": "District cooling, chilled water, or other source type if mentioned. Leave empty if not clear.",
+  "consumption": 0,
+  "consumptionUnit": "Unit of measurement (kWh, MWh, GJ)",
+  "siteId": "Site ID, meter number, account number, or facility identifier if mentioned",
+  "startDate": "Billing period start date in DD/MM/YYYY format",
+  "endDate": "Billing period end date in DD/MM/YYYY format",
+  "notes": "Any additional relevant information (invoice number, supplier name, total cost, meter reading, etc.)",
+  "confidence": "high | medium | low"
+}
+
+Rules:
+- consumption must be a positive number representing cooling energy consumed
+- consumptionUnit must be one of: kWh, MWh, GJ
+- startDate and endDate must be in DD/MM/YYYY format
+- activityType should default to "Activity based" unless the document clearly indicates otherwise
+- If a field cannot be determined, use empty string for text fields and 0 for consumption
+- Translate any Arabic/non-English text to English for the field values
+- Set confidence to "high" if all key fields (consumption, unit, dates) are clearly readable, "medium" if some are inferred, "low" if guessing
+- Return ONLY the JSON object, nothing else`;
+
+export type PurchasedCoolingExtractionResult = {
+  activityType: string;
+  sourceType: string;
+  consumption: number;
+  consumptionUnit: string;
+  siteId: string;
+  startDate: string;
+  endDate: string;
+  notes: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+export async function extractPurchasedCoolingData(
+  fileBuffer: Buffer,
+  mimeType: string,
+  originalName: string
+): Promise<PurchasedCoolingExtractionResult> {
+  if (!config.anthropic.apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not configured. Set it in your .env file.');
+  }
+
+  const client = new Anthropic({ apiKey: config.anthropic.apiKey });
+  const source = bufferToBase64MediaType(fileBuffer, mimeType);
+
+  logger.info(`AI purchased cooling extraction starting for "${originalName}" (${mimeType}, ${(fileBuffer.length / 1024).toFixed(0)} KB)`);
+
+  const isPdf = mimeType === 'application/pdf';
+
+  const contentBlock: Anthropic.Messages.ContentBlockParam[] = isPdf
+    ? [
+        { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: source.data } },
+        { type: 'text' as const, text: PURCHASED_COOLING_EXTRACTION_PROMPT },
+      ]
+    : [
+        { type: 'image' as const, source: { type: 'base64' as const, media_type: (source.media_type === 'application/pdf' ? 'image/jpeg' : source.media_type) as 'image/jpeg', data: source.data } },
+        { type: 'text' as const, text: PURCHASED_COOLING_EXTRACTION_PROMPT },
+      ];
+
+  const response = await client.messages.create({
+    model: config.anthropic.model,
+    max_tokens: config.anthropic.maxTokens,
+    messages: [{ role: 'user', content: contentBlock }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === 'text');
+  if (!textBlock || textBlock.type !== 'text') throw new Error('Claude returned no text response');
+
+  let raw = textBlock.text.trim();
+  if (raw.startsWith('```')) raw = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+
+  let parsed: PurchasedCoolingExtractionResult;
+  try { parsed = JSON.parse(raw); } catch {
+    logger.error('Claude returned invalid JSON:', raw.slice(0, 500));
+    throw new Error('AI returned invalid JSON. Please try again or use manual entry.');
+  }
+
+  parsed.activityType = String(parsed.activityType ?? 'Activity based').trim();
+  parsed.sourceType = String(parsed.sourceType ?? '').trim();
+  parsed.consumption = Number(parsed.consumption) || 0;
+  parsed.consumptionUnit = String(parsed.consumptionUnit ?? '').trim();
+  parsed.siteId = String(parsed.siteId ?? '').trim();
+  parsed.startDate = String(parsed.startDate ?? '').trim();
+  parsed.endDate = String(parsed.endDate ?? '').trim();
+  parsed.notes = String(parsed.notes ?? '').trim();
+  parsed.confidence = (['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low') as 'high' | 'medium' | 'low';
+
+  logger.info(`AI purchased cooling extraction complete: consumption=${parsed.consumption} ${parsed.consumptionUnit}, site=${parsed.siteId}, confidence=${parsed.confidence}`);
+
+  return parsed;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * Purchased Steaming — AI extraction
+ * ══════════════════════════════════════════════════════════════════════════════ */
+
+const PURCHASED_STEAMING_EXTRACTION_PROMPT = `You are an expert at reading steam bills, district steam invoices, and energy consumption documents for GHG (Greenhouse Gas) emissions reporting under the GHG Protocol Scope 2 — Purchased Steam category.
+
+The document may be in Arabic, English, or any other language. Extract the data regardless of language.
+
+Extract the following fields from the uploaded steam bill/invoice. Return ONLY a valid JSON object (no markdown, no explanation) with these keys:
+
+{
+  "activityType": "Activity based",
+  "sourceType": "District steam, industrial steam, or other source type if mentioned. Leave empty if not clear.",
+  "consumption": 0,
+  "consumptionUnit": "Unit of measurement (kWh, MWh, GJ)",
+  "siteId": "Site ID, meter number, account number, or facility identifier if mentioned",
+  "startDate": "Billing period start date in DD/MM/YYYY format",
+  "endDate": "Billing period end date in DD/MM/YYYY format",
+  "notes": "Any additional relevant information (invoice number, supplier name, total cost, meter reading, etc.)",
+  "confidence": "high | medium | low"
+}
+
+Rules:
+- consumption must be a positive number representing steam energy consumed
+- consumptionUnit must be one of: kWh, MWh, GJ
+- startDate and endDate must be in DD/MM/YYYY format
+- activityType should default to "Activity based" unless the document clearly indicates otherwise
+- If a field cannot be determined, use empty string for text fields and 0 for consumption
+- Translate any Arabic/non-English text to English for the field values
+- Set confidence to "high" if all key fields (consumption, unit, dates) are clearly readable, "medium" if some are inferred, "low" if guessing
+- Return ONLY the JSON object, nothing else`;
+
+export type PurchasedSteamingExtractionResult = {
+  activityType: string;
+  sourceType: string;
+  consumption: number;
+  consumptionUnit: string;
+  siteId: string;
+  startDate: string;
+  endDate: string;
+  notes: string;
+  confidence: 'high' | 'medium' | 'low';
+};
+
+export async function extractPurchasedSteamingData(
+  fileBuffer: Buffer,
+  mimeType: string,
+  originalName: string
+): Promise<PurchasedSteamingExtractionResult> {
+  if (!config.anthropic.apiKey) {
+    throw new Error('ANTHROPIC_API_KEY is not configured. Set it in your .env file.');
+  }
+
+  const client = new Anthropic({ apiKey: config.anthropic.apiKey });
+  const source = bufferToBase64MediaType(fileBuffer, mimeType);
+
+  logger.info(`AI purchased steaming extraction starting for "${originalName}" (${mimeType}, ${(fileBuffer.length / 1024).toFixed(0)} KB)`);
+
+  const isPdf = mimeType === 'application/pdf';
+
+  const contentBlock: Anthropic.Messages.ContentBlockParam[] = isPdf
+    ? [
+        { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: source.data } },
+        { type: 'text' as const, text: PURCHASED_STEAMING_EXTRACTION_PROMPT },
+      ]
+    : [
+        { type: 'image' as const, source: { type: 'base64' as const, media_type: (source.media_type === 'application/pdf' ? 'image/jpeg' : source.media_type) as 'image/jpeg', data: source.data } },
+        { type: 'text' as const, text: PURCHASED_STEAMING_EXTRACTION_PROMPT },
+      ];
+
+  const response = await client.messages.create({
+    model: config.anthropic.model,
+    max_tokens: config.anthropic.maxTokens,
+    messages: [{ role: 'user', content: contentBlock }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === 'text');
+  if (!textBlock || textBlock.type !== 'text') throw new Error('Claude returned no text response');
+
+  let raw = textBlock.text.trim();
+  if (raw.startsWith('```')) raw = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
+
+  let parsed: PurchasedSteamingExtractionResult;
+  try { parsed = JSON.parse(raw); } catch {
+    logger.error('Claude returned invalid JSON:', raw.slice(0, 500));
+    throw new Error('AI returned invalid JSON. Please try again or use manual entry.');
+  }
+
+  parsed.activityType = String(parsed.activityType ?? 'Activity based').trim();
+  parsed.sourceType = String(parsed.sourceType ?? '').trim();
+  parsed.consumption = Number(parsed.consumption) || 0;
+  parsed.consumptionUnit = String(parsed.consumptionUnit ?? '').trim();
+  parsed.siteId = String(parsed.siteId ?? '').trim();
+  parsed.startDate = String(parsed.startDate ?? '').trim();
+  parsed.endDate = String(parsed.endDate ?? '').trim();
+  parsed.notes = String(parsed.notes ?? '').trim();
+  parsed.confidence = (['high', 'medium', 'low'].includes(parsed.confidence) ? parsed.confidence : 'low') as 'high' | 'medium' | 'low';
+
+  logger.info(`AI purchased steaming extraction complete: consumption=${parsed.consumption} ${parsed.consumptionUnit}, site=${parsed.siteId}, confidence=${parsed.confidence}`);
+
+  return parsed;
+}

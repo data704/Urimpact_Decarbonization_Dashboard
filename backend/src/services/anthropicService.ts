@@ -432,7 +432,7 @@ Extract structured data and respond with ONLY a valid JSON object (no markdown, 
   "billingPeriodEnd": "YYYY-MM-DD" if visible",
   "documentDate": "YYYY-MM-DD" from receipt/invoice date when visible (use when no billing period)",
   "amount": number if visible",
-  "currency": "AED" etc. if visible"
+  "currency": "SAR" etc. if visible"
 }
 
 Rules:
