@@ -40,6 +40,13 @@ async function main() {
       lastName: 'User',
       company: 'URIMPACT',
     },
+    {
+      email: 'Europe@urimpact.sa',
+      password: 'Demo@2026',
+      firstName: 'Europe',
+      lastName: 'Demo',
+      company: 'URIMPACT Europe',
+    },
   ];
 
   for (const acct of accounts) {

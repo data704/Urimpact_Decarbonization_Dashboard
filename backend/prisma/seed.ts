@@ -39,6 +39,13 @@ async function main() {
       lastName: 'User',
       company: 'URIMPACT',
     },
+    {
+      email: 'Europe@urimpact.sa',
+      password: 'Demo@2026',
+      firstName: 'Europe',
+      lastName: 'Demo',
+      company: 'URIMPACT Europe',
+    },
   ];
 
   for (const acct of accounts) {
@@ -184,6 +191,7 @@ async function main() {
   console.log('   komal@urimpact.sa / Komal@121102');
   console.log('   b.aldelewy@urimpact.sa / Admin@123');
   console.log('   data@urimpact.sa / Admin@1234');
+  console.log('   Europe@urimpact.sa / Demo@2026');
 }
 
 main()
