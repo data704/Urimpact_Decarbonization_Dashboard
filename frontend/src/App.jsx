@@ -16,6 +16,7 @@ import Decarbonization from './pages/Decarbonization';
 import ESGModule from './pages/ESG/ESGModule';
 import SupplyChain from './pages/SupplyChain/SupplyChain';
 import BSM from './pages/BSM/BSM';
+import ROIModule from './pages/ROI';
 import LearnWithUs from './pages/LearnWithUs/LearnWithUs';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
@@ -47,6 +48,7 @@ function App() {
                                 <Route path="/reports" element={<Reports />} />
                                 <Route path="/esg" element={<ESGModule />} />
                                 <Route path="/decarbonization" element={<Decarbonization />} />
+                                <Route path="/roi" element={<ROIModule />} />
                                 <Route path="/supply-chain" element={<SupplyChain />} />
                                 <Route path="/bsm" element={<BSM />} />
                                 <Route path="/learn" element={<LearnWithUs />} />

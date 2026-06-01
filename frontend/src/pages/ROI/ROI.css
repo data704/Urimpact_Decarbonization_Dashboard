@@ -1,0 +1,403 @@
+/* ═══ ROI & Scenario Analysis Module ═══ */
+
+.roi-page { animation: roiFadeIn 0.3s ease; }
+@keyframes roiFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── Page Header ── */
+.roi-page-header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+.roi-page-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  background: #EAF7F5; display: flex; align-items: center; justify-content: center;
+}
+.roi-page-icon svg { width: 22px; height: 22px; color: #1CA39A; }
+.roi-page-title { font-size: 24px; font-weight: 600; color: #1a2332; line-height: 1.2; }
+.roi-page-subtitle { font-size: 13px; color: #9aa3b0; margin-top: 2px; }
+
+/* ── Module Tabs ── */
+.roi-module-tabs {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  background: #fff; border-radius: 16px;
+  padding: 6px; border: 1px solid #e8ecf0;
+  margin-bottom: 24px; box-shadow: 0 2px 12px rgba(28,163,154,0.08);
+}
+.roi-module-tab {
+  padding: 7px 14px; border-radius: 10px;
+  font-size: 12.5px; font-weight: 500; cursor: pointer;
+  color: #6b7a8d; border: none; background: none;
+  transition: all 0.18s; white-space: nowrap;
+  font-family: inherit; display: flex; align-items: center; gap: 6px;
+}
+.roi-module-tab svg { width: 14px; height: 14px; }
+.roi-module-tab:hover { background: #EAF7F5; color: #1CA39A; }
+.roi-module-tab.active { background: #1CA39A; color: #fff; }
+
+/* ── Industry Switcher ── */
+.roi-industry-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.roi-industry-label { font-size: 12.5px; color: #9aa3b0; font-weight: 500; }
+.roi-industry-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.roi-ind-btn {
+  padding: 7px 16px; border-radius: 20px;
+  border: 1.5px solid #e8ecf0; background: #fff;
+  font-family: inherit; font-size: 12.5px;
+  font-weight: 500; cursor: pointer; color: #6b7a8d;
+  transition: all 0.18s;
+}
+.roi-ind-btn:hover { border-color: #1CA39A; color: #1CA39A; }
+.roi-ind-btn.active { background: #1CA39A; color: #fff; border-color: #1CA39A; }
+
+/* ── KPI Grid ── */
+.roi-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.roi-kpi-card {
+  background: #fff; border-radius: 16px;
+  padding: 18px 20px; border: 1px solid #e8ecf0;
+  box-shadow: 0 2px 12px rgba(28,163,154,0.08);
+  transition: all 0.2s; animation: roiCardFadeUp 0.4s ease both;
+}
+.roi-kpi-card:hover { box-shadow: 0 6px 24px rgba(28,163,154,0.15); transform: translateY(-2px); }
+@keyframes roiCardFadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+.roi-kpi-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 10px;
+}
+.roi-kpi-icon svg { width: 18px; height: 18px; }
+.roi-kpi-icon.teal { background: #EAF7F5; color: #1CA39A; }
+.roi-kpi-icon.green { background: #e8f5e9; color: #4CAF50; }
+.roi-kpi-icon.amber { background: #fff8e1; color: #e6a817; }
+.roi-kpi-icon.blue { background: #e3f2fd; color: #1565c0; }
+.roi-kpi-icon.red { background: #fdecea; color: #E95C5C; }
+
+.roi-kpi-label { font-size: 12px; color: #6b7a8d; font-weight: 500; margin-bottom: 4px; }
+.roi-kpi-value { font-size: 22px; font-weight: 700; color: #1a2332; line-height: 1.1; }
+.roi-kpi-sub { font-size: 11px; color: #9aa3b0; margin-top: 2px; }
+.roi-kpi-trend {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11.5px; font-weight: 500; margin-top: 6px;
+  border-radius: 6px; padding: 2px 7px;
+}
+.roi-kpi-trend.down { color: #1CA39A; background: #EAF7F5; }
+.roi-kpi-trend.up { color: #4CAF50; background: #e8f5e9; }
+.roi-kpi-trend.neutral { color: #e6a817; background: #fff8e1; }
+
+/* ── Grid layouts ── */
+.roi-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.roi-grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 24px; }
+
+/* ── Card ── */
+.roi-card {
+  background: #fff; border-radius: 16px;
+  border: 1px solid #e8ecf0; box-shadow: 0 2px 12px rgba(28,163,154,0.08);
+  padding: 20px 22px;
+}
+.roi-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.roi-card-title { font-size: 15px; font-weight: 600; color: #1a2332; }
+.roi-card-subtitle { font-size: 12px; color: #9aa3b0; margin-top: 2px; }
+.roi-card-badge {
+  font-size: 11px; font-weight: 500; padding: 3px 10px;
+  border-radius: 20px; background: #EAF7F5; color: #1CA39A;
+}
+
+/* ── Funnel ── */
+.roi-funnel {
+  display: flex; align-items: center; gap: 4px;
+  background: #EAF7F5; border-radius: 12px;
+  padding: 14px 16px; flex-wrap: wrap;
+}
+.roi-funnel-node {
+  flex: 1; min-width: 80px; background: #fff;
+  border-radius: 10px; padding: 10px 8px; text-align: center;
+  cursor: pointer; transition: all 0.18s; border: 2px solid transparent;
+}
+.roi-funnel-node:hover,
+.roi-funnel-node.active { border-color: #1CA39A; background: #1CA39A; color: #fff; }
+.roi-funnel-node:hover .roi-fn-label,
+.roi-funnel-node.active .roi-fn-label { color: #fff; }
+.roi-funnel-node:hover .roi-fn-icon svg,
+.roi-funnel-node.active .roi-fn-icon svg { color: rgba(255,255,255,0.85); }
+.roi-fn-icon { margin-bottom: 4px; }
+.roi-fn-icon svg { width: 20px; height: 20px; color: #1CA39A; }
+.roi-fn-label { font-size: 11px; font-weight: 500; color: #6b7a8d; }
+.roi-funnel-arrow { color: #1CA39A; font-size: 16px; flex-shrink: 0; padding: 0 2px; font-weight: 700; }
+
+/* ── Treemap ── */
+.roi-treemap { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.roi-tm-cell {
+  border-radius: 12px; padding: 14px 16px; cursor: pointer;
+  transition: transform 0.18s; overflow: hidden;
+}
+.roi-tm-cell:hover { transform: scale(1.02); }
+.roi-tm-cell.large { grid-column: span 2; }
+.roi-tm-label { font-size: 13px; font-weight: 600; color: #fff; }
+.roi-tm-pct { font-size: 28px; font-weight: 700; color: #fff; line-height: 1; margin-top: 4px; }
+.roi-tm-sub { font-size: 11px; color: rgba(255,255,255,0.75); margin-top: 2px; }
+.roi-tm-teal { background: #1CA39A; }
+.roi-tm-blue { background: #2196F3; }
+.roi-tm-green { background: #4CAF50; }
+.roi-tm-amber { background: #F5B942; }
+.roi-tm-purple { background: #9C27B0; }
+
+/* ── Data Table ── */
+.roi-data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.roi-data-table th {
+  text-align: left; padding: 10px 12px;
+  color: #9aa3b0; font-weight: 500; font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid #e8ecf0;
+}
+.roi-data-table td { padding: 11px 12px; border-bottom: 1px solid #e8ecf0; color: #1a2332; }
+.roi-data-table tr:last-child td { border-bottom: none; }
+.roi-data-table tr:hover td { background: #EAF7F5; }
+.roi-score-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 22px; border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+}
+.roi-score-high { background: #e8f5e9; color: #2e7d32; }
+.roi-score-mid { background: #fff8e1; color: #e6a817; }
+
+/* ── Scenario Cards ── */
+.roi-scenario-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.roi-sc-card {
+  border-radius: 12px; padding: 14px 16px; border: 2px solid transparent;
+  cursor: pointer; transition: all 0.18s; text-align: center;
+}
+.roi-sc-card:hover { transform: translateY(-2px); }
+.roi-sc-card.active { border-color: #1CA39A !important; }
+.roi-sc-card.bau { background: #fdecea; }
+.roi-sc-card.cons { background: #fff8e1; }
+.roi-sc-card.mod { background: #EAF7F5; }
+.roi-sc-card.aggr { background: #e8f5e9; }
+.roi-sc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.roi-sc-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+.roi-sc-sub { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+
+/* ── Slider Controls ── */
+.roi-slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.roi-slider-label { font-size: 12.5px; color: #6b7a8d; width: 150px; flex-shrink: 0; }
+.roi-slider-input { flex: 1; accent-color: #1CA39A; }
+.roi-slider-val { font-size: 13px; font-weight: 600; color: #1CA39A; min-width: 44px; text-align: right; }
+
+/* ── Hotspot cards ── */
+.roi-hotspot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.roi-hs-card {
+  background: #fff; border-radius: 12px;
+  border: 1px solid #e8ecf0; padding: 16px; cursor: pointer;
+  transition: all 0.18s;
+}
+.roi-hs-card:hover { border-color: #1CA39A; box-shadow: 0 6px 24px rgba(28,163,154,0.15); }
+.roi-hs-pct { font-size: 24px; font-weight: 700; color: #1CA39A; }
+.roi-hs-name { font-size: 13px; font-weight: 600; color: #1a2332; margin-top: 4px; }
+.roi-hs-cost { font-size: 12px; color: #9aa3b0; margin-top: 2px; }
+.roi-hs-bar { height: 4px; background: #e8ecf0; border-radius: 2px; margin-top: 10px; }
+.roi-hs-bar-fill { height: 100%; border-radius: 2px; background: #1CA39A; }
+.roi-hs-potential { margin-top: 8px; font-size: 11px; color: #1CA39A; font-weight: 500; }
+
+/* ── AI Insight Box ── */
+.roi-ai-box {
+  background: linear-gradient(135deg, #1CA39A 0%, #167d76 100%);
+  border-radius: 14px; padding: 18px 20px; color: #fff; margin-top: 16px;
+  display: flex; gap: 14px; align-items: flex-start;
+}
+.roi-ai-icon { flex-shrink: 0; margin-top: 2px; }
+.roi-ai-icon svg { width: 24px; height: 24px; color: #fff; }
+.roi-ai-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.roi-ai-text { font-size: 12.5px; opacity: 0.9; line-height: 1.6; }
+
+/* ── Intervention cards ── */
+.roi-int-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.roi-int-card {
+  background: #fff; border-radius: 16px;
+  border: 1px solid #e8ecf0; padding: 20px;
+  cursor: pointer; transition: all 0.2s;
+}
+.roi-int-card:hover { border-color: #1CA39A; box-shadow: 0 6px 24px rgba(28,163,154,0.15); transform: translateY(-2px); }
+.roi-int-tag {
+  display: inline-block; background: #EAF7F5; color: #1CA39A;
+  font-size: 11px; font-weight: 600; padding: 3px 10px;
+  border-radius: 20px; margin-bottom: 10px;
+}
+.roi-int-name { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: #1a2332; }
+.roi-int-metric { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.roi-int-metric-label { font-size: 12px; color: #9aa3b0; }
+.roi-int-metric-val { font-size: 12px; font-weight: 600; color: #1a2332; }
+.roi-int-score { margin-top: 12px; display: flex; align-items: center; justify-content: space-between; }
+.roi-int-score-label { font-size: 11px; color: #9aa3b0; }
+.roi-int-score-bar { flex: 1; height: 6px; background: #e8ecf0; border-radius: 3px; margin: 0 10px; }
+.roi-int-score-fill { height: 100%; border-radius: 3px; background: #1CA39A; }
+.roi-int-score-num { font-size: 13px; font-weight: 700; color: #1CA39A; }
+
+/* ── Filter bar ── */
+.roi-filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+.roi-filter-select {
+  border: 1px solid #e8ecf0; border-radius: 8px;
+  padding: 7px 12px; font-family: inherit;
+  font-size: 12.5px; color: #6b7a8d; background: #fff; cursor: pointer;
+}
+
+/* ── Financial KPIs ── */
+.roi-financial-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 24px; }
+
+/* ── Sensitivity Matrix ── */
+.roi-matrix-grid {
+  display: grid; grid-template-columns: auto repeat(5, 1fr);
+  gap: 4px; font-size: 12px;
+}
+.roi-mx-header {
+  background: #EAF7F5; color: #1CA39A;
+  padding: 8px 10px; border-radius: 6px;
+  font-weight: 600; text-align: center;
+}
+.roi-mx-row-label {
+  background: #EAF7F5; color: #1CA39A;
+  padding: 8px 10px; border-radius: 6px; font-weight: 600;
+  display: flex; align-items: center;
+}
+.roi-mx-cell {
+  padding: 8px 10px; border-radius: 6px;
+  text-align: center; font-weight: 500; font-size: 12px;
+}
+.roi-mx-high { background: #e8f5e9; color: #2e7d32; }
+.roi-mx-mid { background: #fff8e1; color: #e6a817; }
+.roi-mx-low { background: #fdecea; color: #c62828; }
+
+/* ── Pathway Timeline ── */
+.roi-timeline { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; padding-bottom: 8px; }
+.roi-tl-item { display: flex; flex-direction: column; align-items: center; min-width: 100px; }
+.roi-tl-dot-row { display: flex; align-items: center; width: 100%; }
+.roi-tl-dot {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #1CA39A; border: 3px solid #d0f0ed;
+  z-index: 1; flex-shrink: 0;
+}
+.roi-tl-dot.target { background: #4CAF50; border-color: #e8f5e9; }
+.roi-tl-line { flex: 1; height: 2px; background: #d0f0ed; }
+.roi-tl-year { font-size: 12px; font-weight: 600; color: #1CA39A; margin-top: 6px; }
+.roi-tl-year.target { color: #4CAF50; }
+.roi-tl-events { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding: 0 4px; }
+.roi-tl-event {
+  background: #EAF7F5; color: #1CA39A;
+  border-radius: 8px; padding: 5px 10px;
+  font-size: 11px; font-weight: 500; text-align: center; white-space: nowrap;
+}
+.roi-tl-event.target-event { background: #e8f5e9; color: #4CAF50; font-weight: 700; }
+
+/* ── Gauge row ── */
+.roi-gauge-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.roi-gauge-card {
+  border-radius: 12px; padding: 16px; text-align: center;
+}
+.roi-gauge-num { font-size: 24px; font-weight: 700; }
+.roi-gauge-label { font-size: 12px; color: #9aa3b0; margin-top: 4px; }
+
+/* ── Carbon pricing exposure ── */
+.roi-exposure-grid { display: grid; gap: 10px; }
+.roi-exposure-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px; border-radius: 10px;
+}
+.roi-exposure-item.teal { background: #EAF7F5; }
+.roi-exposure-item.amber { background: #fff8e1; }
+.roi-exposure-item.red { background: #fdecea; }
+.roi-exposure-item.green { background: #e8f5e9; }
+.roi-exposure-label { font-size: 12.5px; font-weight: 500; color: #6b7a8d; }
+.roi-exposure-value { font-size: 16px; font-weight: 700; }
+.roi-exposure-item.teal .roi-exposure-value { color: #1CA39A; }
+.roi-exposure-item.amber .roi-exposure-value { color: #e6a817; }
+.roi-exposure-item.red .roi-exposure-value { color: #E95C5C; }
+.roi-exposure-item.green .roi-exposure-value { color: #4CAF50; }
+
+/* ── Monte Carlo volatility inputs ── */
+.roi-mc-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.roi-mc-input-card { border-radius: 10px; padding: 12px; }
+.roi-mc-input-card.teal { background: #EAF7F5; }
+.roi-mc-input-card.blue { background: #e3f2fd; }
+.roi-mc-input-card.green { background: #e8f5e9; }
+.roi-mc-input-card.amber { background: #fff8e1; }
+.roi-mc-input-label { font-size: 11px; font-weight: 600; }
+.roi-mc-input-card.teal .roi-mc-input-label { color: #1CA39A; }
+.roi-mc-input-card.blue .roi-mc-input-label { color: #1565c0; }
+.roi-mc-input-card.green .roi-mc-input-label { color: #4CAF50; }
+.roi-mc-input-card.amber .roi-mc-input-label { color: #e6a817; }
+.roi-mc-input-range { width: 100%; margin: 8px 0; }
+.roi-mc-input-card.teal .roi-mc-input-range { accent-color: #1CA39A; }
+.roi-mc-input-card.blue .roi-mc-input-range { accent-color: #2196F3; }
+.roi-mc-input-card.green .roi-mc-input-range { accent-color: #4CAF50; }
+.roi-mc-input-card.amber .roi-mc-input-range { accent-color: #F5B942; }
+.roi-mc-input-val { font-size: 13px; font-weight: 700; }
+.roi-mc-input-card.teal .roi-mc-input-val { color: #1CA39A; }
+.roi-mc-input-card.blue .roi-mc-input-val { color: #1565c0; }
+.roi-mc-input-card.green .roi-mc-input-val { color: #4CAF50; }
+.roi-mc-input-card.amber .roi-mc-input-val { color: #e6a817; }
+
+/* ── Risk adjusted NPV box ── */
+.roi-risk-npv-box {
+  background: #EAF7F5; border-radius: 12px;
+  padding: 14px; margin-top: 12px; text-align: center;
+}
+.roi-risk-npv-label { font-size: 12px; color: #9aa3b0; }
+.roi-risk-npv-value { font-size: 28px; font-weight: 700; color: #1CA39A; }
+.roi-risk-npv-prob { font-size: 12px; color: #1CA39A; }
+
+/* ── Intensity metrics ── */
+.roi-intensity-grid { display: grid; gap: 14px; }
+.roi-intensity-card { border-radius: 12px; padding: 16px; }
+.roi-intensity-card.teal { background: #EAF7F5; }
+.roi-intensity-card.blue { background: #e3f2fd; }
+.roi-intensity-card.green { background: #e8f5e9; }
+.roi-intensity-label { font-size: 12px; font-weight: 500; }
+.roi-intensity-card.teal .roi-intensity-label { color: #1CA39A; }
+.roi-intensity-card.blue .roi-intensity-label { color: #1565c0; }
+.roi-intensity-card.green .roi-intensity-label { color: #4CAF50; }
+.roi-intensity-value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.roi-intensity-card.teal .roi-intensity-value { color: #1CA39A; }
+.roi-intensity-card.blue .roi-intensity-value { color: #1565c0; }
+.roi-intensity-card.green .roi-intensity-value { color: #4CAF50; }
+.roi-intensity-unit { font-size: 12px; color: #9aa3b0; }
+
+/* ── Baseline sub-tabs ── */
+.roi-baseline-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.roi-baseline-tab {
+  padding: 7px 14px; border-radius: 8px;
+  border: 1.5px solid #e8ecf0; background: #fff;
+  font-family: inherit; font-size: 12.5px;
+  font-weight: 500; cursor: pointer; color: #6b7a8d;
+  transition: all 0.18s;
+}
+.roi-baseline-tab:hover { border-color: #1CA39A; color: #1CA39A; }
+.roi-baseline-tab.active { background: #1CA39A; color: #fff; border-color: #1CA39A; }
+
+/* ── Chart container ── */
+.roi-chart-container { position: relative; height: 260px; }
+.roi-chart-container.sm { height: 220px; }
+.roi-chart-container.lg { height: 280px; }
+
+/* ── Chart legend ── */
+.roi-chart-legend { display: flex; gap: 16px; margin-top: 10px; flex-wrap: wrap; }
+.roi-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #6b7a8d; }
+.roi-legend-dot { width: 12px; height: 3px; border-radius: 2px; display: inline-block; }
+.roi-legend-sq { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* ── Section header (used in hotspot banner) ── */
+.roi-hotspot-banner {
+  background: #1CA39A; border-radius: 14px;
+  padding: 16px 20px; color: #fff; margin-bottom: 20px;
+  display: flex; align-items: center; gap: 14px;
+}
+.roi-hotspot-banner-icon svg { width: 28px; height: 28px; color: #fff; }
+.roi-hotspot-banner-title { font-size: 14px; font-weight: 600; }
+.roi-hotspot-banner-sub { font-size: 13px; opacity: 0.85; margin-top: 2px; }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .roi-grid-2 { grid-template-columns: 1fr; }
+  .roi-grid-3 { grid-template-columns: 1fr; }
+  .roi-scenario-cards { grid-template-columns: repeat(2, 1fr); }
+  .roi-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .roi-financial-kpis { grid-template-columns: repeat(2, 1fr); }
+  .roi-gauge-row { grid-template-columns: 1fr; }
+}
